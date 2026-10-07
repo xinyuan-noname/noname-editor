@@ -93,6 +93,9 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
     这类旧布局则沿用；配置里已手填的值不动。「创建/更新目录」按钮可随时手动补一次。
   - 每行右侧「选」按钮弹目录选择器（搜索 + 点选，含「＋ 新建目录…」，新建后立即建目录并写配置）；
     手填目录名并失焦同样会建出目录。
+  - **打开资源管理器**：按钮直接调起系统文件管理器定位到 `resources/app/extension/<工作区>`，方便手动整理
+    立绘/语音；底层是 `require("electron").shell.openPath`，失败退回 `child_process.exec` 调 `explorer`。
+    提示行会显示该目录的绝对路径；**建目录失败会在此处显式报错**（不再静默）。
 
 
 

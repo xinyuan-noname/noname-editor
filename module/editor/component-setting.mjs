@@ -84,7 +84,7 @@ shadow.innerHTML=`
         <label class="row"><span>当前工作区</span>
             <select id="workspace"></select>
         </label>
-        <div class="row"><button id="workspaceNew">新建工作区</button><button id="workspaceRefresh">刷新列表</button><button id="workspaceDirs">创建/更新目录</button></div>
+        <div class="row"><button id="workspaceNew">新建工作区</button><button id="workspaceRefresh">刷新列表</button><button id="workspaceDirs">创建/更新目录</button><button id="workspaceOpen">打开资源管理器</button></div>
         <div class="row muted" id="workspaceHint"></div>
         <label class="row"><span>武将立绘目录</span>
             <span class="dir-field"><input id="workspaceCharacterImage" list="workspaceFolderList" placeholder="image/character"><button class="dir-pick" type="button" data-dir-for="workspaceCharacterImage" title="选择文件夹">…</button></span>
@@ -216,6 +216,7 @@ shadow.innerHTML=`
             await this.ensureWorkspaceDirs(this.workspace);
             this.refreshWorkspaceFiles(this.workspace);
         });
+        query("workspaceOpen").addEventListener("pointerup", () => this.openWorkspaceInExplorer());
         for (const [id, key] of Object.entries(WORKSPACE_RESOURCE_INPUTS)) {
             query(id).addEventListener("change", async e => {
                 if (!this.workspace) return;
@@ -269,11 +270,82 @@ shadow.innerHTML=`
         const value = { ...this.readExtensionFileConfig(extensionName), ...patch };
         return this.configQuery("write", { member: EXT_FILE_CONFIG_PREFIX + extensionName, value });
     }
+    /**
+     * 资源根目录（桌面端 = `resources/app`）
+     * @returns {string}
+     */
+    get assetRoot() {
+        // 1) window.__dirname：noname 在桌面端把它规范成 resources/app
+        if (typeof window.__dirname === "string" && window.__dirname) return this.normalizeRoot(window.__dirname);
+        // 2) lib.assetURL：可能是 file:/// 前缀，也可能是空串
+        if (typeof lib.assetURL === "string" && lib.assetURL) return this.normalizeRoot(lib.assetURL);
+        // 3) 复刻 noname 自己的推导：cwd + resources/app
+        if (lib.node && lib.node.path) return lib.node.path.join(lib.node.path.resolve(), "resources/app");
+        return "";
+    }
+    /**
+     * @param {string} value
+     * @returns {string}
+     */
+    normalizeRoot(value) {
+        return decodeURIComponent(String(value)).replace(/^file:\/*/i, "").replace(/[\\/]+$/, "");
+    }
+    /**
+     * 工作区（扩展）目录的绝对路径
+     * @param {string} [workspace]
+     * @returns {string}
+     */
+    workspaceDir(workspace = this.workspace) {
+        const root = this.assetRoot;
+        return root ? `${root}/extension/${workspace}` : "";
+    }
+    /**
+     * 调系统资源管理器打开目录：Electron `shell.openPath` → `child_process.exec explorer` → 提示路径
+     * （引擎里没有现成的「打开目录」API，`explorer`/`shell.openPath` 在 noname 源码里零命中）
+     * @param {string} target
+     * @returns {boolean}
+     */
+    openInExplorer(target) {
+        if (!target) return false;
+        const winPath = target.replace(/\//g, "\\");
+        const req = typeof window.require === "function" ? window.require : null;
+        if (req) {
+            try {
+                const electron = req("electron");
+                if (electron && electron.shell && typeof electron.shell.openPath === "function") {
+                    electron.shell.openPath(winPath);
+                    return true;
+                }
+            } catch (err) { /* 退回 child_process */ }
+            try {
+                req("child_process").exec(`explorer "${winPath}"`);
+                return true;
+            } catch (err) {
+                console.warn("打开资源管理器失败", err);
+            }
+        }
+        alert(`无法自动调起资源管理器，请手动打开这个目录：\n${winPath}`);
+        return false;
+    }
+    /**
+     * 打开当前工作区目录（目录不存在就先建出来）
+     */
+    async openWorkspaceInExplorer() {
+        const workspace = this.workspace;
+        if (!workspace) {
+            alert("请先选择工作区。");
+            return;
+        }
+        await this.ensureWorkspaceDirs(workspace);
+        this.openInExplorer(this.workspaceDir(workspace));
+    }
+
 
     /**
      * 保证工作区的四个资源目录在磁盘上存在，并把配置更新为它们。
      * 规则：配置已有自定义值（≠ 扩展根）→ 不动；否则优先沿用扩展里已存在的约定目录
      * （如 `image` / `audio`），都没有就**新建**默认目录。
+     * 建目录失败不再静默：结果写进 `this.dirErrors`，由 renderWorkspace() 显示在提示行里。
      * @param {string} extensionName
      * @returns {Promise<{folderList: string[], config: object}>}
      */
@@ -282,17 +354,23 @@ shadow.innerHTML=`
         let [folderList] = await this.fileQuery("getAllFolderAndFileList", { path: "extension/" + extensionName }) || [[], []];
         const config = this.readExtensionFileConfig(extensionName);
         const patch = {};
+        const failed = [];
         for (const [key, defaultDir] of Object.entries(WORKSPACE_DEFAULT_DIRS)) {
             const current = config[key];
             if (current && current !== extensionName) continue;
             const existed = [defaultDir, ...(WORKSPACE_LEGACY_DIRS[key] || [])].find(dir => folderList.includes(dir));
             const target = existed || defaultDir;
             if (!existed) {
-                await this.fileQuery("createDir", { path: `extension/${extensionName}/${target}` });
-                folderList = [...folderList, target];
+                try {
+                    await this.fileQuery("createDir", { path: `extension/${extensionName}/${target}` });
+                    folderList = [...folderList, target];
+                } catch (err) {
+                    failed.push(`${target}（${(err && err.message) || err}）`);
+                }
             }
             patch[key] = extensionName + "/" + target;
         }
+        this.dirErrors = failed;
         if (Object.keys(patch).length) this.writeExtensionFileConfig(extensionName, patch);
         return { folderList, config: this.readExtensionFileConfig(extensionName) };
     }
@@ -393,8 +471,11 @@ shadow.innerHTML=`
         const hint = query("workspaceHint");
         if (hint) {
             hint.textContent = workspace
-                ? `工作区「${workspace}」：武将草稿与资源目录都归它，新建的武将会写入该扩展。`
+                ? `工作区「${workspace}」：武将草稿与资源目录都归它。\n扩展目录：${this.workspaceDir(workspace)}`
                 : "工作区即扩展：先在上面选择或新建一个扩展，武将草稿列表会按它过滤。";
+            if (workspace && this.dirErrors && this.dirErrors.length) {
+                hint.textContent += `\n⚠ 目录创建失败：${this.dirErrors.join("、")}——可用「打开资源管理器」手动建。`;
+            }
         }
     }
     /**
