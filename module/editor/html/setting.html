@@ -4,12 +4,20 @@
         <label class="row"><span>当前工作区</span>
             <select id="workspace"></select>
         </label>
-        <div class="row"><button id="workspaceNew">新建工作区</button><button id="workspaceRefresh">刷新列表</button></div>
+        <div class="row"><button id="workspaceNew">新建工作区</button><button id="workspaceRefresh">刷新列表</button><button id="workspaceDirs">创建/更新目录</button></div>
         <div class="row muted" id="workspaceHint"></div>
-        <label class="row"><span>武将立绘目录</span><input id="workspaceCharacterImage" list="workspaceFolderList" placeholder="image/character"></label>
-        <label class="row"><span>卡牌图片目录</span><input id="workspaceCardImage" list="workspaceFolderList" placeholder="image/card"></label>
-        <label class="row"><span>技能语音目录</span><input id="workspaceSkillAudio" list="workspaceFolderList" placeholder="audio/skill"></label>
-        <label class="row"><span>阵亡语音目录</span><input id="workspaceDieAudio" list="workspaceFolderList" placeholder="audio/die"></label>
+        <label class="row"><span>武将立绘目录</span>
+            <span class="dir-field"><input id="workspaceCharacterImage" list="workspaceFolderList" placeholder="image/character"><button class="dir-pick" type="button" data-dir-for="workspaceCharacterImage" title="选择文件夹">…</button></span>
+        </label>
+        <label class="row"><span>卡牌图片目录</span>
+            <span class="dir-field"><input id="workspaceCardImage" list="workspaceFolderList" placeholder="image/card"><button class="dir-pick" type="button" data-dir-for="workspaceCardImage" title="选择文件夹">…</button></span>
+        </label>
+        <label class="row"><span>技能语音目录</span>
+            <span class="dir-field"><input id="workspaceSkillAudio" list="workspaceFolderList" placeholder="audio/skill"><button class="dir-pick" type="button" data-dir-for="workspaceSkillAudio" title="选择文件夹">…</button></span>
+        </label>
+        <label class="row"><span>阵亡语音目录</span>
+            <span class="dir-field"><input id="workspaceDieAudio" list="workspaceFolderList" placeholder="audio/die"><button class="dir-pick" type="button" data-dir-for="workspaceDieAudio" title="选择文件夹">…</button></span>
+        </label>
         <datalist id="workspaceFolderList"></datalist>
     </section>
     <section>

@@ -87,7 +87,12 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
 - **武将归属**：扩展不再按武将单独设置，草稿的 `extension` 一律取当前工作区（保存时写回）；
   侧栏「武将」列表按工作区过滤，未归属的旧草稿照常显示。
 - **资源目录**：立绘 / 卡图 / 技能语音 / 阵亡语音四个目录写在 `x19D6_editor.extensionFileConfig.<工作区>`，
-  供 `downloadExtensionAsset()` 下载资源时使用；目录名可手填，datalist 会列出扩展内已有目录。
+  供 `downloadExtensionAsset()` 下载资源时使用。
+  - **会自动建立并更新**：新建工作区（以及选中工作区）时，配置为空或仍指向扩展根就按
+    `image/character`、`image/card`、`audio/skill`、`audio/die` 建目录并写进配置；扩展里已有 `image` / `audio`
+    这类旧布局则沿用；配置里已手填的值不动。「创建/更新目录」按钮可随时手动补一次。
+  - 每行右侧「选」按钮弹目录选择器（搜索 + 点选，含「＋ 新建目录…」，新建后立即建目录并写配置）；
+    手填目录名并失焦同样会建出目录。
 
 
 

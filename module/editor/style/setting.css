@@ -85,3 +85,22 @@ input[type="text"] {
     min-width: 0;
     flex: 1;
 }
+
+.dir-field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.dir-field>input {
+    flex: 1;
+    min-width: 0;
+}
+
+.dir-pick {
+    flex: 0 0 auto;
+    padding: 2px 7px;
+    line-height: 1.2;
+}
