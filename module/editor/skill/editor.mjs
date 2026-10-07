@@ -2451,5 +2451,5 @@ game.x19D6_skillEditor = function (readCache = true, father) {
 	return back;
 }
 
-//供组件外壳（component-skill.mjs）内联调用
+//供魂氏编辑器的技能入口调用（旧版为独立浮层，直接调用即可）
 export const createSkillEditor = game.x19D6_skillEditor;

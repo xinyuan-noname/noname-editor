@@ -1,5 +1,5 @@
 /* 由《技能编辑器》的 css/main.css + css/animation.css 合并而来（x19D6_ → x19D6_；已剥离《新将包》品牌图片引用）*/
-:host {
+:root {
   --xy-ED-skill-file-width: 54%;
   --xy-ED-skill-color: #f0acf7, #7093DB, #f7f0ac;
 }

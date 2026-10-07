@@ -1,8 +1,8 @@
 "use script";
 import "./component.mjs";
-import "./component-skill.mjs";
 import "./component-setting.mjs";
 import { UniqueChoiceManager, DragManager, toggleMultiClass } from "./encapsulated.mjs";
+
 /**
  * @typedef {import("./nonameEditor.mjs").NonameEditor NonameEditor}
  */
@@ -151,7 +151,7 @@ export class NonameEditorView {
     init(parentNode) {
         const mainPage = this.mainPage;
         //$: mainPage , html/index.html//
-mainPage.innerHTML=`
+        mainPage.innerHTML = `
 <div class="xy-ED-minimizeControl" draggable>魂</div>
 <div class="xy-ED-operationPage">
     <header>
@@ -224,7 +224,7 @@ mainPage.innerHTML=`
         </div>
     </div>
 </div>`
-//#: mainPage , html/index.html//
+        //#: mainPage , html/index.html//
         parentNode.appendChild(mainPage);
         this.listenPageClose();
         this.listenPageMinize();
@@ -313,7 +313,8 @@ mainPage.innerHTML=`
         viewArea.addEventListener("pointerup", () => {
             if (!resizeStatus.isResizing) return;
             resizeStatus.isResizing = false;
-        });
+        });
+
         //收手后记录宽度比（供基本设置查看与重置）
         viewArea.addEventListener("pointerup", () => {
             const ratio = viewArea.style.getPropertyValue("--xy-ED-WidthRatio");
@@ -465,7 +466,10 @@ mainPage.innerHTML=`
         if (lastNav && remember !== false) this.toggleNav(lastNav);
     }
     listenSideBarSkill() {
-        this.navSkill.addEventListener("pointerup", () => this.createSkillEditor());
+        //技能编辑入口：旧版为悬挂在 ui.window 的独立浮层（新版 shya 编辑器接入后改为内联）
+        this.navSkill.addEventListener("pointerup", () => {
+            if (typeof game.x19D6_openLegacySkillEditor === "function") game.x19D6_openLegacySkillEditor();
+        });
     }
     listenSideBarSearch() {
         const { sideBarSearch } = this;

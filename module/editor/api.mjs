@@ -1,5 +1,6 @@
 import { lib, game, ui, get, ai, _status } from "../../../../noname.js";
 import loadEditor from "./index.mjs";
+import url from "./url.mjs";
 
 
 /**
@@ -11,6 +12,33 @@ import loadEditor from "./index.mjs";
 /** @type {import("./nonameEditor.mjs").NonameEditor|null} */
 let editor = null;
 let inited = false;
+/** 技能编辑器内核的动态导入缓存（内核顶层读 lib.config.cards，必须等数据就绪后再载入） */
+let skillCoreLoader = null;
+let legacyStylesLoaded = false;
+
+function loadSkillCore() {
+    if (!skillCoreLoader) skillCoreLoader = import("./skill/editor.mjs");
+    return skillCoreLoader;
+}
+/**
+ * 旧版技能编辑器自带样式：全局加载到 document.head
+ * （旧版不参与魂氏编辑器的 shadowRoot 样式体系，故不使用组件的 loadCss）
+ */
+function ensureLegacyStyles() {
+    if (legacyStylesLoaded) return;
+    legacyStylesLoaded = true;
+    lib.init.css(`./${url}/skill/style`, "base");
+    lib.init.css(`./${url}/skill/style`, "editor");
+}
+/**
+ * 旧版技能编辑器：还原为悬挂在 ui.window 上的自成一体的浮层
+ * @param {boolean} [readCache] 是否读取上次的编辑缓存
+ */
+async function openLegacySkillEditor(readCache = true) {
+    ensureLegacyStyles();
+    const { createSkillEditor } = await loadSkillCore();
+    return createSkillEditor(readCache);
+}
 
 function getEditor() {
     if (!editor) editor = loadEditor();
@@ -53,11 +81,9 @@ function openEditor(options = {}) {
  * @param {{ parent?: HTMLElement, readCache?: boolean }} [options]
  */
 function openSkillEditor(options = {}) {
-    const instance = ensureMounted(options.parent);
-    instance.view.toggleNav("skill");
-    return instance.view.createSkillEditor();
+    //新版 shya 编辑器尚未接入，此接口暂时指向旧版；新版就绪后改为 nav 路由到 <shya-editor>
+    return openLegacySkillEditor(options.readCache !== false);
 }
-
 /**
  * 打开并切到武将编辑页，返回 <character-editor> 组件
  * @param {{ parent?: HTMLElement, id?: string, data?: object }} [options]
@@ -93,7 +119,7 @@ async function createSkill(options = {}) {
     ui.window.appendChild(host);
     try {
         //动态导入，避免在卡牌数据就绪前初始化内核
-        const { createSkillEditor } = await import("./skill/editor.js");
+        const { createSkillEditor } = await import("./skill/editor.mjs");
         const back = createSkillEditor(false, host);
         const { id, kind, mode, tags, filter, content, trigger, filterTarget, filterCard } = options;
         if (kind) back.skill.kind = kind;
@@ -149,10 +175,11 @@ export function installApi() {
     game.x19D6_isReady = () => true;
     game.x19D6_openEditor = openEditor;
     game.x19D6_openSkillEditor = openSkillEditor;
+    game.x19D6_openLegacySkillEditor = openLegacySkillEditor;
     game.x19D6_openCharacterEditor = openCharacterEditor;
     game.x19D6_createSkill = createSkill;
     game.x19D6_closeEditor = closeEditor;
     return game.x19D6_editor;
 }
 
-export { openEditor, openSkillEditor, openCharacterEditor, createSkill, closeEditor, getEditor };
+export { openEditor, openSkillEditor, openLegacySkillEditor, openCharacterEditor, createSkill, closeEditor, getEditor };

@@ -1,3 +1,6 @@
+// 已废弃（DEPRECATED）：新版技能编辑器基于 shya，直接使用 <noname-dialog>，
+// 不再需要把旧内核的私有对话框层迁移到组件体系。保留作历史记录，可安全删除。
+
 "use script";
 import { lib, game, ui, get, ai, _status } from "../../../../../../noname.js";
 
@@ -8,7 +11,7 @@ import { lib, game, ui, get, ai, _status } from "../../../../../../noname.js";
  * <noname-dialog>，而内核那约 24 处调用点一行不改。
  *
  * 当前状态：**已实现但尚未接线**。本文件导出 installDialogAdapter()，
- * 但 skill/editor.js 还没有调用它，因此运行时行为与并轨前完全一致。
+ * 但 skill/editor.mjs 还没有调用它，因此运行时行为与并轨前完全一致。
  * 接线方式：在内核首次载入时调用一次 installDialogAdapter()；
  * 若要回退，注释掉那一行即可。
  *
