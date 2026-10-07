@@ -177,7 +177,7 @@ mainPage.innerHTML=`
                         <button>点击创建</button>
                     </div>
                     <div class="xy-ED-characte-show">
-                        <header></header>
+                        <header><span class="xy-ED-characte-count"></span><span class="xy-ED-refresh-button" title="刷新已保存武将列表">⟳ 刷新</span></header>
                         <ul></ul>
                     </div>
                 </div>
@@ -342,6 +342,11 @@ mainPage.innerHTML=`
      * 而不是自己拼列表项——它自带武将名/包/分包/体力/技能等展示与「使用/删除」操作条。
      * @returns {number} 已保存的武将数量
      */
+    /**
+     * 渲染「历史武将」：数据源是已持久化的草稿 x19D6_editor.characters。
+     * 使用既有组件 <character-info-card>（component-infoCard.mjs 定义）。
+     * @returns {number} 已保存的武将数量
+     */
     loadSideBarCharacter() {
         const sideBarCharacter = this.sideBarCharacter;
         if (!sideBarCharacter) return 0;
@@ -349,7 +354,7 @@ mainPage.innerHTML=`
         const ids = records && typeof records === "object" ? Object.keys(records) : [];
         const emptyCard = sideBarCharacter.querySelector(".xy-ED-nocharacterCard");
         const showBox = sideBarCharacter.querySelector(".xy-ED-characte-show");
-        const header = showBox.querySelector("header");
+        const counter = showBox.querySelector(".xy-ED-characte-count");
         const ul = showBox.querySelector("ul");
         ul.replaceChildren();
         ids.forEach(id => {
@@ -376,7 +381,7 @@ mainPage.innerHTML=`
             if (data.savedAt) card.title = `最后保存：${new Date(data.savedAt).toLocaleString()}`;
             ul.appendChild(card);
         });
-        header.textContent = ids.length ? `已保存 ${ids.length} 位武将（使用→继续编辑，删除→丢弃草稿）` : "";
+        if (counter) counter.textContent = ids.length ? `已保存 ${ids.length} 位（使用→编辑，删除→丢弃）` : "";
         if (emptyCard) emptyCard.classList.toggle("xy-ED-hidden", ids.length > 0);
         if (showBox) showBox.classList.toggle("xy-ED-hidden", ids.length === 0);
         return ids.length;
@@ -387,8 +392,17 @@ mainPage.innerHTML=`
         noneCharacterCardButton.addEventListener("pointerup", () => {
             this.createCharacterEditor();
         });
-        //每次点开「武将」页都刷新一次列表，保证刚保存的草稿立刻可见
+        //每次点开「武将」页都刷新一次列表
         this.navCharacter.addEventListener("pointerup", () => this.loadSideBarCharacter());
+        //手动刷新键
+        const refreshButton = sideBarCharacter.querySelector(".xy-ED-refresh-button");
+        if (refreshButton) refreshButton.addEventListener("pointerup", () => this.loadSideBarCharacter());
+        //与编辑区同步：武将编辑页被打开/关闭（增删子元素）时自动刷新列表，
+        //否则关闭编辑页后侧栏会与实际草稿不同步
+        if (!this.characterListObserver) {
+            this.characterListObserver = new MutationObserver(() => this.loadSideBarCharacter());
+            this.characterListObserver.observe(this.mainArea, { childList: true });
+        }
         const ul = sideBarCharacter.querySelector("ul");
         //点击卡片操作条上的「使用」：继续编辑该草稿
         ul.addEventListener("useCardData", e => {
@@ -398,7 +412,7 @@ mainPage.innerHTML=`
             if (this.mainArea.querySelector(`character-editor[character-id="${id}"]`)) return;
             this.createCharacterEditor(id);
         });
-        //点击卡片操作条上的「删除」：丢弃该草稿（写入配置持久化）
+        //点击卡片操作条上的「删除」：丢弃该草稿（写回配置持久化）
         ul.addEventListener("removeCard", e => {
             const node = e.detail && e.detail.from;
             const id = node && node.getAttribute && node.getAttribute("character-id");

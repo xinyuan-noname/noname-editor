@@ -482,3 +482,80 @@ body.xy-ED-col-resizing * {
     display: block;
     margin-bottom: 6px;
 }
+/* ================= 响应式（保守：只设上限与防溢出，不改设计尺寸、不覆盖 flex） ================= */
+.xy-ED-viewArea>.xy-ED-mainArea {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.xy-ED-sideBar-content {
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* 侧栏只加「上限」，flex 仍由 --xy-ED-WidthRatio 决定，拖宽照样有效 */
+.xy-ED-viewArea>.xy-ED-sideBar {
+    max-width: min(62%, 460px);
+}
+
+.xy-ED-sideBar-content>* {
+    overflow: auto;
+}
+
+/* 搜索栏等窄内容允许折行，避免撑破侧栏 */
+.xy-ED-sideBar-content .xy-ED-input-container>div {
+    flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+    .xy-ED-viewArea>.xy-ED-sideBar {
+        max-width: 72%;
+    }
+}
+
+@media (max-width: 640px) {
+    .xy-ED-viewArea {
+        flex-direction: column;
+    }
+
+    .xy-ED-viewArea>.xy-ED-sideBar {
+        flex: 0 0 46%;
+        width: 100%;
+        max-width: none;
+    }
+
+    .xy-ED-viewArea>.xy-ED-mainArea {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+}
+
+/* 武将页头的计数与刷新键 */
+.xy-ED-sideBar-character .xy-ED-characte-show>header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.xy-ED-sideBar-character .xy-ED-characte-count {
+    opacity: 0.85;
+    font-size: 0.85em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.xy-ED-sideBar-character .xy-ED-refresh-button {
+    flex: 0 0 auto;
+    padding: 1px 8px;
+    border-radius: 4px;
+    background: #e4d5b7;
+    color: #000;
+    cursor: pointer;
+    font-size: 0.85em;
+}
+
+.xy-ED-sideBar-character .xy-ED-refresh-button:hover {
+    background: #f3e6c9;
+}
