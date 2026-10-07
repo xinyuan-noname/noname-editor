@@ -274,4 +274,15 @@ button.close:hover {
     .tools {
         max-height: 40%;
     }
+}/* ================= 工具栏「技能模板」下拉（类别选择） ================= */
+.skill-kind {
+    font: inherit;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #6b6b6b;
+    background: #e4d5b7;
+    color: #000;
+    flex: 0 0 auto;
+    max-width: 12em;
+    cursor: pointer;
 }

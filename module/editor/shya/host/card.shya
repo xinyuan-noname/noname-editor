@@ -1,0 +1,47 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// card —— 无名杀 `Card`（实体牌）宿主声明
+// 证据：noname/library/element/card.js（字段 :309-320、gaintag :56、方法见各行）
+//
+// 注意：`subtype` / `color` / `type2` / `value` **不是**卡牌自身的字段，
+// 一律走 `get subtype(card)` / `get color(card)`（引擎的 get 模块，S:807、S:1464）。
+// ═══════════════════════════════════════════════════════════════════════════
+declare Card {
+  name: string
+  suit: string
+  number: number
+  nature: string
+  cardid: string
+  storage: map
+  gaintag: array<string>
+  vanishtag: array<string>
+  destroyed: string
+
+  hasNature(nature: string): boolean
+  addNature(nature: string): void
+  removeNature(nature: string): void
+  hasGaintag(tag: string): boolean
+  addGaintag(tag: string): void
+  removeGaintag(tag: string): void
+  hasTag(tag: string): boolean
+  hasPosition(): boolean
+  isInPile(): boolean
+  isKnownBy(player: Player, checkKnowers: boolean = false): boolean
+  addKnower(player: Player): void
+  getSource(name: string): any
+  copy(): Card
+  discard(bool: boolean = true): void
+}
+
+// 虚拟牌（viewAs 产物）：noname/library/element/vcard.js:15-35、102-105
+declare VCard {
+  name: string
+  suit: string
+  number: number
+  color: string
+  nature: string
+  isCard: boolean
+  cardid: string
+  storage: map
+  cards: array<Card>
+  vcardID: string
+}

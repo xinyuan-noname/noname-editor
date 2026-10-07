@@ -1,0 +1,32 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// game —— 无名杀全局 `game` 对象宿主声明（类型名 `Game`）
+// 证据：noname/game/index.js（players:G9410、dead:G4098、me:G3265、zhu、
+// playerMap:G4415、roundNumber:G8104、phaseNumber:G1746、countPlayer:G9679、
+// filterPlayer:G9724、hasPlayer:G9665、loseAsync:G948、swapSeat:G7078、
+// createEvent:G5608、delay:G6871）。
+//
+// shya 不能声明「全局变量」，所以 `Game` 这个类型只在你给自定义函数的参数
+// 标注时才有用（宏体里的 player/event 已经由宏库标好类型）：
+//   fn helper(game: Game, player: Player) { game log("x") }
+// 刻意不声明：game.playersAlive（不存在，用 countPlayer/filterPlayer）、
+// game.log()（变长参数，shya 无法表达）。
+// ═══════════════════════════════════════════════════════════════════════════
+declare Game {
+  players: array<Player>
+  dead: array<Player>
+  me: Player
+  zhu: Player
+  playerMap: map
+  roundNumber: number
+  phaseNumber: number
+
+  countPlayer(func: any = void, includeOut: boolean = false): number
+  filterPlayer(func: any = void, list: any = void, includeOut: boolean = false): array<Player>
+  hasPlayer(func: any, includeOut: boolean = false): boolean
+  loseAsync(arg: any): void
+  swapSeat(player1: Player, player2: Player, prompt: any = void, behind: boolean = false, noanimate: boolean = false): void
+  createEvent(name: string, trigger: any = void, triggerEvent: any = void): any
+  delay(time: number = void, time2: number = void): void
+  broadcast(func: any, arg1: any = void, arg2: any = void): void
+  broadcastAll(func: any, arg1: any = void, arg2: any = void): void
+}

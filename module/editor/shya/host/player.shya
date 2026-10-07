@@ -1,0 +1,135 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// player —— 无名杀 `Player`（角色）宿主声明
+//
+// 只声明**真实存在**且**形状单一**的成员（证据：noname/library/element/player.js）。
+// 刻意不声明的（写错比不写更危险，见《风险清单》）：
+//   hand / equip / judge   —— Player 上没有这三个牌区数组（手牌在 node.handcards1/2，
+//                             判定牌在 node.judges）。取牌用 getCards("h"/"e"/"j")。
+//   dead / linked / turnedover / chained / isDead —— 不是属性（classList 实现），
+//                             用 isDead() / isLinked() / isTurnedOver()。
+//   hasSkills / getJudging / setHp / getMaxHp —— 引擎里不存在，别写。
+//   get.name / get.color / get.value … —— 属于 `get` 模块，不是 Card/Player 的方法。
+//
+// 多形态方法（draw / damage / discard / gain / useCard / respond / judge / chooseXxx）
+// 第一个参数一律标 `any`，因为同一个方法既能吃数字也能吃对象（声明成单一定长签名
+// 会让合法用法误报 TC006）。可选调用请用**默认值**（`num: any = 1`）表达：
+// shya 的 `?:` 不参与实参个数检查（typecheck.cpp:785-799）。
+//
+// 用法：`import "./host/index.shya"` 后，给自定义函数的参数标注 Player 即可获得
+// 类型检查；`player hp` 读属性、`player draw(2)` 调方法，与引擎语义一致。
+// ═══════════════════════════════════════════════════════════════════════════
+declare Player {
+  // ── 字段（player.js:95-108、3411-3415、4002-4010）──
+  name: string
+  name1: string
+  name2: string
+  sex: string
+  group: string
+  identity: string
+  playerid: string
+  hp: number
+  maxHp: number
+  hujia: number
+  phaseNumber: number
+  skills: array<string>
+  hiddenSkills: array<string>
+  storage: map
+  marks: map
+  tempSkills: map
+  skipList: array<string>
+  judging: array<Card>
+  next: Player
+  previous: Player
+
+  // ── 状态查询 ──
+  isAlive(): boolean
+  isDead(): boolean
+  isIn(): boolean
+  isOut(): boolean
+  isDamaged(): boolean
+  isHealthy(): boolean
+  isDying(): boolean
+  isTurnedOver(): boolean
+  isLinked(): boolean
+  isMin(distance: boolean = false): boolean
+  isPhaseUsing(notmeisok: boolean = false): boolean
+  hasSkill(skill: string): boolean
+  hasSex(sex: string): boolean
+  isFriendOf(player: Player): boolean
+  isEnemyOf(player: Player): boolean
+  hasJudge(name: string): boolean
+  hasEmptySlot(type: any): boolean
+  hasMark(name: string): boolean
+  hasStorage(name: string, value: any = void): boolean
+
+  // ── 牌区 / 牌堆历史 ──
+  getCards(position: string = "h", filter: any = void): array<Card>
+  countCards(position: string = "h", filter: any = void): number
+  hasCard(pattern: string, position: string = "h"): boolean
+  hasCards(position: string = "h", filter: any = void): boolean
+  getEquip(name: any): Card
+  getEquips(subtype: string = ""): array<Card>
+  getJudge(name: string): Card
+  getHistory(key: string = "", filter: any = void, last: boolean = false): array<any>
+  countHistory(key: string, filter: any = void, last: boolean = false): number
+  hasHistory(key: string, filter: any = void, last: boolean = false): boolean
+  countUsed(card: any, type: boolean = false): number
+
+  // ── 数值 / 距离 / 可用性 ──
+  getHp(raw: boolean = false): number
+  getDamagedHp(raw: boolean = false): number
+  getHandcardLimit(): number
+  getAttackRange(raw: boolean = false): number
+  getCardUsable(card: Card, pure: boolean = false): number
+  countMark(name: string): number
+  distanceTo(target: Player, method: any = void): number
+  distanceFrom(target: Player, method: any = void): number
+  inRange(target: Player): boolean
+  inRangeOf(source: Player): boolean
+  canUse(card: any, target: Player = void, distance: number = void, includecard: boolean = false): boolean
+  canRespond(event: any = void, card: any = void, type: any = void): boolean
+
+  // ── 动作（返回可 await 的事件）──
+  draw(params: any = void): void
+  recover(params: any = void): void
+  loseHp(num: number = 1): void
+  damage(params: any = void): void
+  die(reason: any = void): void
+  dying(reason: any = void): void
+  changeHp(num: number, popup: boolean = false): void
+  discard(params: any = void): void
+  gain(params: any = void): void
+  lose(params: any = void): void
+  equip(card: Card, draw: boolean = false): void
+  useCard(params: any = void): void
+  respond(params: any = void): void
+  judge(params: any = void): void
+  turnOver(bool: boolean = true): void
+  link(bool: boolean = true): void
+  skip(name: string): void
+
+  // ── 交互（参数形态多，一律 any）──
+  chooseToUse(params: any = void): void
+  chooseToRespond(params: any = void): void
+  chooseToDiscard(params: any = void): void
+  chooseCard(params: any = void): void
+  chooseTarget(params: any = void): void
+
+  // ── 技能 / 标记 ──
+  getSkills(skillMode: any = void, includeEquipSkills: any = void, applySkillFilter: any = void): array<string>
+  addSkill(skill: string, checkConflict: boolean = false): void
+  addTempSkill(skill: string, expire: string, checkConflict: boolean = false): void
+  addAdditionalSkill(skill: string, skillsToAdd: string, keep: boolean = false): void
+  removeSkill(skill: string): void
+  awakenSkill(skill: string, nounmark: boolean = false): void
+  changeZhuanhuanji(skill: string): void
+  markSkill(name: string, info: any = void, card: any = void, nobroadcast: boolean = false): void
+  unmarkSkill(name: string, nobroadcast: boolean = false): void
+  addMark(name: string, num: number = 1, log: boolean = true): void
+  removeMark(name: string, num: number = 1, log: boolean = true): void
+  setMark(name: string, num: number, log: boolean = true): void
+  setStorage(name: string, value: any, mark: boolean = false): any
+  getStorage(name: string, defaultValue: any = void): any
+  getNext(): Player
+  getPrevious(): Player
+}

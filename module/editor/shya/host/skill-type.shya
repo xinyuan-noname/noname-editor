@@ -1,0 +1,515 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// skill-type —— 无名杀技能类型宏库（魂氏编辑器 / shya 宿主库）
+//
+// 一个技能类别一个宏，宏体按 resources/app/character/standard/skill.js 的真实
+// 字段形状写：函数型字段一律**方法简写**（`filter(event, player) { … }`），
+// `content` / `cost` 一律 `async`；类别名与旧版编辑器「技能种类」一致
+// （module/editor/skill/editor.mjs:922-928 的 skillCategories）。
+//
+//   旧版编辑器类别        宏                      产物开头字段
+//   ─────────────────────────────────────────────────────────────────────
+//   触发类                @skill_trigger          trigger:{ … }
+//   出牌阶段类            @skill_phaseUse         enable:"phaseUse"
+//   使用类                @skill_chooseToUse      enable:"chooseToUse"
+//   打出类                @skill_chooseToRespond  enable:"chooseToRespond"
+//   使用打出类            @skill_useRespond       enable:["chooseToUse","chooseToRespond"]
+//   视为技（正交）        @skill_viewAs           enable + viewAs
+//   修改技                @skill_mod              mod:{ … }
+//   组合技                @skill_group            group:[ … ]
+//   自由技能（兜底）      @skill_raw              #object 原样展开
+//
+// 通用插槽（所有技能宏都有）：
+//   #skill:Ident?      技能 id。省略 → 整条定义不产出（可用于只写片段）
+//   #translation:Str?  技能名   → 产物字段 translation（注入时归位到 lib.translate）
+//   #description:Str?  技能描述 → 产物字段 description（归位到 <id>_info）
+//   #forced / #locked / #frequent / #limited: Bool?   锁定类标记，写了才产出该成员
+//   #usable:Num?       每回合可用次数
+//   #ai:ObjectLit?     整块 ai 字段
+//
+// 最小用法（编辑器会自动注入 `import "./host/skill-type.shya"`，手写也可以）：
+//
+//   @skill_trigger {
+//     #skill: my_recover
+//     #translation: "回春"
+//     #description: "结束阶段开始时，你可以回复 1 点体力。"
+//     #trigger: "phaseJieshuBegin"
+//     #filter: return player hp < player maxHp
+//     #content: player recover(1)
+//   }
+//
+// 约定与坑（改这个文件前先读）：
+//  1. 插槽值**直接写语句**，不要包大括号：`#content: { … }` 会被当成对象字面量
+//     （parser.cpp:1792 的 looksLikeObjectLit）。多条语句另起一行写，
+//     直到下一个 `#插槽:` 或调用结束的 `}` 为止。
+//  2. 语句体插槽（#filter/#check/#cost/#content/#filterCard/#filterTarget/#viewAsFilter）
+//     在宏体里一律用 `@ts{ #槽 }` 包一层。**不要**写成裸 `#槽`：
+//     裸引用走表达式通道（macro.cpp:1248），多条语句会被错误地拼成成员链
+//     （实测 `#s:` 里两条语句产出 `player.draw(1).recover(1)`），
+//     含 `return`/`if` 的真语句则直接报 MAC013。
+//  3. 过滤器类槽（filter / filterCard / filterTarget / check）的末尾由宏补
+//     `return true`，与旧版编辑器一致：写了 `return` 就提前返回，没写就是永远成立。
+//  4. 省略某个可选插槽时，那个成员**整条消失**（靠 `<插槽>…</插槽>` 作用域），
+//     产物里不会留下 `xxx: undefined` —— 这需要 shya ≥ 1.3.0 的编译器。
+//  5. `#trigger: "phaseEnd"` 是糖 → `trigger:{ player: "phaseEnd" }`；
+//     多键 / 多事件照官方写对象：`#trigger: { global: "judge", player: ["a","b"] }`。
+//  6. 宏没覆盖的字段（audio / intro / onremove / charlotte / subSkill / getIndex /
+//     logTarget / derivation / 任意 mod 钩子以外的钩子）走 @skill_raw 整块写。
+//
+// 四个 enable 类宏（@skill_phaseUse / @skill_chooseToUse / @skill_chooseToRespond /
+// @skill_useRespond）的成员表是**刻意平行**的，改其中一个记得同步另外三个。
+// ═══════════════════════════════════════════════════════════════════════════
+
+// 宿主声明（Player / Card / GameEvent / Game）：宏体里的方法形参都标了这些类型，
+// 所以技能体里的 `player hp` / `player draw(2)` / `card suit` 会被真正类型检查，
+// 未声明的成员只是 TC014 警告（按属性读取处理），不会拦下合法代码。
+import "./player.shya"
+import "./card.shya"
+import "./event.shya"
+import "./game.shya"
+// ── 内部：把「事件名字符串 / 事件数组 / 事件对象」归一成 trigger 字段的值 ──
+// 字符串与数组默认落 player 键，与官方 `trigger:{ player: "phaseEnd" }` 同义。
+macro @__skillTriggerValue(#t: expr?) {
+  @when(#t is Str) @ts{{ player: #t }}
+  @when(#t is ArrayLit) @ts{{ player: #t }}
+  @when(#t is ObjectLit) @ts{#t}
+}
+
+// ── 内部：ai 字段默认值（省略时给一个「对自己有利就发动」的保底 AI） ──
+macro @__skillAiValue(#ai: expr?) {
+  @when(#ai is ObjectLit) @ts{#ai}
+  @when(#ai is void) @ts{{ order: 1, result: { player: 1 } }}
+}
+
+// ── 内部：启用方式默认值（视为技省略 #enable 时按「使用打出类」处理） ──
+macro @__skillEnableValue(#enable: expr?) {
+  @when(#enable is Str) @ts{#enable}
+  @when(#enable is ArrayLit) @ts{#enable}
+  @when(#enable is void) @ts{["chooseToUse", "chooseToRespond"]}
+}
+
+// ════════════════════════════════════ 触发类 ════════════════════════════════
+// 旧版编辑器 kind = 'trigger'；可发动性由 filter（自动触发门）与 check（AI/玩家
+// 是否发动）决定，锁定技写 #forced: true。
+macro @skill_trigger(
+  #skill: Ident?,
+  #translation: Str?,
+  #description: Str?,
+  #trigger: expr?,
+  #filter: stmt,
+  #check: stmt,
+  #cost: stmt,
+  #content: stmt,
+  #forced: Bool?,
+  #locked: Bool?,
+  #frequent: Bool?,
+  #limited: Bool?,
+  #usable: Num?,
+  #ai: ObjectLit?
+) {
+  #skill = {
+    <translation>translation: #translation,</translation>
+    <description>description: #description,</description>
+    <trigger>trigger: @__skillTriggerValue(#trigger),</trigger>
+    <forced>forced: #forced,</forced>
+    <locked>locked: #locked,</locked>
+    <frequent>frequent: #frequent,</frequent>
+    <limited>limited: #limited,</limited>
+    <usable>usable: #usable,</usable>
+    <filter>
+      filter(event: GameEvent, player: Player) {
+        @ts{ #filter }
+        return true
+      },
+    </filter>
+    <check>
+      check(event: GameEvent, player: Player) {
+        @ts{ #check }
+        return true
+      },
+    </check>
+    <cost>
+      async cost(event: GameEvent, trigger: GameEvent, player: Player) {
+        @ts{ #cost }
+      },
+    </cost>
+    <content>
+      async content(event: GameEvent, trigger: GameEvent, player: Player) {
+        @ts{ #content }
+      },
+    </content>
+    <ai>ai: @__skillAiValue(#ai),</ai>
+  }
+}
+
+// ═══════════════════════════════ 出牌阶段类 ══════════════════════════════════
+// 旧版编辑器 kind = 'enable:"phaseUse"'；选牌条件写 #filterCard（体，末尾自动补
+// return true），或用 #filterCardValue 直接给值（`true` / `{ name: "sha" }`，
+// 写了它就以它为准）；选角色条件写 #filterTarget。主动技请务必给 #ai。
+macro @skill_phaseUse(
+  #skill: Ident?,
+  #translation: Str?,
+  #description: Str?,
+  #filter: stmt,
+  #filterCard: stmt,
+  #filterCardValue: expr?,
+  #selectCard: expr?,
+  #filterTarget: stmt,
+  #selectTarget: Num?,
+  #position: Str?,
+  #prompt: Str?,
+  #usable: Num?,
+  #check: stmt,
+  #content: stmt,
+  #ai: ObjectLit?
+) {
+  #skill = {
+    enable: "phaseUse",
+    <translation>translation: #translation,</translation>
+    <description>description: #description,</description>
+    <usable>usable: #usable,</usable>
+    <filter>
+      filter(event: GameEvent, player: Player) {
+        @ts{ #filter }
+        return true
+      },
+    </filter>
+    <filterCard>
+      filterCard(card: Card, player: Player) {
+        @ts{ #filterCard }
+        return true
+      },
+    </filterCard>
+    <filterCardValue>filterCard: #filterCardValue,</filterCardValue>
+    <selectCard>selectCard: #selectCard,</selectCard>
+    <filterTarget>
+      filterTarget(card: Card, player: Player, target: Player) {
+        @ts{ #filterTarget }
+        return true
+      },
+    </filterTarget>
+    <selectTarget>selectTarget: #selectTarget,</selectTarget>
+    <position>position: #position,</position>
+    <prompt>prompt: #prompt,</prompt>
+    <check>
+      check(card: Card) {
+        @ts{ #check }
+        return true
+      },
+    </check>
+    <content>
+      async content(event: GameEvent, trigger: GameEvent, player: Player) {
+        @ts{ #content }
+      },
+    </content>
+    <ai>ai: @__skillAiValue(#ai),</ai>
+  }
+}
+
+// ═════════════════════════════════ 使用类 ════════════════════════════════════
+// 旧版编辑器 kind = 'enable:"chooseToUse"'；出牌阶段之外也能主动使用的技能。
+macro @skill_chooseToUse(
+  #skill: Ident?,
+  #translation: Str?,
+  #description: Str?,
+  #filter: stmt,
+  #filterCard: stmt,
+  #filterCardValue: expr?,
+  #selectCard: expr?,
+  #filterTarget: stmt,
+  #selectTarget: Num?,
+  #position: Str?,
+  #prompt: Str?,
+  #usable: Num?,
+  #check: stmt,
+  #content: stmt,
+  #ai: ObjectLit?
+) {
+  #skill = {
+    enable: "chooseToUse",
+    <translation>translation: #translation,</translation>
+    <description>description: #description,</description>
+    <usable>usable: #usable,</usable>
+    <filter>
+      filter(event: GameEvent, player: Player) {
+        @ts{ #filter }
+        return true
+      },
+    </filter>
+    <filterCard>
+      filterCard(card: Card, player: Player) {
+        @ts{ #filterCard }
+        return true
+      },
+    </filterCard>
+    <filterCardValue>filterCard: #filterCardValue,</filterCardValue>
+    <selectCard>selectCard: #selectCard,</selectCard>
+    <filterTarget>
+      filterTarget(card: Card, player: Player, target: Player) {
+        @ts{ #filterTarget }
+        return true
+      },
+    </filterTarget>
+    <selectTarget>selectTarget: #selectTarget,</selectTarget>
+    <position>position: #position,</position>
+    <prompt>prompt: #prompt,</prompt>
+    <check>
+      check(card: Card) {
+        @ts{ #check }
+        return true
+      },
+    </check>
+    <content>
+      async content(event: GameEvent, trigger: GameEvent, player: Player) {
+        @ts{ #content }
+      },
+    </content>
+    <ai>ai: @__skillAiValue(#ai),</ai>
+  }
+}
+
+// ═════════════════════════════════ 打出类 ════════════════════════════════════
+// 旧版编辑器 kind = 'enable:"chooseToRespond"'；被要求「打出」时可用。
+macro @skill_chooseToRespond(
+  #skill: Ident?,
+  #translation: Str?,
+  #description: Str?,
+  #filter: stmt,
+  #filterCard: stmt,
+  #filterCardValue: expr?,
+  #selectCard: expr?,
+  #filterTarget: stmt,
+  #selectTarget: Num?,
+  #position: Str?,
+  #prompt: Str?,
+  #usable: Num?,
+  #check: stmt,
+  #content: stmt,
+  #ai: ObjectLit?
+) {
+  #skill = {
+    enable: "chooseToRespond",
+    <translation>translation: #translation,</translation>
+    <description>description: #description,</description>
+    <usable>usable: #usable,</usable>
+    <filter>
+      filter(event: GameEvent, player: Player) {
+        @ts{ #filter }
+        return true
+      },
+    </filter>
+    <filterCard>
+      filterCard(card: Card, player: Player) {
+        @ts{ #filterCard }
+        return true
+      },
+    </filterCard>
+    <filterCardValue>filterCard: #filterCardValue,</filterCardValue>
+    <selectCard>selectCard: #selectCard,</selectCard>
+    <filterTarget>
+      filterTarget(card: Card, player: Player, target: Player) {
+        @ts{ #filterTarget }
+        return true
+      },
+    </filterTarget>
+    <selectTarget>selectTarget: #selectTarget,</selectTarget>
+    <position>position: #position,</position>
+    <prompt>prompt: #prompt,</prompt>
+    <check>
+      check(card: Card) {
+        @ts{ #check }
+        return true
+      },
+    </check>
+    <content>
+      async content(event: GameEvent, trigger: GameEvent, player: Player) {
+        @ts{ #content }
+      },
+    </content>
+    <ai>ai: @__skillAiValue(#ai),</ai>
+  }
+}
+
+// ═══════════════════════════════ 使用打出类 ══════════════════════════════════
+// 旧版编辑器 kind = 'enable:["chooseToUse","chooseToRespond"]'；既能使用也能打出。
+macro @skill_useRespond(
+  #skill: Ident?,
+  #translation: Str?,
+  #description: Str?,
+  #filter: stmt,
+  #filterCard: stmt,
+  #filterCardValue: expr?,
+  #selectCard: expr?,
+  #filterTarget: stmt,
+  #selectTarget: Num?,
+  #position: Str?,
+  #prompt: Str?,
+  #usable: Num?,
+  #check: stmt,
+  #content: stmt,
+  #ai: ObjectLit?
+) {
+  #skill = {
+    enable: ["chooseToUse", "chooseToRespond"],
+    <translation>translation: #translation,</translation>
+    <description>description: #description,</description>
+    <usable>usable: #usable,</usable>
+    <filter>
+      filter(event: GameEvent, player: Player) {
+        @ts{ #filter }
+        return true
+      },
+    </filter>
+    <filterCard>
+      filterCard(card: Card, player: Player) {
+        @ts{ #filterCard }
+        return true
+      },
+    </filterCard>
+    <filterCardValue>filterCard: #filterCardValue,</filterCardValue>
+    <selectCard>selectCard: #selectCard,</selectCard>
+    <filterTarget>
+      filterTarget(card: Card, player: Player, target: Player) {
+        @ts{ #filterTarget }
+        return true
+      },
+    </filterTarget>
+    <selectTarget>selectTarget: #selectTarget,</selectTarget>
+    <position>position: #position,</position>
+    <prompt>prompt: #prompt,</prompt>
+    <check>
+      check(card: Card) {
+        @ts{ #check }
+        return true
+      },
+    </check>
+    <content>
+      async content(event: GameEvent, trigger: GameEvent, player: Player) {
+        @ts{ #content }
+      },
+    </content>
+    <ai>ai: @__skillAiValue(#ai),</ai>
+  }
+}
+
+// ═══════════════════════════════ 视为技 ═════════════════════════════════════
+// 视为技不是旧版的独立类别（editor.mjs:475 的 isViewAs 判定），而是叠加在上面
+// 任意一种 enable 上：把牌「当作」另一张牌使用/打出。省略 #enable 时默认
+// ["chooseToUse","chooseToRespond"]（武圣、倾国这一类）。
+//   #viewAs: { name: "shan" }          → 当作闪
+//   #viewAs: { name: "sha", nature: "fire" } → 当作火杀
+macro @skill_viewAs(
+  #skill: Ident?,
+  #translation: Str?,
+  #description: Str?,
+  #enable: expr?,
+  #viewAs: ObjectLit?,
+  #filterCard: stmt,
+  #filterCardValue: expr?,
+  #viewAsFilter: stmt,
+  #selectCard: expr?,
+  #position: Str?,
+  #prompt: Str?,
+  #usable: Num?,
+  #check: stmt,
+  #content: stmt,
+  #ai: ObjectLit?
+) {
+  #skill = {
+    enable: @__skillEnableValue(#enable),
+    <translation>translation: #translation,</translation>
+    <description>description: #description,</description>
+    <usable>usable: #usable,</usable>
+    <viewAs>viewAs: #viewAs,</viewAs>
+    <filterCard>
+      filterCard(card: Card, player: Player) {
+        @ts{ #filterCard }
+        return true
+      },
+    </filterCard>
+    <filterCardValue>filterCard: #filterCardValue,</filterCardValue>
+    <viewAsFilter>
+      viewAsFilter(player: Player) {
+        @ts{ #viewAsFilter }
+        return true
+      },
+    </viewAsFilter>
+    <selectCard>selectCard: #selectCard,</selectCard>
+    <position>position: #position,</position>
+    <prompt>prompt: #prompt,</prompt>
+    <check>
+      check(card: Card) {
+        @ts{ #check }
+        return true
+      },
+    </check>
+    <content>
+      async content(event: GameEvent, trigger: GameEvent, player: Player) {
+        @ts{ #content }
+      },
+    </content>
+    <ai>ai: @__skillAiValue(#ai),</ai>
+  }
+}
+
+// ═══════════════════════════════ 修改技 ═════════════════════════════════════
+// 旧版编辑器把「修改技」放在独立板块（editor.mjs:246 的 back.skill.mod）。
+// #mod 直接写钩子对象，方法简写，与官方 mashu 同形：
+//   @skill_mod {
+//     #skill: mashu
+//     #translation: "马术"
+//     #mod: { globalFrom(from, to, distance) { return distance - 1 } }
+//   }
+macro @skill_mod(
+  #skill: Ident?,
+  #translation: Str?,
+  #description: Str?,
+  #mod: ObjectLit,
+  #locked: Bool?,
+  #ai: ObjectLit?
+) {
+  #skill = {
+    <translation>translation: #translation,</translation>
+    <description>description: #description,</description>
+    mod: #mod,
+    <locked>locked: #locked,</locked>
+    <ai>ai: #ai,</ai>
+  }
+}
+
+// ═══════════════════════════════ 组合技 ═════════════════════════════════════
+// 本体只挂规则标记、真正效果在被引用的子技里（官方 wushuang / kongcheng 同形）。
+macro @skill_group(
+  #skill: Ident?,
+  #translation: Str?,
+  #description: Str?,
+  #group: expr,
+  #preHidden: expr?,
+  #forced: Bool?,
+  #locked: Bool?
+) {
+  #skill = {
+    <translation>translation: #translation,</translation>
+    <description>description: #description,</description>
+    group: #group,
+    <preHidden>preHidden: #preHidden,</preHidden>
+    <forced>forced: #forced,</forced>
+    <locked>locked: #locked,</locked>
+  }
+}
+
+// ══════════════════════════ 自由技能（兜底 / 逃生口） ═════════════════════════
+// 上面的宏没覆盖到的字段一律走这里：整个技能对象自己写。
+//   @skill_raw {
+//     #skill: my_skill
+//     #object: {
+//       audio: "ext:我的包/audio/skill:2",
+//       trigger: { player: "phaseEnd" },
+//       forced: true,
+//       async content(event: GameEvent, trigger: GameEvent, player: Player) { player draw(1) },
+//     }
+//   }
+macro @skill_raw(#skill: Ident?, #object: ObjectLit?) {
+  <object>
+  #skill = #object
+  </object>
+}

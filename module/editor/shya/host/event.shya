@@ -1,0 +1,31 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// event —— 无名杀事件对象 `GameEvent` 宿主声明
+// 证据：noname/library/element/gameEvent.js（name:E17、skill:E736、set:E36、
+// getParent:E124、getTrigger:E184）与官方技能里的用法（character/standard/skill.js）。
+//
+// 事件里的 player / source / target / targets / card / cards / num / result 都是
+// **事件流程动态赋值**的，这里声明只用于类型检查，不产出任何代码。
+// 刻意不声明：event.trigger（不存在，用 getTrigger()）、event.forResult()、
+// event.getg()/getd()（动态挂载，声明会误导）。
+// ═══════════════════════════════════════════════════════════════════════════
+declare GameEvent {
+  name: string
+  player: Player
+  source: Player
+  target: Player
+  targets: array<Player>
+  card: Card
+  cards: array<Card>
+  num: number
+  result: any
+  skill: string
+  position: string
+  type: string
+  custom: any
+  reason: any
+
+  getParent(level: number = 1, forced: boolean = false, includeSelf: boolean = false): GameEvent
+  getTrigger(): GameEvent
+  set(key: string, value: any): GameEvent
+  setContent(content: any): void
+}
