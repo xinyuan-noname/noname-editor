@@ -44,7 +44,6 @@ shadow.innerHTML=`
             <button class="compile" type="button">编译</button>
             <button class="generate" type="button">生成</button>
             <button class="copy" type="button">复制代码</button>
-            <button class="close" type="button" title="关闭编辑器">关闭</button>
         </span>
     </div>
     <div class="tools">

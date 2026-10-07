@@ -368,8 +368,6 @@ shadow.innerHTML=`
 </section>
 <section class="menu">
     <div class="menu-icon">🔧</div>
-    <div class="close">关闭界面</div>
-    <div class="export-all">一键导出</div>
     <div class="gen-code">生成代码</div>
     <div class="return-setting">返回设置</div>
 </section>`
@@ -613,45 +611,9 @@ shadow.innerHTML=`
     #listenMenu() {
         const main = this.shadowRoot.querySelector(".main");
         const menu = this.shadowRoot.querySelector(".menu");
-        const closeButton = menu.querySelector(".close");
         //
         const genCodeButton = menu.querySelector(".gen-code");
         const returnSettingButton = menu.querySelector(".return-setting");
-        //
-        const exportAllButton = menu.querySelector(".export-all");
-        closeButton.addEventListener("pointerup", () => {
-            this.remove();
-        });
-        exportAllButton.addEventListener("pointerup", async () => {
-            if (!this.getData("id")) {
-                const { dialog, processing } = this.openCharacterIdDialog();
-                dialog.setAttribute("headline", "暂未设置武将id，请设置之！")
-                const result = await processing;
-                if (result === false) return;
-                await this.loadId(result);
-            }
-            if (!this.getData("extension")) {
-                const { dialog, processing } = this.openExtensionDialog();
-                dialog.setAttribute("headline", "暂未设置导出到的扩展，请设置之。");
-                const result = await processing;
-                if (result === false) return;
-            }
-            const extensionName = this.getData("extension");
-            if (!this.getData("packageId")) {
-                if (!this.configQuery("get", { member: `x19D6_editor.extensionModuleConfig.${extensionName}` })) {
-                    await this.writeModuleConfig(extensionName);
-                }
-                const { processing } = this.openPackageSelectDialog(extensionName);
-                const result = await processing;
-                if (result === false) return;
-            }
-            await this.downloadExtensionAsset();
-            const modificationInfo = await this.codeQuery("modifyCharacterPackageCode", [
-                this.getAllData(),
-                this.configQuery("get", { member: `x19D6_editor.extensionModuleConfig.${extensionName}` })
-            ]);
-            this.modifyFiles(modificationInfo);
-        })
         genCodeButton.addEventListener("pointerup", async () => {
             if (!this.getData("id")) {
                 const { dialog, processing } = this.openCharacterIdDialog();
