@@ -81,9 +81,7 @@ game.x19D6_judgeType = function (word) {
 game.x19D6_skillEditor = function (readCache = true, father) {
 	const playerCN = NonameCN.playerCN;
 	const JOINED_PLAYAERCN = playerCN.join("|");
-	const backgroundItems = ui.create.x19D6_back(void 0, father);
-	console.log(backgroundItems);
-	const [back, close] = backgroundItems;
+	const [back, close] = ui.create.x19D6_back(void 0, father)
 	back.close = close
 	back.classList.add("xy-ED-skill-editor")
 	back.ele = {}

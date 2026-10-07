@@ -523,3 +523,30 @@ span.xy-ED-skill-weakHidden {
       transform: rotateY(360deg)
     }
   }
+/* ================= 旧版技能编辑器浮层（还原后的独立形态） ================= */
+/* 魂氏编辑器给自身子元素设了 z-index:100，旧浮层必须更高才能盖在其上 */
+.xy-ED-skill-interact-back {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2000;
+}
+
+/* 关闭按钮：补齐尺寸与可点区域（图标文件位于扩展的 image/icon/close.png） */
+.xy-ED-skill-interact-back>.xy-ED-skill-interact-close {
+    position: absolute;
+    top: 0.4em;
+    right: 0.4em;
+    width: 2em;
+    height: 2em;
+    z-index: 2001;
+    cursor: pointer;
+    object-fit: contain;
+    opacity: 0.85;
+}
+
+.xy-ED-skill-interact-back>.xy-ED-skill-interact-close:hover {
+    opacity: 1;
+}
