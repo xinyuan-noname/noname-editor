@@ -130,16 +130,18 @@ async function resolveSkillEditorVersion() {
 /**
  * 新版 shya 技能编辑器（接入中：组件与编译链路完成后替换此处）
  */
-function openShyaSkillEditor() {
-    const dialog = document.createElement("noname-dialog");
-    dialog.setAttribute("headline", "新版技能编辑器");
-    dialog.setAttribute("message", "新版（shya）编辑器正在接入中。可先在「设置 → 技能编辑器版本」切回旧版使用。");
-    dialog.setAttribute("type", "alert");
-    (ui.window || document.body).appendChild(dialog);
-    dialog.wait().finally(() => dialog.remove());
-    return null;
-}
-async function openSkillEditor(options = {}) {
+async function openShyaSkillEditor(options = {}) {
+    const instance = ensureMounted(options.parent);
+    instance.view.toggleNav("skill");
+    //组件定义按需载入（WASM 在组件内首次编译时才拉，避免拖慢启动）
+    await import("./component-shyaEditor.mjs");
+    let node = instance.view.mainArea.querySelector("shya-editor");
+    if (!node) {
+        node = document.createElement("shya-editor");
+        instance.view.mainArea.appendChild(node);
+    }
+    return node;
+}async function openSkillEditor(options = {}) {
     const version = await resolveSkillEditorVersion();
     if (version === "legacy") return openLegacySkillEditor(options.readCache !== false);
     return openShyaSkillEditor(options);
