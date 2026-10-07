@@ -310,6 +310,10 @@ shadow.innerHTML=`
                         this.#whenEnd(() => {
                             this.#finishReslove(picked);
                         });
+                        //取消/关闭时也要 resolve，否则调用方 await 会一直悬住
+                        this.#whenCancel(() => {
+                            this.#finishReslove(-1);
+                        });
                     }; break;
                     case "multi-input": {
                         let fields = [];

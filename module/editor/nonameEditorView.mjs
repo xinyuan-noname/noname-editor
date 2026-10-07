@@ -514,9 +514,10 @@ mainPage.innerHTML=`
         if (lastNav && remember !== false) this.toggleNav(lastNav);
     }
     listenSideBarSkill() {
-        //技能编辑入口：旧版为悬挂在 ui.window 的独立浮层（新版 shya 编辑器接入后改为内联）
+        //技能编辑入口：走 openSkillEditor 的「新/旧」偏好分流，不要直接调旧版
+        //（偏好存在 x19D6_editor.settings.skillEditorVersion，首次弹一次，之后在设置页改）
         this.navSkill.addEventListener("pointerup", () => {
-            if (typeof game.x19D6_openLegacySkillEditor === "function") game.x19D6_openLegacySkillEditor();
+            if (typeof game.x19D6_openSkillEditor === "function") game.x19D6_openSkillEditor();
         });
     }
     listenSideBarSearch() {
