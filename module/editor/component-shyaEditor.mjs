@@ -37,6 +37,7 @@ shadow.innerHTML=`
             <button class="compile" type="button">编译</button>
             <button class="generate" type="button">生成</button>
             <button class="copy" type="button">复制代码</button>
+            <button class="close" type="button" title="关闭编辑器">关闭</button>
         </span>
     </div>
     <div class="body">
@@ -62,6 +63,8 @@ shadow.innerHTML=`
         q(".compile").addEventListener("pointerup", () => this.compile());
         q(".generate").addEventListener("pointerup", () => this.generate());
         q(".copy").addEventListener("pointerup", () => this.copyCode());
+        const closeButton = q(".close");
+        if (closeButton) closeButton.addEventListener("pointerup", () => this.remove());
     }
     escape(text) {
         return String(text).replace(/[&<>]/g, ch => (ch === "&" ? "&amp;" : ch === "<" ? "&lt;" : "&gt;"));

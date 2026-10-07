@@ -142,3 +142,10 @@ button:hover {
         flex-direction: column;
     }
 }
+button.close {
+    background: #d9c7bd;
+}
+
+button.close:hover {
+    background: #efd9cf;
+}
