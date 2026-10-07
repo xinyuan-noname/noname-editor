@@ -1,0 +1,525 @@
+/* 由《技能编辑器》的 css/main.css + css/animation.css 合并而来（x19D6_ → x19D6_；已剥离《新将包》品牌图片引用）*/
+:host {
+  --xy-ED-skill-file-width: 54%;
+  --xy-ED-skill-color: #f0acf7, #7093DB, #f7f0ac;
+}
+
+/*彩框动画*/
+
+
+.x19D6_tranEndless {
+  display: block;
+  animation: x19D6_tran var(--x19D6TimeLong) infinite linear;
+}
+
+.avatar.x19D6_tranEndless {
+  --x19D6TimeLong: 0.5s
+}
+
+#arena.x19D6_tranEndless {
+  --x19D6TimeLong: 4s
+}
+
+
+
+/*左浮动*/
+.x19D6_floatRight {
+  float: right;
+}
+
+/*居中定位*/
+.x19D6ToCenter {
+  position: absolute;
+  margin: auto;
+  right: 0px;
+  top: 0px;
+  left: 0px;
+  bottom: 0px;
+}
+
+/*隐藏*/
+.x19D6_hidden {
+  display: none !important;
+}
+
+
+
+/*抽奖*/
+.xy-ED-skill-choujiang-listContainer> :nth-child(1) {
+  color: red;
+}
+
+.xy-ED-skill-choujiang-listContainer> :nth-child(2) {
+  color: orange;
+}
+
+.xy-ED-skill-choujiang-listContainer> :nth-child(3) {
+  color: blue;
+}
+
+.xy-ED-skill-choujiang-listContainer> :nth-child(4) {
+  color: pink;
+}
+
+.x19D6_choujiang {
+  position: relative;
+  font-size: 24px;
+  border: 1px solid #4A766E;
+  border-radius: 5em;
+  float: left;
+  margin-bottom: 14px;
+}
+
+div#myChouJiang_x19D6_CONTENT {
+  font-size: 30px;
+  color: #D9D919;
+  margin-left: 56%;
+  margin-top: 100px;
+  width: 240px;
+  text-align: center;
+}
+
+button#myChouJiang_x19D6_BUTTON {
+  margin-left: 60%;
+  border-radius: 5em;
+  position: relative;
+  color: red;
+  border: 1px solid green;
+  font-size: 24px;
+  margin-top: 200px;
+  width: 175px;
+  height: 80px;
+}
+
+div#myChouJiang_x19D6_TXT {
+  font-size: 20px;
+  right: 410px;
+  top: 10px;
+}
+
+div.x19D6_ImgButton {
+  width: 28.3%;
+  height: 238px;
+  margin: 1.7%;
+  border: 3px solid #f0acf7;
+  background-size: cover;
+  background-repeat: no-repeat;
+  color: white;
+  text-align: center;
+  border-radius: 0.5em;
+}
+
+
+/*存档*/
+.x19D6_ul_storage li p span {
+
+  padding-top: 6px;
+  float: left;
+  width: 41px;
+  height: 35px;
+  margin-left: 8px;
+  margin-top: -10px;
+  background-color: #004b49;
+  border-radius: 50%
+}
+
+.x19D6_ul_storage li p {
+  font-size: 18px;
+  margin-left: 6%
+}
+
+/*新将包被存档*/
+#x19D6_storage_theStorage {
+  background-size: 18% 100%;
+  visibility: hidden;
+  margin-bottom: 150px;
+  margin-left: -50px;
+  overflow: auto;
+  background-image: linear-gradient(rgba(255, 225, 255, 0.6), rgba(255, 225, 255, 0.6)), none
+}
+
+#x19D6_storage_theStorage::before {
+  content: attr(x19D6_information);
+  white-space: pre;
+  color: #e75480;
+  background-image: inherit;
+  background-size: 100% 100%;
+  text-shadow: 2px 2px 0.75em #4e5180;
+  position: absolute;
+  font-size: 1.25em;
+  height: 10em;
+  width: 98%;
+  border: inherit;
+  visibility: visible;
+  display: block;
+  overflow: auto
+}
+
+
+
+.xy-ED-skill-HpCard {
+  position: relative;
+}
+
+.xy-ED-skill-HpCard::after {
+  content: attr(number);
+  position: absolute;
+  color: red;
+  right: 0;
+}
+
+.xy-ED-skill-hpCard-container {
+  perspective: 1000px;
+  height: 100%;
+  width: 100%;
+  z-index: 5;
+}
+
+.xy-ED-skill-hpCard-doubleFace {
+  transition: 1s;
+  transform-style: preserve-3d;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+}
+
+.xy-ED-skill-hpCard-doubleFace>div {
+  backface-visibility: hidden;
+  position: absolute;
+}
+
+.xy-ED-skill-hpCard-back {
+  transform: rotateY(180deg);
+}
+
+/*新将包诗文*/
+.x19D6Headline {
+  font-size: 36px;
+  margin: 0px;
+}
+
+.x19D6Writer {
+  font-size: 20px;
+  margin: 0px;
+}
+
+.x19D62levelTitle {
+  font-size: 26px;
+  font-weight: bold;
+  position: relative;
+}
+
+
+
+
+/*拼音注释*/
+[x19D6_pinyin]:hover::after {
+  content: attr(x19D6_pinyin);
+  background: gold;
+}
+
+/*概念注释*/
+b[description]:hover::after {
+  content: attr(description);
+  background: rgb(0, 0, 0, 0.7);
+  display: block;
+  position: absolute;
+  width: 500px;
+  font-size: 0.9em;
+  text-shadow: 1px 1px 2px rgba(185, 162, 162, 0.3);
+  z-index: 10;
+  border-radius: 4px;
+  color: rgb(170, 169, 169);
+  box-shadow: 0 2px 4px rgba(85, 72, 72, 0.2);
+  max-width: 60%;
+  left: 30%;
+}
+
+
+
+/*背景*/
+div.xy-ED-skill-interact-back {
+  width: 800px;
+  height: 400px;
+  z-index: 8;
+  border-radius: 3em;
+  background-image: linear-gradient(to bottom right, #f0acf7, #7093DB, #f7f0ac);
+  border: 3px solid black;
+}
+
+div.xy-ED-skill-interact-foot {
+  position: absolute;
+  font-size: 20px;
+  font-family: "楷体";
+  width: 100%;
+  color: #D9D919;
+  text-align: center;
+  margin-top: 370px;
+  margin-left: -40px;
+}
+
+img.xy-ED-skill-interact-close {
+  float: left;
+  width: 40px;
+}
+
+/*蒙层背景*/
+div.x19D6_curtain {
+  width: 100%;
+  height: 100%;
+  background-color: rgba(60, 65, 81, 0.7);
+  z-index: 9;
+}
+
+/*对话框*/
+.x19D6_dialogBase {
+  background-color: #71291d;
+  list-style: none;
+  opacity: 0.9;
+  padding: 5px;
+  z-index: 10;
+  height: 159.34px;
+  width: 628.65px;
+  border-radius: 0.5em;
+  border: 5px solid #cb6d51;
+  font-size: 24px;
+  overflow: auto;
+  display: block
+}
+
+.x19D6_dialogButton {
+  color: #041322;
+  text-align: center;
+  font-size: 36px;
+  background-color: #e4d5b7;
+  border-radius: 0.5em;
+  position: relative;
+}
+
+
+
+.xy-ED-skill-button {
+  padding: 0 0;
+  text-align: center;
+  border-radius: 0.5em;
+  position: relative;
+  background-color: #e4d5b7;
+  margin-left: 3px;
+}
+
+.x19D6_ImgButton {
+  position: relative;
+}
+
+/*chosen*/
+li.xy-ED-skill-chosen,
+.x19D6_dialogButton.xy-ED-skill-chosen,
+.xy-ED-skill-button.xy-ED-skill-chosen {
+  background-color: red;
+}
+
+.x19D6_dialogButton.xy-ED-skill-chosen.xy-ED-skill-isVar {
+  background-color: #7093DB;
+}
+
+.x19D6_dialogButton.xy-ED-skill-chosen.xy-ED-skill-isVarAnother {
+  background-color: orange;
+}
+
+.x19D6_dialogButton.xy-ED-skill-chosen.xy-ED-skill-button-color2 {
+  background-color: #70c7db;
+}
+
+.x19D6_dialogButton.xy-ED-skill-chosen.xy-ED-skill-button-color1 {
+  background-color: #db7092;
+}
+
+.xy-ED-skill-dialog-prompt {
+  position: relative;
+  overflow: auto;
+  font-size: 24px
+}
+
+
+.xy-ED-skill-pointer:hover {
+  cursor: pointer;
+}
+
+
+.x19D6_dialogButton .x19D6_dialogButton {
+  margin: 0 0.3em;
+  border-radius: 50%;
+  background-color: yellow;
+  top: -0.1em;
+  color: red;
+  position: relative;
+}
+
+
+div.x19D6_brightButton {
+  border: 2px solid white;
+  color: yellow;
+  border-radius: 200px;
+  font-size: 19px;
+  position: relative;
+  margin-left: 5px;
+}
+
+/*称号样式，去掉下划线*/
+.x19D6_hunTitle {
+  text-decoration: none;
+}
+
+.x19D6_hunTitle:hover,
+.x19D6_hunTitle:link,
+.x19D6_hunTitle:visited,
+.x19D6_hunTitle:active {
+  color: inherit;
+}
+
+.player>.x19D6_gathering {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  background-image: none;
+  background-size: 123px 123px;
+  background-repeat: no-repeat;
+  background-position: center;
+  animation: x19D6_tranB 1s infinite linear;
+}
+
+.player>.avatar.xy-ED-skill-becomeBat {
+  background-image: none !important;
+}
+
+span.xy-ED-skill-weakHidden {
+  display: none;
+}
+
+.hover-showChildren:hover>span {
+  display: inline;
+}
+
+.xy-ED-skill-smaller {
+  font-size: smaller
+}
+
+.xy-ED-skill-color-invert {
+  filter: invert(100%);
+  -webkit-filter: invert(100%);
+}
+@keyframes xy-ED-skill-color-circle {
+    0% {
+      border-top-color: #f0acf7;
+      border-bottom-color: white;
+      border-left-color: #7093DB;
+      border-right-color: #f7f0ac
+    }
+  
+    25% {
+      border-top-color: #7093DB;
+      border-bottom-color: #f7f0ac;
+      border-left-color: white;
+      border-right-color: #f0acf7
+    }
+  
+    50% {
+      border-top-color: white;
+      border-bottom-color: #f0acf7;
+      border-left-color: #f7f0ac;
+      border-right-color: #7093DB
+    }
+  
+    75% {
+      border-top-color: #f7f0ac;
+      border-bottom-color: 7093DB;
+      border-left-color: #f0acf7;
+      border-right-color: white
+    }
+  
+    100% {
+      border-top-color: #f0acf7;
+      border-bottom-color: white;
+      border-left-color: #7093DB;
+      border-right-color: #f7f0ac
+    }
+  }
+  
+  .x19D6_color_circle {
+    animation: xy-ED-skill-color-circle 0.6s infinite linear
+  }
+  
+  /*振荡动画*/
+  @keyframes x19D6_shake {
+  
+    10%,
+    90% {
+      transform: translate3d(-1px, 0, 0);
+    }
+  
+    20%,
+    80% {
+      transform: translate3d(2px, 0, 0);
+    }
+  
+    30%,
+    50%,
+    70% {
+      transform: translate3d(-4px, 0, 0);
+    }
+  
+    40%,
+    60% {
+      transform: translate3d(4px, 0, 0);
+    }
+  }
+  
+  .x19D6_animation_shake {
+    animation: x19D6_shake 0.82s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  }
+  
+  .xy-ED-skill-shake {
+    animation: x19D6_shake 0.5s infinite linear
+  }
+  
+  /*旋转动画*/
+  @keyframes x19D6_tran {
+    0% {
+      transform: rotateY(0deg)
+    }
+  
+    50% {
+      transform: rotateY(180deg)
+    }
+  
+    100% {
+      transform: rotateY(360deg)
+    }
+  }
+  
+  @keyframes x19D6_tranB {
+  
+    0%,
+    100% {
+      background-size: 23px 23px;
+      opacity: 0;
+      transform: rotateY(0deg);
+    }
+  
+    25%,
+    90% {
+      background-size: 36px 36px;
+      opacity: 0.3;
+      transform: rotateY(180deg)
+    }
+  
+    50%,
+    75% {
+      background-size: 50px 50px;
+      opacity: 0;
+      transform: rotateY(360deg)
+    }
+  }

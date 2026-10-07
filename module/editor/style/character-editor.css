@@ -1,0 +1,1052 @@
+:host {
+    display: flex;
+    font-size: var(--font-size);
+    overflow: hidden;
+    max-height: 100%;
+    max-width: 100%;
+    position: relative;
+    --data-group-text-shadow:
+        rgb(78 117 140) 0 0 2px,
+        rgb(78 117 140) 0 0 2px,
+        rgb(78 117 140) 0 0 2px,
+        rgb(78 117 140) 0 0 2px,
+        black 0 0 1px;
+    --font-size: clamp(15px, 1.1vw + 12px, 22px);
+    --data-name: "";
+    --data-pinyin: "";
+    --data-id: "";
+    --data-sex: "男性";
+    --data-group: "魏势力";
+    --data-hp: '4';
+    --data-maxHp: '4';
+    --data-hujia: '0';
+    --data-skills: '';
+    --data-clans: "";
+    --data-avatar: url();
+}
+
+audio-info-card,
+skill-info-card {
+    font-size: 16px;
+    margin-top: 2px;
+}
+
+.small-font {
+    font-size: 16px;
+}
+
+.flex-column {
+    display: flex;
+    flex-direction: column;
+}
+
+.flex--between {
+    display: flex;
+    justify-content: space-between;
+}
+
+.flex-center {
+    display: flex;
+    align-items: center;
+}
+
+.flex-center-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.text-shadow-free {
+    text-shadow: none;
+}
+
+.pointer {
+    cursor: pointer;
+}
+
+.link-arrow::after {
+    content: ">";
+}
+
+.full-height {
+    height: 100%;
+}
+
+.full-width {
+    width: 100%;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.transparent {
+    opacity: 0 !important;
+}
+
+.checkbox {
+    text-shadow: none;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.checkbox::before {
+    content: "";
+    background-color: white;
+    height: 0.8em;
+    width: 0.8em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 2px;
+}
+
+.checkbox.chosen::before {
+    content: "√";
+    color: yellow;
+    background-color: blue;
+}
+
+/* 搜索按钮 */
+.search {
+    background-image: url("../image/icon/search.png");
+    background-size: cover;
+    display: flex;
+    background-color: rgba(0, 0, 255, 0.557);
+    border-radius: 60% 40% 100% 0% / 0% 100% 0% 100%;
+    width: 1em;
+    height: 1em;
+    cursor: pointer;
+}
+
+p.note {
+    font-size: 12px;
+    font-family: fangsong;
+    margin-top: 0;
+}
+
+/* 错误提示 */
+.wrong::before {
+    content: "!";
+    color: red
+}
+
+/* 可折叠按钮 */
+.expandable-expanded,
+.expandable-collapsed {
+    font-size: 14px;
+    transition: 0.1s;
+    cursor: pointer;
+}
+
+:is(.expandable-expanded, .expandable-collapsed)::after {
+    content: ">";
+    height: 100%;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    transition: 0.1s;
+}
+
+.expandable-expanded::after {
+    transform: rotate(90deg);
+}
+
+.expandable-collapsed::after {
+    transform: rotateZ(0deg);
+}
+
+/* 控制 */
+.control-point {
+    padding: 10px;
+    background-color: rgb(0, 76, 255);
+    position: absolute;
+}
+
+/* 可编辑文本框 */
+[contenteditable='true'] {
+    cursor: text;
+    text-shadow: none;
+}
+
+:not([data-intro]) ul {
+    padding: 0;
+    margin: 0;
+}
+
+span[contenteditable='true'] {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    min-width: 1em;
+}
+
+div[contenteditable="true"] {
+    background-color: rgb(255, 250, 240);
+    padding: 0 10px;
+    height: var(--font-size);
+    min-width: 100px;
+    text-align: center;
+    overflow: hidden;
+}
+
+.menu {
+    position: absolute;
+    display: flex;
+    z-index: 1024;
+}
+
+.menu>* {
+    border-radius: 50%;
+    transition: 0.1s;
+    box-shadow: 0 0 5px #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    top: 10px;
+    left: 10px;
+}
+
+.menu-icon {
+    width: 36px;
+    height: 36px;
+}
+
+.menu:hover .menu-icon {
+    font-size: 48px;
+    width: 72px;
+    height: 72px;
+}
+
+.menu-icon~* {
+    height: 48px;
+    width: 48px;
+    cursor: pointer;
+    text-shadow: 0 0 2px #176fd4;
+    text-align: center;
+    color: coral;
+    font-weight: 800;
+    margin: 0 3px;
+}
+
+.menu-icon~*:hover {
+    transform: scale(1.2);
+}
+
+.menu:not(:hover) .menu-icon~* {
+    display: none;
+}
+
+.main.turn-over+.menu .gen-code {
+    display: none;
+}
+
+.main:not(.turn-over)+.menu .return-setting {
+    display: none;
+}
+
+.main {
+    width: 100%;
+    display: flex;
+    padding: 5px;
+    transition: transform 0.6s;
+    transform-style: preserve-3d;
+    border: 5px solid black;
+    color: black;
+    border-radius: 10px;
+    max-height: calc(100% - 20px);
+    position: relative;
+}
+
+.main.turn-over {
+    transform: rotateY(180deg);
+}
+
+.main.turn-over .content {
+    display: none;
+}
+
+.main.turn-over .content {
+    display: none;
+}
+
+.code,
+.content {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-height: 100%;
+    backface-visibility: hidden;
+}
+
+.code {
+    position: absolute;
+    flex-direction: column;
+    transform: rotateY(180deg);
+    overflow: auto;
+}
+
+.code .code-section {
+    width: 85%;
+    border-radius: 5px 5px 0 0;
+    text-shadow: none;
+    overflow: hidden;
+}
+
+.code .code-section .title {
+    height: 32px;
+    display: flex;
+    flex-direction: row-reverse;
+    background-color: #3c3c3c;
+    width: 100%;
+    position: relative;
+}
+
+.code .code-section .title .copy {
+    color: #fff;
+    font-family: fangsong;
+    margin: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    flex-direction: row-reverse;
+}
+
+.code .code-section .title .copy::after {
+    display: block;
+    position: absolute;
+    width: max-content;
+    top: 100%;
+    color: #000;
+    background-color: #fff;
+    border-radius: 4px;
+    padding: 2px;
+}
+
+.code .code-section .title .copy.copied-ok::after {
+    content: '复制成功！';
+}
+
+.code .code-section .title .copy.copied-error::after {
+    content: '复制失败！';
+}
+
+.code .code-section pre {
+    margin: 0;
+    user-select: text;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+}
+
+.code .code-section code {
+    padding: 22px;
+    width: max-content;
+    min-width: calc(100% - 44px);
+}
+
+.content {
+    overflow: hidden;
+}
+
+.left,
+.right {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    flex: 1;
+}
+
+.left {
+    justify-content: center;
+    align-items: center;
+}
+
+.right {
+    justify-content: flex-start;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.right .data-setting {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+}
+
+.right .data-setting>span {
+    display: flex;
+    align-items: center;
+}
+
+.right .expandable-expanded+span {
+    display: none;
+}
+
+.right .expandable-collapsed+span {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    margin-left: auto;
+    color: #fff;
+    font-size: 20px;
+    max-width: 200px;
+    height: 20px;
+    text-shadow: var(--data-group-text-shadow);
+    overflow: hidden;
+}
+
+.right .expandable-collapsed+span::after {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.expandable-collapsed[data-for="name"]+span::after {
+    content: var(--data-name, "") var(--data-pinyin);
+}
+
+.expandable-collapsed[data-for="id"]+span::after {
+    content: var(--data-id)
+}
+
+.expandable-collapsed[data-for="group"]+span::after {
+    content: var(--data-group);
+}
+
+.expandable-collapsed[data-for="sex"]+span::after {
+    content: var(--data-sex)
+}
+
+.expandable-collapsed[data-for="clans"]+span::after {
+    content: var(--data-clans)
+}
+
+.expandable-collapsed[data-for="hp"]+span::after {
+    content: "体：" var(--data-hp) "/" var(--data-maxHp) "，甲：" var(--data-hujia);
+}
+
+.expandable-collapsed[data-for="skills"]+span::after {
+    content: var(--data-skills);
+}
+
+/* 分包设置 */
+[data-extension] {
+    width: 12em;
+    margin-bottom: 5px;
+    overflow: hidden;
+}
+
+[data-extension] .sort-view{
+    width: max-content;
+}
+
+[data-extension] .extension-name::before {
+    content: var(--data-extension-name, "未设置扩展");
+    text-decoration: underline;
+}
+
+[data-extension] .package-id::before {
+    content: var(--data-package-id, "未设置将包");
+    text-decoration: underline;
+}
+
+[data-extension] .character-sort::before {
+    content: var(--data-character-sort, "未设置分包");
+    text-decoration: underline;
+}
+
+/* 皮肤 */
+[data-avatar] {
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+[data-avatar]>section {
+    display: flex;
+    font-size: 0.9em;
+    width: 100%;
+}
+
+[data-avatar]>section *:first-child {
+    margin-right: auto;
+}
+
+[data-avatar]>section *:first-child~* {
+    margin-left: 4px;
+    text-shadow: none;
+    cursor: pointer;
+    transition: 0.1s;
+}
+
+[data-avatar]>section *:first-child~*:hover {
+    transform: scale(1.5);
+}
+
+[data-avatar]>.avatar-view {
+    width: var(--view-width);
+    height: var(--view-height);
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    background-image: var(--data-avatar);
+    background-position: 50%;
+    --view-width: 12em;
+}
+
+[data-avatar]>.avatar-view.high {
+    --view-height: 22em
+}
+
+[data-avatar]>.avatar-view.mid {
+    --view-height: 20em;
+}
+
+[data-avatar]>.avatar-view.short {
+    --view-height: 18em;
+}
+
+[data-avatar]>.avatar-view:not(.done) {
+    cursor: pointer;
+    border: dashed black;
+    border-radius: 3px;
+}
+
+[data-avatar]>.avatar-view.done {
+    background-size: cover;
+}
+
+[data-avatar]>.avatar-view:not(.done)::before {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    content: "1.点击选择原画文件 \A 2.拖入原画文件";
+    position: absolute;
+    white-space: pre;
+}
+
+/* 图片编辑栏 */
+[data-avatar]>.avatar-view:not(.done)+.tool-bar {
+    display: none;
+}
+
+[data-avatar]>.avatar-view+.tool-bar {
+    margin-top: 3px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-items: center;
+    width: 100%;
+    z-index: 2;
+}
+
+[data-avatar]>.tool-bar>span {
+    line-height: 1em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 2px;
+}
+
+/* 图片加载时相关 */
+[data-avatar]>.avatar-view:not(.loading) .img-loading {
+    display: none;
+}
+
+[data-avatar]>.avatar-view.loading .img-loading {
+    display: flex;
+    position: absolute;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    background-color: rgba(255, 255, 255, 0.4);
+    z-index: 3;
+}
+
+[data-avatar]>.avatar-view.loading .img-loading::after {
+    content: "";
+    border: 16px solid #f3f3f3;
+    border-top: 16px solid #3498db;
+    border-radius: 50%;
+    width: var(--view-width);
+    height: var(--view-width);
+    box-sizing: border-box;
+    animation: spin 2s linear infinite;
+}
+
+[data-avatar]>.avatar-view.loading .img-container {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+[data-avatar]>.avatar-view.loading+.tool-bar {
+    display: none;
+}
+
+/* 编辑图片相关*/
+/* 编辑时，样式隐藏 */
+[data-avatar]>.avatar-view.editing+.tool-bar>span {
+    display: none;
+}
+
+[data-avatar]>.avatar-view:not(.editing) .img-container {
+    display: none;
+}
+
+[data-avatar] .img-container {
+    position: relative;
+}
+
+[data-avatar]>.avatar-view img {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 2;
+    user-select: none;
+}
+
+/* 裁剪 */
+[data-avatar]>.avatar-view.cutting .img-container .curtain {
+    content: "";
+    width: 100vw;
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    background-color: rgba(255, 255, 255, 0.4);
+    z-index: 1;
+}
+
+[data-avatar]>.avatar-view.cutting {
+    overflow: visible;
+}
+
+[data-avatar]>.avatar-view:not(.cutting) .cutter {
+    display: none;
+}
+
+[data-avatar]>.avatar-view .cutter {
+    width: 100%;
+    height: 100%;
+    outline: gold 5px solid;
+    position: absolute;
+    top: 0;
+    z-index: 2;
+}
+
+[data-avatar] .cutter .cutter-view {
+    width: calc(var(--view-width) * var(--scale, 1));
+    height: 100%;
+    outline: 5px dashed black;
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    pointer-events: none;
+    position: absolute;
+}
+
+[data-avatar] .cutter .control-point.lt {
+    top: 0;
+    left: 0;
+    transform: translate(-50%, -50%);
+    cursor: nwse-resize;
+}
+
+[data-avatar]>.avatar-view .cutter .control-point.lb {
+    bottom: 0;
+    left: 0;
+    transform: translate(-50%, 50%);
+    cursor: nesw-resize;
+}
+
+[data-avatar]>.avatar-view .cutter .control-point.rt {
+    top: 0;
+    right: 0;
+    transform: translate(50%, -50%);
+    cursor: nesw-resize;
+}
+
+[data-avatar]>.avatar-view .cutter .control-point.rb {
+    bottom: 0;
+    right: 0;
+    transform: translate(50%, 50%);
+    cursor: nwse-resize;
+}
+
+[data-avatar]>.avatar-view.cutting+.tool-bar::after {
+    content: "点击图片外任意位置完成裁剪";
+    font-family: songti;
+    font-size: 14px;
+    text-shadow: none;
+    position: relative;
+}
+
+/* 阵亡语音 */
+[data-die-audios] {
+    margin-top: 10px;
+    width: 12em;
+}
+
+[data-die-audios] header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9em;
+}
+
+
+[data-die-audios] section {
+    max-height: 200px;
+    overflow: auto;
+}
+
+/* 武将名 */
+[data-name] rt:empty {
+    display: none;
+}
+
+[data-id] ruby {
+    display: flex;
+    justify-content: space-between;
+}
+
+/* 性别-势力-宗族 */
+:is([data-sex], [data-group], [data-clans]) ul {
+    list-style-type: none;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+:is([data-group], [data-sex], [data-clans]) li {
+    background-size: contain;
+    background-repeat: no-repeat;
+    cursor: pointer;
+    opacity: 0.4;
+    transition: 0.1s;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    flex-direction: column;
+    font-size: 14px;
+}
+
+:is([data-group], [data-sex], [data-clans]) li.chosen {
+    opacity: 1;
+}
+
+:is([data-group], [data-sex], [data-diy]) li:hover {
+    opacity: 1;
+}
+
+:is([data-sex], [data-group], [data-clans]) li::before {
+    content: attr(value);
+    background-size: contain;
+    background-repeat: no-repeat;
+    height: 40px;
+    width: 40px;
+    background-image: var(--url);
+}
+
+/* 势力-宗族 */
+:is([data-group], [data-clans]) li[data-diy]::before {
+    content: "➕";
+    border-radius: 50%;
+    box-sizing: border-box;
+    border: 1px dashed black;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+}
+
+/* 势力 */
+[data-group]>section li::after {
+    content: var(--group-type-note, none);
+    position: absolute;
+    border-radius: 50%;
+    text-shadow: var(--data-group-text-shadow);
+    background-color: rgb(198, 70, 66);
+    top: 0;
+    right: 0;
+    color: #FFF;
+}
+
+[data-group]>section.double-group-choosing li.double-group-chosen {
+    opacity: 1;
+    --group-type-note: "多";
+}
+
+/* 宗族 */
+[data-clans] ul li:not([data-diy]) {
+    --url: url("../image/clan/门阀士族.png")
+}
+
+/* 体力相关 */
+/* 体力 */
+[data-hp] div.hp-operation {
+    display: flex;
+    align-items: center;
+    font-size: 20px;
+    position: relative;
+    padding-left: 1em;
+    box-sizing: border-box;
+    justify-content: space-between;
+}
+
+.hp-more-show:not(.hidden)~.hp-show {
+    display: none;
+}
+
+.hp-more-show:is(.hidden)~.hp-adjust span[contenteditable] {
+    display: none;
+}
+
+.hp-more-show {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-left: auto;
+    text-shadow: none;
+}
+
+.hp-more-show [data-hp-adjust-mode].chosen {
+    background: cadetblue;
+    color: red;
+}
+
+.hp-show {
+    display: flex;
+    margin-left: auto;
+}
+
+.hp-adjust {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-left: 10px;
+}
+
+.hp-adjust>div {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    text-shadow: none;
+    margin: 0;
+    margin-left: 3px;
+}
+
+.hp-adjust>div>div {
+    cursor: pointer;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.hp-adjust>div>div:hover {
+    cursor: pointer;
+    outline: dashed 1px;
+}
+
+.hp-adjust>span {
+    margin: 10px;
+}
+
+.hp-adjust hr {
+    width: 100%;
+    margin: 0;
+}
+
+.hpContainer {
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    justify-content: flex-end;
+    margin: 10px 0;
+}
+
+.hpContainer .hp {
+    height: 20px;
+    width: 20px;
+    margin: 0 3px;
+    background-size: cover;
+    cursor: pointer;
+}
+
+.hpContainer.healthy .hp {
+    background-image: url(/theme/style/hp/image/glass1.png);
+}
+
+.hpContainer.damaged .hp {
+    background-image: url(/theme/style/hp/image/glass2.png);
+}
+
+.hpContainer.dangerous .hp {
+    background-image: url(/theme/style/hp/image/glass3.png);
+}
+
+.hp.lost {
+    background-image: url(/theme/style/hp/image/glass4.png);
+    filter: grayscale(100%);
+    opacity: 0.5;
+}
+
+.hp.lost.chosen,
+.hp.lost.chosen~.hp.lost,
+.hp.lost:hover,
+.hp.lost:hover~.hp.lost {
+    filter: grayscale(0%);
+    opacity: 1;
+}
+
+/* 护甲 */
+[data-hujia] div.hujia-operation {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 20px;
+    padding-left: 1em;
+    box-sizing: border-box;
+}
+
+.hujiaContainer {
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    justify-content: flex-end;
+    margin: 10px 0;
+    box-shadow: none;
+}
+
+.hujia {
+    height: 20px;
+    width: 20px;
+    transform: scale(1.4);
+    margin: 0 3px;
+    background-image: url(/image/card/shield.png);
+    background-size: cover;
+    cursor: pointer;
+}
+
+.hujia.reset {
+    margin: 0 10px;
+}
+
+.hujia.reset::before {
+    content: "🗘";
+    font-size: 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    top: 1px;
+    right: 1px;
+}
+
+.hujia.lost {
+    filter: grayscale(100%);
+    opacity: 0.5;
+}
+
+.hujia.lost.chosen,
+.hujia.lost.chosen~.hujia.lost,
+.hujia.lost:hover,
+.hujia.lost:hover~.hujia.lost {
+    filter: grayscale(0%);
+    opacity: 1;
+}
+
+/* 技能 */
+[data-skills] div[contenteditable] {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+[data-skills] section>header {
+    font-size: 16px;
+}
+
+[data-more] ul {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+}
+
+[data-more] ul li {
+    margin: 0 10px;
+}
+
+[data-more] ul li p {
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+[data-more] ul li[data-more-option] span {
+    display: inline-flex;
+    height: 1em;
+    width: 1em;
+    background-size: cover;
+}
+
+[data-more] ul li[data-more-option="isZhuGong"] span {
+    background-image: url(../image/icon/zhugong.png);
+}
+
+[data-more] ul li[data-more-option="hasHiddenSkill"] span {
+    background-image: url(/theme/style/hp/image/hidden_hp.png);
+}
+
+[data-more] ul li[data-more-option="isUnseen"] span {
+    background-image: url(../image/icon/unseen.png);
+}
+
+[data-more] ul li[data-more-option="isAiForbidden"] span {
+    background-image: url(../image/icon/ai-forbidden.png);
+}
+
+[data-more] ul li[data-more-option*="Boss"] span {
+    background-image: url(../image/icon/BOSS.png);
+}
+
+/* 介绍 */
+[data-intro] section>p {
+    font-size: 0.95em;
+    margin: 0;
+    padding: 2px;
+}
+
+[data-intro] section>p.use-default::before {
+    content: "以下为默认介绍：";
+}
+
+[data-intro] section>p.use-default::after {
+    content: attr(data-default-intro);
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}

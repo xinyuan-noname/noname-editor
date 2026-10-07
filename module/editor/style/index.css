@@ -1,0 +1,542 @@
+.xy-ED-nonameEditor {
+    /* 响应式尺度变量：随视口自适应，可由基本设置覆盖 */
+    --xy-ED-header-h: clamp(18px, 2.4vh, 28px);
+    --xy-ED-nav-w: clamp(44px, 5.5vw, 80px);
+    --xy-ED-nav-item: clamp(44px, 5.5vw, 80px);
+    --xy-ED-nav-icon: clamp(26px, 3.4vw, 50px);
+    --xy-ED-ball-size: clamp(34px, 4.4vw, 50px);
+    --xy-ED-font-scale: 1;
+    font-size: calc(1em * var(--xy-ED-font-scale));
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: auto;
+    width: 100%;
+    height: 100%;
+    max-width: 100vw;
+    max-height: 100vh;
+}
+
+.xy-ED-nonameEditor input,
+.xy-ED-nonameEditor textarea {
+    resize: none;
+    padding: 0;
+    border: none;
+}
+
+.xy-ED-nonameEditor ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.xy-ED-nonameEditor * {
+    position: relative;
+}
+
+.xy-ED-nonameEditor>* {
+    position: relative;
+    z-index: 100;
+}
+
+/* 最小化控制按键 */
+.xy-ED-minimizeControl {
+    position: absolute;
+    box-sizing: border-box;
+    border-radius: 50%;
+    box-shadow: 1px 1px 1px #fff, inset 1px 1px 1px #00000094;
+    background-color: rgb(149, 149, 149);
+    border: 5px whitesmoke solid;
+    font-size: calc(var(--xy-ED-ball-size) * 0.48);
+    height: var(--xy-ED-ball-size);
+    width: var(--xy-ED-ball-size);
+    touch-action: none;
+    will-change: transform;
+    transition: 0.1s;
+    opacity: 0.5;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.xy-ED-minimizeControl:hover {
+    opacity: 1;
+    cursor: pointer;
+}
+
+/* 操作界面控制 */
+.xy-ED-operationPage {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 操作界面头部 */
+.xy-ED-operationPage>header {
+    height: var(--xy-ED-header-h);
+    width: 100%;
+    background-color: rgb(185, 185, 185);
+    box-shadow: inset 1px 1px 3px #fff, inset 0px 0px 3px #000000a6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-align: center;
+}
+
+.xy-ED-operationPage>header .xy-ED-header-right,
+.xy-ED-operationPage>header .xy-ED-header-left {
+    width: 100px;
+    font-size: 20px;
+    text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0 10px;
+}
+
+.xy-ED-operationPage>header [class^="xy-ED-control"] {
+    opacity: 0.8;
+    transition: 0.1s;
+    height: calc(var(--xy-ED-header-h) - 2px);
+    width: calc(var(--xy-ED-header-h) - 2px);
+    background-size: cover;
+    box-sizing: border-box;
+}
+
+.xy-ED-operationPage>header .xy-ED-control-minize {
+    background-image: url(../image/icon/minimize.png);
+}
+
+.xy-ED-operationPage>header .xy-ED-control-close {
+    background-image: url(../image/icon/close.png);
+}
+
+.xy-ED-operationPage>header [class^="xy-ED-control"]:hover {
+    background-color: rgba(126, 107, 107, 0.5);
+    border: whitesmoke 1px solid;
+}
+
+/* 操作区域 */
+.xy-ED-viewArea {
+    --xy-ED-WidthRatio: 0.333;
+    display: flex;
+    height: calc(100% - var(--xy-ED-header-h));
+}
+
+.xy-ED-viewArea>.xy-ED-mainArea {
+    flex: 1;
+    background-color: rgb(220, 220, 220);
+    box-shadow: inset -1px -1px 3px #000000a8;
+    min-width: 200px;
+}
+
+.xy-ED-viewArea>.xy-ED-sideBar {
+    flex: var(--xy-ED-WidthRatio);
+    background-color: rgb(137, 137, 137);
+    display: flex;
+    box-shadow: inset 0 1px 1px #2b2b2b36;
+}
+
+.xy-ED-mainArea {
+    display: grid;
+    gap: 10px;
+}
+
+/* 侧边栏控制 */
+.xy-ED-sideBar-content {
+    flex: 1;
+    min-width: 180px;
+}
+
+.xy-ED-sideBar-content>* {
+    display: none;
+    width: 100%;
+    height: 100%;
+    flex-direction: column;
+}
+
+.xy-ED-sideBar-content .xy-ED-input-container+hr {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+.xy-ED-sideBar-content .xy-ED-input-container>div {
+    width: 80%;
+    display: flex;
+    align-items: center;
+    border: 1px solid white;
+    background-color: rgb(194 194 194);
+}
+
+.xy-ED-sideBar-content .xy-ED-input-container input {
+    background-color: transparent;
+    font-size: var(--xy-ED-input-fontSize);
+    height: inherit;
+    width: calc(100% - var(--xy-ED-input-fontSize) - var(--xy-ED-input-fontSize));
+}
+
+.xy-ED-sideBar-content .xy-ED-input-container input:focus {
+    background-color: transparent;
+    outline: none;
+}
+
+.xy-ED-sideBar-content .xy-ED-input-container .xy-ED-input-clear {
+    height: var(--xy-ED-input-fontSize);
+    width: var(--xy-ED-input-fontSize);
+    background-image: url(../image/icon/close.png);
+    background-size: cover;
+    cursor: pointer;
+    opacity: 0;
+}
+
+.xy-ED-sideBar-content .xy-ED-input-container .xy-ED-input-search {
+    height: calc(var(--xy-ED-input-fontSize) + 4px);
+    width: calc(var(--xy-ED-input-fontSize) + 4px);
+    background-image: url(../image/icon/search.png);
+    background-size: cover;
+    cursor: pointer;
+    border-radius: 50%;
+    border-left: 1px solid white;
+}
+
+.xy-ED-sideBar-content .xy-ED-input-container [class^=xy-ED-input-]:hover {
+    opacity: 1;
+}
+
+/* 武将卡片 */
+/* 无历史记录时显示效果 */
+.xy-ED-nocharacterCard:not(+.xy-ED-character-show>section:not(:empty)) {
+    display: none;
+}
+
+.xy-ED-nocharacterCard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    justify-content: center;
+    font-size: 24px;
+    text-shadow: 1px 1px #000, 2px 2px #000;
+}
+
+.xy-ED-nocharacterCard>button {
+    padding: 0;
+    border-radius: 10px;
+    width: 80%;
+    height: 48px;
+    display: block;
+    margin-top: 10px;
+    box-shadow:
+        inset 0px 0px 5px #00000050,
+        1px 1px 5px #00000094;
+}
+
+.xy-ED-nocharacterCard>button:hover {
+    cursor: pointer;
+    box-shadow:
+        0px 0px 5px #fff,
+        1px 1px 5px #00000094;
+}
+
+/* 搜索控制 */
+.xy-ED-sideBar-content>.xy-ED-sideBar-search .xy-ED-input-container {
+    width: 100%;
+    border-radius: 5px;
+    padding: 5px;
+    box-sizing: border-box;
+    --xy-ED-input-fontSize: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.xy-ED-sideBar-search .xy-ED-search-concerning {
+    display: flex;
+    flex-direction: column;
+    padding: 3px;
+    height: calc(100% - 5px - 2em);
+    overflow: hidden;
+}
+
+.xy-ED-sideBar-search .xy-ED-search-mode-controller {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.xy-ED-sideBar-search .xy-ED-search-mode-controller>* {
+    display: flex;
+    align-items: center;
+}
+
+.xy-ED-sideBar-search .xy-ED-search-mode-controller>*::before {
+    content: "";
+    height: 1em;
+    width: 1em;
+    display: inline-block;
+    border-radius: 3px;
+    box-sizing: border-box;
+    background-color: whitesmoke;
+}
+
+.xy-ED-sideBar-search .xy-ED-search-mode-controller>*.xy-ED-chosen::before {
+    content: "√";
+    color: yellow;
+    background-color: blue;
+}
+
+.xy-ED-sideBar-search .xy-ED-search-concerning>* {
+    border-bottom: 1px solid #ffffff7d;
+    margin: 2px 0;
+    max-height: calc(100% - 16px);
+    display: flex;
+    flex-direction: column;
+    font-size: 16px;
+    padding: 2px;
+    min-height: 16px;
+    flex: var(--xy-ED-flex-index);
+    --xy-ED-flex-index: 0;
+}
+
+.xy-ED-sideBar-search section:empty {
+    display: none;
+}
+
+.xy-ED-sideBar-search .xy-ED-search-concerning>div>section {
+    overflow: auto;
+    box-sizing: border-box;
+    margin-top: 10px;
+}
+
+skin-info-card,
+skill-info-card,
+character-info-card {
+    margin: 4px;
+}
+
+/* 导航栏控制 */
+.xy-ED-viewArea>.xy-ED-sideBar>nav {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: rgb(93, 93, 93);
+    width: var(--xy-ED-nav-w);
+    flex: 0 0 auto;
+    box-shadow: inset 1px 0px 1px #ffffffad;
+}
+
+.xy-ED-viewArea>.xy-ED-sideBar>nav>.xy-ED-nav-chosen {
+    background-color: rgb(148, 148, 148);
+    border-radius: 86% 14% 100% 0% / 42% 35% 65% 58%;
+    box-shadow: 1px 1px 1px #ffffffad, inset 1px 1px 1px 1px #00000050;
+}
+
+.xy-ED-operationPage>.xy-ED-viewArea>.xy-ED-sideBar>nav>.xy-ED-nav-chosen::before {
+    opacity: 1;
+}
+
+.xy-ED-viewArea>.xy-ED-sideBar>nav>[class^="xy-ED-nav"] {
+    height: var(--xy-ED-nav-item);
+    width: var(--xy-ED-nav-item);
+    touch-action: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.xy-ED-viewArea>.xy-ED-sideBar>nav>[class^="xy-ED-nav"]:hover::before {
+    opacity: 1;
+}
+
+.xy-ED-viewArea>.xy-ED-sideBar>nav>[class^="xy-ED-nav"]::before {
+    content: "";
+    height: var(--xy-ED-nav-icon);
+    width: var(--xy-ED-nav-icon);
+    cursor: pointer;
+    opacity: 0.6;
+}
+
+.xy-ED-viewArea>.xy-ED-sideBar>nav>.xy-ED-nav-setting::before {
+    background-image: url(../image/icon/setting.png);
+    background-size: cover;
+}
+
+.xy-ED-viewArea>.xy-ED-sideBar>nav>.xy-ED-nav-character::before {
+    background-image: url(../image/icon/character.png);
+    background-size: cover;
+}
+
+.xy-ED-viewArea>.xy-ED-sideBar>nav>.xy-ED-nav-card::before {
+    background-image: url(../image/icon/card.png);
+    background-size: cover;
+}
+
+.xy-ED-viewArea>.xy-ED-sideBar>nav>.xy-ED-nav-search::before {
+    background-image: url(../image/icon/search.png);
+    background-size: cover;
+}
+
+/* 拖拽调整大小设置 */
+.xy-ED-viewArea>.xy-ED-sideBar>hr {
+    margin: 0;
+    background-color: red;
+    width: 3px;
+    border: 0;
+    position: absolute;
+    height: 100%;
+    opacity: 0;
+    transition: 0.1s;
+    left: -3px;
+}
+
+.xy-ED-viewArea>.xy-ED-sideBar>hr:hover {
+    box-shadow: 1px 1px 4px 1px whitesmoke;
+    opacity: 1;
+    cursor: e-resize;
+}
+
+.xy-ED-viewArea>.xy-ED-sideBar>hr:active {
+    box-shadow: 1px 1px 4px 1px whitesmoke;
+    opacity: 1;
+    cursor: e-resize;
+}
+/* 技能编辑器导航项（用文字字形，无需额外图片资源） */
+.xy-ED-viewArea>.xy-ED-sideBar>nav>.xy-ED-nav-skill::before {
+    content: "技";
+    font-size: calc(var(--xy-ED-nav-icon) * 0.8);
+    font-weight: 900;
+    line-height: var(--xy-ED-nav-icon);
+    text-align: center;
+    color: #fff;
+    text-shadow: 0 0 3px #000;
+}
+
+/* 技能编辑器组件铺满所在网格单元 */
+.xy-ED-mainArea>skill-editor {
+    display: block;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+/* ================= 响应式断点 ================= */
+@media (max-width: 1280px) {
+    .xy-ED-viewArea>.xy-ED-sideBar {
+        flex: 0 0 min(38%, 340px);
+    }
+}
+
+@media (max-width: 900px) {
+    .xy-ED-nonameEditor {
+        --xy-ED-font-scale: 0.9;
+    }
+
+    .xy-ED-viewArea>.xy-ED-mainArea {
+        min-width: 0;
+    }
+
+    .xy-ED-sideBar-content {
+        min-width: 0;
+    }
+}
+
+@media (max-width: 640px) {
+    .xy-ED-nonameEditor {
+        --xy-ED-font-scale: 0.78;
+    }
+
+    /* 窄屏改为上下布局：编辑区在上，侧栏在下 */
+    .xy-ED-viewArea {
+        flex-direction: column;
+    }
+
+    .xy-ED-viewArea>.xy-ED-sideBar {
+        flex: 0 0 46%;
+        width: 100%;
+    }
+
+    .xy-ED-viewArea>.xy-ED-mainArea {
+        min-width: 0;
+        min-height: 0;
+    }
+}
+
+/* 拖拽中的统一表现：只走合成层，禁止选中与回弹 */
+.xy-ED-dragging {
+    transition: none !important;
+    user-select: none;
+    touch-action: none;
+}
+
+body.xy-ED-col-resizing,
+body.xy-ED-col-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+/* 基本设置：关闭界面动画 */
+.xy-ED-nonameEditor.xy-ED-no-animation *,
+.xy-ED-nonameEditor.xy-ED-no-animation {
+    transition: none !important;
+    animation: none !important;
+}
+/* 侧栏「历史武将」列表 */
+.xy-ED-sideBar-character {
+    padding: 6px;
+    box-sizing: border-box;
+}
+
+.xy-ED-sideBar-character .xy-ED-nocharacterCard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 100%;
+}
+
+.xy-ED-sideBar-character .xy-ED-characte-show {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.xy-ED-sideBar-character .xy-ED-characte-show>header {
+    font-size: 0.85em;
+    opacity: 0.85;
+    margin-bottom: 6px;
+    flex: 0 0 auto;
+}
+
+.xy-ED-sideBar-character .xy-ED-characte-show>ul {
+    flex: 1;
+    overflow: auto;
+    margin: 0;
+    padding: 0;
+}
+
+.xy-ED-sideBar-character .xy-ED-characte-show>ul>li {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    padding: 5px 8px;
+    margin-bottom: 4px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.18);
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.xy-ED-sideBar-character .xy-ED-characte-show>ul>li:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.xy-ED-sideBar-character .xy-ED-characte-show>ul>li>span {
+    opacity: 0.6;
+    font-size: 0.85em;
+}

@@ -1,0 +1,27 @@
+{
+    "1": {
+        "dir": "../",
+        "targets": [
+            "nonameEditorView.mjs",
+            "component*.mjs"
+        ],
+        "ignore": [],
+        "wrap": "\r\n",
+        "argUse": [
+            [
+                2,
+                "file"
+            ]
+        ],
+        "insert": [
+            [
+                1,
+                ".innerHTML=`\n"
+            ],
+            [
+                2,
+                "`"
+            ]
+        ]
+    }
+}

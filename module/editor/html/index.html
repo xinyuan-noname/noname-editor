@@ -1,0 +1,70 @@
+<div class="xy-ED-minimizeControl" draggable>魂</div>
+<div class="xy-ED-operationPage">
+    <header>
+        <div class="xy-ED-header-left">
+            <div class="xy-ED-title">魂氏编辑器</div>
+        </div>
+        <div class="xy-ED-header-right">
+            <div class="xy-ED-control-minize"></div>
+            <div class="xy-ED-control-close"></div>
+        </div>
+    </header>
+    <div class="xy-ED-viewArea">
+        <div class="xy-ED-mainArea">
+        </div>
+        <div class="xy-ED-sideBar">
+            <hr>
+            <div class="xy-ED-sideBar-content">
+                <div class="xy-ED-sideBar-setting" data-by="setting"></div>
+                <div class="xy-ED-sideBar-character" data-by="character">
+                    <div class="xy-ED-nocharacterCard">
+                        <div>暂未创建过武将!</div>
+                        <button>点击创建</button>
+                    </div>
+                    <div class="xy-ED-characte-show">
+                        <header></header>
+                        <ul></ul>
+                    </div>
+                </div>
+                <div class="xy-ED-sideBar-card" data-by="card"></div>
+                <div class="xy-ED-sideBar-search" data-by="search">
+                    <div class="xy-ED-input-container">
+                        <div>
+                            <input spellcheck="false">
+                            <span class="xy-ED-input-clear"></span>
+                            <span class="xy-ED-input-search"></span>
+                        </div>
+                        <div class="xy-ED-search-mode-controller">
+                            <span data-search-mode="skill" data-placeholder="这里输入以搜索技能">技能</span>
+                            <span data-search-mode="character" data-placeholder="输入武将的姓名、分包、技能名以搜索">武将</span>
+                            <span data-search-mode="bwikiSkin" data-placeholder="请输入武将名以搜索" tilte="来自bwiki">bwiki皮肤</span>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="xy-ED-search-concerning">
+                        <div class="xy-ED-searchResult">
+                            <header>
+                                <div class="xy-ED-expandable-expanded" data-for=search-result></div>
+                                <div>搜索结果</div>
+                            </header>
+                            <section data-by=search-result></section>
+                        </div>
+                        <div class="xy-ED-searchLiked">
+                            <header>
+                                <div class="xy-ED-expandable-expanded" data-for=search-like></div>
+                                <div>已收藏</div>
+                            </header>
+                            <section data-by=search-like></section>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <nav>
+                <div class="xy-ED-nav-setting" data-for="setting" draggable="true"></div>
+                <div class="xy-ED-nav-character" data-for="character" draggable="true"></div>
+                <div class="xy-ED-nav-card" data-for="card" draggable="true"></div>
+                <div class="xy-ED-nav-search" data-for="search" draggable="true"></div>
+            </nav>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,91 @@
+<style>
+    :host {
+        height: 100%;
+        width: 100%;
+        z-index: 1024;
+        position: absolute !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+    }
+
+    p {
+        margin: 0;
+        font-weight: 900;
+        font-size: 1.5em;
+    }
+
+    .curtain {
+        display: block;
+        position: absolute;
+        height: 100%;
+        width: 100%;
+        background-color: rgba(255, 255, 255, 0.4);
+        z-index: -1;
+    }
+
+    .remove {
+        cursor: pointer;
+        width: 1em;
+    }
+
+    .dialog {
+        height: var(--dialog-height, 315px);
+        width: var(--dialog-width, 560px);
+        border-radius: 13px;
+        background: #e0e0e0;
+        box-shadow: 0 0 10px #bebebe, 0 0 10px #ffffff, 0 0 5px black;
+        padding: 5px;
+        display: flex;
+        flex-direction: column;
+        color: #000;
+        text-shadow: 1px 1px #fff;
+    }
+
+    .dialog form>div {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .content {
+        height: 95%;
+    }
+
+    .actions {
+        display: flex;
+        justify-content: center;
+        margin-top: 25px;
+    }
+
+    .actions>div {
+        background: #e6e6e6;
+        box-shadow: 0px 0px 3px #272727;
+        border-radius: 5px;
+        margin: 0 10px;
+        padding: 5px;
+        font-size: 28px;
+        color: rgb(200, 200, 200);
+        cursor: pointer;
+    }
+
+    .actions.invalid .confirm {
+        display: none;
+    }
+
+    .actions.forced .cancel {
+        display: none;
+    }
+</style>
+<div class="curtain"></div>
+<div class="dialog">
+    <header>
+        <p></p>
+    </header>
+    <section class="content"></section>
+</div>
+<div class="actions">
+    <div class="confirm">确认</div>
+    <div class="cancel">取消</div>
+</div>

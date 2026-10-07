@@ -1,0 +1,287 @@
+.xy-ED-skill-ED {
+    width: 800px;
+    height: 400px;
+    z-index: 8;
+    border-radius: 3em;
+    background-image: linear-gradient(to bottom right, #f0acf7, #7093DB, #f7f0ac);
+    border: 3px solid black;
+    position: absolute;
+    margin: auto;
+    right: 0px;
+    top: 0px;
+    left: 0px;
+    bottom: 0px;
+}
+
+.xy-ED-skill-close {
+    float: left;
+    top: 0;
+    left: 0;
+    width: 40px;
+}
+
+.xy-ED-skill-title {
+    width: 680px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.xy-ED-skill-title div {
+    position: relative;
+}
+
+.xy-ED-skill-icon {
+    font-size: 0.7em;
+}
+
+.xy-ED-skill-icon:hover {
+    cursor: pointer;
+}
+
+.xy-ED-skill-pageContainer {
+    width: calc(95% - 50px);
+    height: calc(65% + 50px);
+    margin: auto;
+    font-size: 1.5em;
+    font-family: xingkai;
+    display: block;
+    position: relative;
+    bottom: 25px;
+}
+
+.xy-ED-skill-pageContainer>[class^="xy-ED-skill-page"]:not(:first-child) {
+    display: none;
+}
+
+.xy-ED-skill-pageContainer>[class^="xy-ED-skill-page"] {
+    height: 100%;
+    width: 100%;
+    display: flex;
+}
+
+.xy-ED-skill-pageContainer>[class^="xy-ED-skill-page"][class*="hasBack"] {
+    background-color: rgba(60, 65, 81, 0.7);
+}
+
+.xy-ED-skill-pageContainer>[class^="xy-ED-skill-page"][class*="flexColumn"] {
+    flex-direction: column;
+}
+
+.xy-ED-skill-pageContainer>[class^="xy-ED-skill-page"] * {
+    position: relative;
+}
+
+[class^="xy-ED-skill-subUnit"][class*="flexColumn"] {
+    display: flex;
+    flex-direction: column;
+}
+
+.xy-ED-skill-subTitle {
+    height: 1.5em
+}
+
+.xy-ED-skill-ButtonContainer {
+    height: 1.5em;
+    position: relative;
+}
+
+.xy-ED-skill-ButtonContainer>* {
+    color: #041322;
+    text-align: center;
+    font-size: 36px;
+    background-color: #e4d5b7;
+    border-radius: 0.5em;
+    position: relative;
+}
+
+
+.xy-ED-skill-longInput {
+    height: 5em;
+}
+
+.xy-ED-skill-skillTag-Container {
+    display: flex;
+}
+
+.xy-ED-skill-skillTag-Container>* {
+    font-size: 0.9em;
+}
+
+.xy-ED-skill-uniqueSetting-Container>* {
+    font-size: 0.9em;
+}
+
+.xy-ED-skill-contentDataInput {
+    margin-top: 1em;
+    overflow: auto;
+}
+
+.xy-ED-skill-contentWho {
+    width: 10em;
+}
+
+.xy-ED-skill-contentDoWhat {
+    width: 16em;
+}
+
+.xy-ED-skill-contentChoiceContainer>* {
+    font-size: 0.9em;
+}
+
+.xy-ED-skill-contentChoiceContainer ul {
+    max-height: 360px;
+    max-width: 11em;
+    position: fixed;
+    overflow: auto;
+    top: 0;
+    bottom: 0;
+    margin: auto 0;
+    padding: 4px;
+    background-color: rgb(51, 51, 128, 0.8);
+    border: #e4d5b7 solid 4px;
+    border-radius: 1px;
+    right: 0;
+}
+
+.xy-ED-skill-contentChoiceContainer ul select {
+    background-color: rgb(51, 51, 128, 0.8);
+    border: rgb(51, 51, 128, 0.8) solid 4px;
+    border-radius: 1px;
+    height: 100%;
+    color: white;
+    font-size: large;
+    font-family: "楷体";
+}
+
+
+
+.xy-ED-skill-contentChoiceContainer ul:empty {
+    display: none;
+}
+
+.xy-ED-skill-contentChoiceContainer ul li {
+    margin-bottom: 10px;
+    font-size: 15px;
+}
+
+.xy-ED-skill-contentChoiceContainer datalist {
+    overflow: auto;
+    max-height: 200px;
+}
+
+.xy-ED-skill-contentChoiceContainer ul li.xy-ED-skill-chosen {
+    background-color: red;
+}
+
+.xy-ED-skill-contentChoiceContainer ul li span {
+    background-color: yellow;
+}
+
+.xy-ED-skill-contentChoiceContainer .x19D6_dialogButton {
+    font-size: 0.85em;
+}
+
+.x19D6_dialogButton.xy-ED-skill-footerButton {
+    font-size: smaller;
+    margin-right: 10px;
+}
+
+.ED-kindSwitchPage {
+    width: 100%;
+    background: purple;
+    opacity: 0.95;
+    z-index: 4;
+}
+
+/*以下是mindmap节点的内容*/
+@font-face {
+    font-family: "smily-sans";
+    src: url(../font/SmileySans-Oblique.otf.woff2);
+}
+
+.xy-ED-skill-mindmap-back {
+    width: 100%;
+    height: 100%;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    margin: auto;
+    position: absolute;
+    z-index: 20;
+    background-color: rgba(60, 65, 81, 0.7);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-direction: column;
+}
+
+.xy-ED-skill-mindmap-back * {
+    font-family: "smily-sans";
+    position: relative;
+}
+
+.xy-ED-skill-mindmap-contentArea {
+    flex: auto;
+}
+
+.xy-ED-skill-mindmap-canvas {
+    height: 500px;
+    width: 1000px;
+    background-color: #000;
+    border-radius: 1%;
+    margin: auto 0;
+}
+
+.xy-ED-skill-mindmap-back-scale {
+    height: 10px;
+}
+
+.xy-ED-skill-mindmap-footer {
+    height: 96px;
+    width: 100%;
+    background-color: rgba(42, 44, 52, 0.9);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.xy-ED-skill-mindmap-footer>div {
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.xy-ED-skill-mindmap-footer>div:nth-child(1) {
+    border-right: rgb(57 56 81 / 90%) solid 2px;
+    justify-content: space-evenly;
+    flex: auto;
+}
+
+.xy-ED-skill-mindmap-footer>div>button {
+    font-size: 32px;
+    font-weight: 900;
+    display: block;
+    border-radius: 10px;
+    cursor: pointer;
+    transform: rotateZ(-45deg);
+    transition: 0.2s;
+    box-shadow: -15px -15px 15px #0000;
+}
+
+.xy-ED-skill-mindmap-footer>div>button:not(.xy-ED-skill-mindmap-chosen):hover {
+    box-shadow: 0px 0px 4px 2px #d5d1d1;
+    transform: rotateZ(6deg);
+}
+
+.xy-ED-skill-mindmap-footer>div:nth-child(1)>button.xy-ED-skill-mindmap-chosen {
+    transform-style: preserve-3d;
+    transform: rotateZ(6deg) rotateX(30deg);
+    perspective: 50px;
+}
+
+.xy-ED-skill-mindmap-footer>div:nth-child(2)>button {
+    color: rgba(195, 67, 67, 0.9);
+    background-color: aquamarine;
+    margin: 0 15px;
+}

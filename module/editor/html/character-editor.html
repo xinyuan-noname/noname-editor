@@ -1,0 +1,337 @@
+<section class="main">
+    <div class="content">
+        <div class="left">
+            <div class="data-setting" data-extension="" data-package-id="" data-character-sort="" data-character-sort-name="">
+                <section class="flex--between">
+                    <span>所属分包</span>
+                    <span class="extension-setting pointer text-shadow-free">设置</span>
+                </section>
+                <section class="sort-view flex-center small-font">
+                    <span title="扩展包" class="extension-name link-arrow pointer"></span>
+                    <span title="武将包" class="package-id link-arrow pointer"></span>
+                    <span title="分包" class="character-sort pointer"></span>
+                </section>
+            </div>
+            <div class="data-setting flex-column" data-avatar="">
+                <section>
+                    <div>武将原画</div>
+                    <div class="height-set" data-height-set="high">高</div>
+                    <div class="height-set" data-height-set="mid">中</div>
+                    <div class="height-set" data-height-set="short">矮</div>
+                </section>
+                <div class="avatar-view">
+                    <div class="img-container">
+                        <img draggable="false">
+                        <section class="cutter">
+                            <div class="cutter-view"></div>
+                            <span class="control-point lt"></span>
+                            <span class="control-point lb"></span>
+                            <span class="control-point rt"></span>
+                            <span class="control-point rb"></span>
+                        </section>
+                        <section class="curtain"></section>
+                    </div>
+                    <div class="img-loading"></div>
+                </div>
+                <div class="tool-bar">
+                    <span class="reset" title="重置">⟲</span>
+                    <span class="cut" title="裁剪">✂</span>
+                </div>
+            </div>
+            <div class="data-setting flex-column" data-die-audios="" data-die-audio-text="">
+                <header>
+                    <div>阵亡语音</div>
+                    <div class="add text-shadow-free pointer">添加</div>
+                </header>
+                <section data-by="dieAudios"></section>
+            </div>
+        </div>
+        <div class="right">
+            <div class="data-setting" data-name="" data-pinyin="">
+                <span>
+                    <span>姓名</span>
+                    <span class="expandable-expanded" data-for="name"></span>
+                    <span></span>
+                </span>
+                <ruby data-by="name">
+                    <div contenteditable="true" spellcheck="false"></div>
+                    <rp>(</rp>
+                    <rt contenteditable="true" spellcheck="false"></rt>
+                    <rp>)</rp>
+                </ruby>
+            </div>
+            <div class="data-setting" data-id="">
+                <span>
+                    <span>武将标识符(id)</span>
+                    <span class="expandable-expanded" data-for="id"></span>
+                    <span></span>
+                </span>
+                <ruby data-by="id">
+                    <div contenteditable="true" spellcheck="false"></div>
+                    <button>使用拼音</button>
+                </ruby>
+            </div>
+            <div class="data-setting" data-sex="">
+                <span>
+                    <span>性别</span>
+                    <span class="expandable-expanded" data-for="sex"></span>
+                    <span></span>
+                </span>
+                <ul data-by="sex">
+                    <li data-sex-option="male" style="--url:url(/image/card/sex_male.png);">男性</li>
+                    <li data-sex-option="female" style="--url:url(/image/card/sex_female.png)">女性</li>
+                    <li data-sex-option="double" style="--url:url(/image/card/sex_double.png)">双性</li>
+                    <li data-sex-option="none" style="--url:url(/image/card/sex_none.png)">无性</li>
+                    <li data-sex-option="male-castrated" style="--url:url(/image/card/sex_male_castrated.png)">太监</li>
+                </ul>
+            </div>
+            <div class="data-setting" data-group="" data-double-group="">
+                <span>
+                    <span>势力</span>
+                    <span class="expandable-expanded" data-for="group"></span>
+                    <span></span>
+                </span>
+                <section data-by="group" class="flex-column">
+                    <span class="checkbox" data-group-double value="double">选择多势力</span>
+                    <ul>
+                        <li data-group-option="wei"
+                            style="--url:url(/image/card/group_wei.png);--group-text-shadow:rgb(78 117 140) 0 0 2px, rgb(78 117 140) 0 0 2px, rgb(78 117 140) 0 0 2px, rgb(78 117 140) 0 0 2px, black 0 0 1px">
+                            魏</li>
+                        <li data-group-option="shu"
+                            style="--url:url(/image/card/group_shu.png);--group-text-shadow:rgb(128 59 2) 0 0 2px, rgb(128 59 2) 0 0 2px, rgb(128 59 2) 0 0 2px, rgb(128 59 2) 0 0 2px, black 0 0 1px">
+                            蜀</li>
+                        <li data-group-option="wu"
+                            style="--url:url(/image/card/group_wu.png);--group-text-shadow:rgb(57 123 4) 0 0 2px, rgb(57 123 4) 0 0 2px, rgb(57 123 4) 0 0 2px, rgb(57 123 4) 0 0 2px, black 0 0 1px">
+                            吴</li>
+                        <li data-group-option="qun"
+                            style="--url:url(/image/card/group_qun.png);--group-text-shadow:rgb(164 164 164) 0 0 2px, rgb(164 164 164) 0 0 2px, rgb(164 164 164) 0 0 2px, rgb(164 164 164) 0 0 2px, black 0 0 1px">
+                            群</li>
+                        <li data-group-option="jin"
+                            style="--url:url(/image/card/group_jin.png);--group-text-shadow:rgb(100 74 139) 0 0 2px, rgb(100 74 139) 0 0 2px, rgb(100 74 139) 0 0 2px, rgb(100 74 139) 0 0 2px, black 0 0 1px">
+                            晋</li>
+                        <li data-group-option="shen"
+                            style="--url:url(/image/card/group_shen.png);--group-text-shadow:rgb(243 171 27) 0 0 2px, rgb(243 171 27) 0 0 2px, rgb(243 171 27) 0 0 2px, rgb(243 171 27) 0 0 2px, black 0 0 1px">
+                            神</li>
+                    </ul>
+                    <span>
+                        <span class="expandable-collapsed" data-for="more-group">更多势力</span>
+                    </span>
+                    <ul class="hidden" data-by="more-group">
+                        <li data-group-option="western"
+                            style="--url:url(/image/card/group_western.png);--group-text-shadow:rgb(100 74 139) 0 0 2px, rgb(100 74 139) 0 0 2px, rgb(100 74 139) 0 0 2px, rgb(100 74 139) 0 0 2px, black 0 0 1px">
+                            西</li>
+                        <li data-group-option="key"
+                            style="--url:url(/image/card/group_key.png);--group-text-shadow:rgb(203 177 255) 0 0 2px, rgb(203 177 255) 0 0 2px, rgb(203 177 255) 0 0 2px, rgb(203 177 255) 0 0 2px, black 0 0 1px">
+                            键</li>
+                        <li data-diy>新增</li>
+                    </ul>
+                </section>
+            </div>
+            <div class="data-setting" data-clans="">
+                <span>
+                    <span>宗族</span>
+                    <span class="expandable-collapsed" data-for="clans"></span>
+                    <span></span>
+                </span>
+                <section data-by="clans" class="hidden flex-column">
+                    <ul>
+                        <li data-clan-option="陈留吴氏" style="--url:url(../image/clan/陈留吴氏.png)">陈留吴氏</li>
+                        <li data-clan-option="颍川荀氏" style="--url:url(../image/clan/颍川荀氏.png)">颍川荀氏</li>
+                        <li data-clan-option="颍川韩氏" style="--url:url(../image/clan/颍川韩氏.png)">颍川韩氏</li>
+                        <li data-clan-option="太原王氏" style="--url:url(../image/clan/太原王氏.png)">太原王氏</li>
+                        <li data-clan-option="颍川钟氏" style="--url:url(../image/clan/颍川钟氏.png)">颍川钟氏</li>
+                    </ul>
+                    <span>
+                        <span class="expandable-collapsed" data-for="more-clans">更多宗族</span>
+                    </span>
+                    <ul class="hidden" data-by="more-clans">
+                        <li data-diy>添加宗族</li>
+                    </ul>
+                </section>
+            </div>
+            <div class="data-setting" data-hp="4" data-max-hp="4" data-hujia="0">
+                <span>
+                    <span>体力&护甲</span>
+                    <span class="expandable-expanded" data-for="hp"></span>
+                    <span></span>
+                </span>
+                <div data-by="hp">
+                    <div class="hp-operation">
+                        <div>
+                            <span>体力</span>
+                            <span contenteditable="true">4</span>
+                            <span>/</span>
+                            <span contenteditable="true">4</span>
+                        </div>
+                        <div class="hp-more-show hidden">
+                            <div class="flex-column text-shadow-free">
+                                <span data-hp-adjust-mode="hp" class="pointer">体力值</span>
+                                <span data-hp-adjust-mode="maxHp" class="pointer">体力上限</span>
+                            </div>
+                        </div>
+                        <div class="hp-show">
+                            <div class="hpContainer healthy">
+                                <div class="hp lost"></div>
+                                <div class="hp lost"></div>
+                                <div class="hp lost"></div>
+                                <div class="hp lost"></div>
+                            </div>
+                        </div>
+                        <div class="hp-adjust">
+                            <div>
+                                <div class="hp-plus">+</div>
+                                <hr>
+                                <div class="hp-minus">-</div>
+                            </div>
+                            <span contenteditable="true">1</span>
+                        </div>
+                    </div>
+                    <div class="hujia-operation">
+                        <div>
+                            <span>护甲</span>
+                            <span contenteditable="true">0</span>
+                        </div>
+                        <div class="hujiaContainer">
+                            <div class="hujia lost"></div>
+                            <div class="hujia lost"></div>
+                            <div class="hujia lost"></div>
+                            <div class="hujia lost"></div>
+                            <div class="hujia lost"></div>
+                            <div class="hujia reset"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="data-setting" data-skills="" id="noname-skill-editor-skills-setting">
+                <span>
+                    <span>技能</span>
+                    <span class="expandable-expanded" data-for="skills"></span>
+                    <span></span>
+                </span>
+                <div data-by="skills" class="flex-column">
+                    <ruby class="flex-center">
+                        <div contenteditable="true" spellcheck="false"></div>
+                        <span class="search"></span>
+                    </ruby>
+                    <p class="note">搜索技能，将侧边栏技能拖入该区域，或选择技能卡片中的⬅️以添加技能</p>
+                    <section>
+                        <header>
+                            <span>技能列表：</span>
+                            <span class="expandable-expanded" data-for="skill-list"></span>
+                        </header>
+                        <ul data-by="skill-list"></ul>
+                    </section>
+                </div>
+            </div>
+            <div class="data-setting" data-more>
+                <span>
+                    <span>杂项</span>
+                    <span class="expandable-collapsed" data-for="more"></span>
+                    <span></span>
+                </span>
+                <section data-by="more" class="hidden flex-column">
+                    <ul>
+                        <li class="checkbox" data-more-option="isZhuGong">
+                            <p>常备主公</p>
+                            <span></span>
+                        </li>
+                        <li class="checkbox" data-more-option="hasHiddenSkill">
+                            <p>登场隐匿</p>
+                            <span></span>
+                        </li>
+                        <li class="checkbox" data-more-option="isAiForbidden">
+                            <p>人机禁用</p>
+                            <span></span>
+                        </li>
+                        <li class="checkbox" data-more-option="isBoss" title="挑战模式下BOSS">
+                            <p>设为BOSS</p>
+                            <span></span>
+                        </li>
+                    </ul>
+                    <span>
+                        <span class="expandable-collapsed" data-for="more-more">更多选项</span>
+                    </span>
+                    <ul data-by="more-more" class="hidden">
+                        <li class="checkbox" data-more-option="isUnseen" title="该武将在武将包中不可见">
+                            <p>隐藏武将</p>
+                            <span></span>
+                        </li>
+                        <li class="checkbox" data-more-option="isChessBoss" title="战旗模式下的BOSS">
+                            <p>战旗BOSS</p>
+                            <span></span>
+                        </li>
+                        <li class="checkbox" data-more-option="isJiangeBoss" title="剑阁模式下的BOSS">
+                            <p>剑阁BOSS</p>
+                            <span></span>
+                        </li>
+                        <li class="checkbox" data-more-option="isJiangeMech" title="剑阁模式下的机械">
+                            <p>剑阁机械</p>
+                            <span></span>
+                        </li>
+                        <li class="checkbox" data-more-option="isFellowInStoneMode" tilte="炉石模式下的随从">
+                            <p>炉石随从</p>
+                            <span></span>
+                        </li>
+                        <li class="checkbox" data-more-option="isSpecialInStoneMode" tilte="炉石模式下的特殊随从（可以使用装备和法术）">
+                            <p>炉石特殊随从</p>
+                            <span></span>
+                        </li>
+                        <li class="checkbox" data-more-option="isHiddenInStoneMode" tilte="炉石模式下的隐藏武将">
+                            <p>炉石隐藏武将</p>
+                            <span></span>
+                        </li>
+                    </ul>
+                </section>
+            </div>
+            <div class="data-setting" data-intro>
+                <span>
+                    <span>武将介绍</span>
+                    <span class="expandable-collapsed" data-for="intro"></span>
+                    <span></span>
+                </span>
+                <section data-by="intro" class="hidden">
+                    <p class="use-default text-shadow-free flex-column" data-default-intro="暂无武将介绍"></p>
+                    <footer class="tool-bar">
+                        <button class="edit">编辑</button>
+                        <button class="edit-default">基于默认介绍编辑</button>
+                    </footer>
+                </section>
+            </div>
+            <!-- <div class="data-setting" data-title>
+                <span>
+                    <span>武将称号</span>
+                    <span class="expandable-collapsed" data-for="data-title"></span>
+                    <span></span>
+                </span>
+                <section data-by="data-title" class="hidden">
+                </section>
+            </div>
+            <div class="data-setting" data-perfect-pair>
+                <span>
+                    <span>珠联璧合</span>
+                    <span class="expandable-collapsed" data-for="data-perfect-pair"></span>
+                    <span></span>
+                </span>
+                <section data-by="data-perfect-pair" class="hidden">
+                    <ruby class="flex-center">
+                        <div class="flex-center-center" contenteditable="true" spellcheck="false"></div>
+                        <span class="search"></span>
+                    </ruby>
+                    <p class="note">搜索武将，将侧边栏武将拖入该区域，或选择技能卡片中的⬅️以添加武将</p>
+                    <section>
+                        <ul data-by="character-list"></ul>
+                    </section>
+                </section>
+            </div> -->
+        </div>
+    </div>
+    <div class="code">
+    </div>
+</section>
+<section class="menu">
+    <div class="menu-icon">🔧</div>
+    <div class="close">关闭界面</div>
+    <div class="export-all">一键导出</div>
+    <div class="gen-code">生成代码</div>
+    <div class="return-setting">返回设置</div>
+</section>

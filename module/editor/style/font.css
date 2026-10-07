@@ -1,0 +1,5 @@
+/* 迷你繁篆书 */
+@font-face {
+    font-family: "minifanzhuanshu";
+    src: url('../font/minifanzhuanshu.woff2') format('woff2');
+}

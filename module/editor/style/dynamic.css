@@ -1,0 +1,94 @@
+.xy-ED-nonameEditor .xy-ED-hidden {
+    display: none !important;
+}
+
+.xy-ED-nonameEditor .xy-ED-high-z-index {
+    z-index: 1024 !important;
+}
+
+.xy-ED-nonameEditor .xy-ED-shown-flex {
+    display: flex;
+}
+
+.xy-ED-nonameEditor .xy-ED-show-scrollbar::-webkit-scrollbar {
+    display: block;
+}
+
+
+.xy-ED-nonameEditor .xy-ED-grid-oneitem {
+    grid-template-areas:
+        "area1";
+    grid-template-columns: 1fr;
+}
+
+.xy-ED-nonameEditor .xy-ED-grid-twoitem {
+    grid-template-areas:
+        "area1 area2";
+    grid-template-columns: 1fr 1fr;
+}
+
+.xy-ED-nonameEditor .xy-ED-grid-threeitem {
+    grid-template-areas:
+        "area1 area2"
+        "area3 area3";
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+}
+
+.xy-ED-nonameEditor .xy-ED-grid-fouritem {
+    grid-template-areas:
+        "area1 area2"
+        "area3 area4";
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+}
+
+.xy-ED-nonameEditor .xy-ED-grid-oneitem>*:nth-child(1),
+.xy-ED-nonameEditor .xy-ED-grid-twoitem>*:nth-child(1),
+.xy-ED-nonameEditor .xy-ED-grid-threeitem>*:nth-child(1),
+.xy-ED-nonameEditor .xy-ED-grid-fouritem>*:nth-child(1) {
+    grid-area: area1;
+}
+
+.xy-ED-nonameEditor .xy-ED-grid-twoitem>*:nth-child(2),
+.xy-ED-nonameEditor .xy-ED-grid-threeitem>*:nth-child(2),
+.xy-ED-nonameEditor .xy-ED-grid-fouritem>*:nth-child(2) {
+    grid-area: area2;
+}
+
+.xy-ED-nonameEditor .xy-ED-grid-threeitem>*:nth-child(3),
+.xy-ED-nonameEditor .xy-ED-grid-fouritem>*:nth-child(3) {
+    grid-area: area3;
+}
+
+.xy-ED-nonameEditor .xy-ED-grid-fouritem>*:nth-child(4) {
+    grid-area: area4;
+}
+
+.xy-ED-nonameEditor .xy-ED-grid-fouritem>*:nth-child(n+5) {
+    display: none;
+}
+
+.xy-ED-nonameEditor [class^="xy-ED-expandable"]::before {
+    content: ">";
+    color: #000;
+    transition: 0.1s;
+    cursor: pointer;
+    display: block;
+}
+
+.xy-ED-nonameEditor .xy-ED-expandable-expanded::before {
+    transform: rotate(90deg);
+}
+
+.xy-ED-nonameEditor .xy-ED-expandable-collapsed::before {
+    transform: rotateZ(0deg);
+}
+
+.xy-ED-nonameEditor [data-audio-src]::after{
+    content: "🔈";
+}
+
+.xy-ED-nonameEditor [class^="xy-ED"][class *="hidden"] {
+    display: none;
+}
