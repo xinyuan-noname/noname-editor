@@ -246,6 +246,47 @@ class HTMLNonameInfoCardElement extends HTMLNonameFocusUIElement {
             }; break;
         }
     }
+    /**
+     * 外部同步「已收藏」外观。❤️ 在 shadowRoot 里，外部拿不到，只能由组件代劳。
+     * @param {boolean} [liked]
+     * @returns {boolean} 本卡片上是否存在 ❤️
+     */
+    markLiked(liked = true) {
+        const like = this.shadowRoot.querySelector(".interact-bar>.like");
+        if (!like) return false;
+        like.classList.toggle("liked", Boolean(liked));
+        return true;
+    }
+    /**
+     * 外部把 ⬅️ 标成「可用」外观（去掉灰滤色 + cursor:not-allowed）。
+     * 结果列表靠 usefor 属性自动加 .allowed；收藏列表没有 usefor 目标节点，只能外部标记。
+     * @param {boolean} [usable]
+     * @returns {boolean} 本卡片上是否存在 ⬅️
+     */
+    markUsable(usable = true) {
+        const use = this.shadowRoot.querySelector(".interact-bar>.use");
+        if (!use) return false;
+        use.classList.toggle("allowed", Boolean(usable));
+        return true;
+    }
+    /**
+     * 用外部判定同步本卡片（武将卡连带内嵌技能卡）的 ❤️ 点亮状态。
+     * @param {(kind: "skills"|"characters", id: string) => boolean} isLiked
+     * @returns {this}
+     */
+    syncLikedState(isLiked) {
+        if (typeof isLiked !== "function") return this;
+        const characterId = this.getAttribute("character-id");
+        if (characterId) {
+            this.markLiked(isLiked("characters", characterId));
+            this.shadowRoot.querySelectorAll("skill-info-card").forEach(card => {
+                card.markLiked(isLiked("skills", card.getAttribute("skill-id")));
+            });
+        } else {
+            this.markLiked(isLiked("skills", this.getAttribute("skill-id")));
+        }
+        return this;
+    }
 }
 class HTMLNonameSkillInfoCardElement extends HTMLNonameInfoCardElement {
     static observedAttributes = super.observedAttributes.concat("skill-info");
@@ -386,6 +427,13 @@ class HTMLNonameCharacterInfoCardElement extends HTMLNonameInfoCardElement {
     set characterInfo(val) {
         this.#characterInfo = val;
         this.setAttribute("character-info", Boolean(val));
+    }
+    /**
+     * 与 skillInfo 同理：数据在 #characterInfo 上，浅拷贝 cloneNode 拿不到，
+     * 收藏列表等「复制一张已有卡片」的场景必须读回原始数据
+     */
+    get characterInfo() {
+        return this.#characterInfo;
     }
 }
 class HTMLNonameSkinInfoCardElement extends HTMLNonameInfoCardElement {
