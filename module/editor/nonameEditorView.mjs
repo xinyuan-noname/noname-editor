@@ -169,7 +169,8 @@ mainPage.innerHTML=`
         <div class="xy-ED-sideBar">
             <hr>
             <div class="xy-ED-sideBar-content">
-                <div class="xy-ED-sideBar-setting" data-by="setting"></div>
+                <div class="xy-ED-sideBar-setting" data-by="setting"><setting-panel></setting-panel></div>
+                <div class="xy-ED-sideBar-skill" data-by="skill"></div>
                 <div class="xy-ED-sideBar-character" data-by="character">
                     <div class="xy-ED-nocharacterCard">
                         <div>暂未创建过武将!</div>
@@ -215,6 +216,7 @@ mainPage.innerHTML=`
             </div>
             <nav>
                 <div class="xy-ED-nav-setting" data-for="setting" draggable="true"></div>
+                <div class="xy-ED-nav-skill" data-for="skill" draggable="true"></div>
                 <div class="xy-ED-nav-character" data-for="character" draggable="true"></div>
                 <div class="xy-ED-nav-card" data-for="card" draggable="true"></div>
                 <div class="xy-ED-nav-search" data-for="search" draggable="true"></div>
