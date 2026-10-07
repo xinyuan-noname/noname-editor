@@ -41,7 +41,6 @@ shadow.innerHTML=`
             <div class="data-setting" data-extension="" data-package-id="" data-character-sort="" data-character-sort-name="">
                 <section class="flex--between">
                     <span>所属分包</span>
-                    <span class="extension-setting pointer text-shadow-free">设置</span>
                 </section>
                 <section class="sort-view flex-center small-font">
                     <span title="扩展包" class="extension-name link-arrow pointer"></span>
@@ -394,6 +393,8 @@ shadow.innerHTML=`
         this.#listenTitle();
         //
         this.#listenExpanable();
+        //扩展跟随设置页的当前工作区
+        this.syncWorkspace();
         //按 id 载入已保存的草稿（新建武将时 id 为空，不载入）
         const draftId = this.getAttribute("character-id") || this.getData("id");
         if (draftId) this.loadDraft(draftId);
@@ -432,31 +433,6 @@ shadow.innerHTML=`
         return {
             dialog: dialog,
             processing: dialog.wait()
-        }
-    }
-    openExtensionDialog() {
-        const dialog = document.createElement("noname-dialog");
-        dialog.type = "extension-setting";
-        dialog.config = this.configQuery("get", { member: `x19D6_editor.extensionFileConfig` });
-        this.shadowRoot.append(dialog);
-        return {
-            dialog,
-            processing: dialog.wait().then(async result => {
-                if (result) {
-                    const extensionName = result["extension-name"]
-                    if (extensionName !== this.getData("extension")) {
-                        this.style.setProperty("--data-extension-name", `"${extensionName}"`);
-                        this.changeData("extension", extensionName);
-                        this.style.removeProperty("--data-package-id");
-                        this.changeData("packageId", '');
-                        this.changeData("characterSort", "");
-                        this.changeData("characterSortName", "");
-                        this.style.removeProperty("--data-character-sort");
-                    }
-                    await this.configQuery("write", { member: `x19D6_editor.extensionFileConfig.${extensionName}`, value: result });
-                }
-                return result;
-            })
         }
     }
     openPackageSelectDialog(extensionName) {
@@ -555,8 +531,10 @@ shadow.innerHTML=`
         const avatar = this.getData("avatar");
         const dieAudios = this.getData("dieAudios");
         const id = this.getData("id");
+        //资源目录挂在工作区（= 扩展）上，不再从武将的 extension 字段取
+        const extensionName = this.workspace || this.getData("extension");
         const config = this.configQuery("get", {
-            member: `x19D6_editor.extensionFileConfig.${this.getData("extension")}`
+            member: `x19D6_editor.extensionFileConfig.${extensionName}`
         });
         const promises = [];
         if (dieAudios.length) {
@@ -629,28 +607,43 @@ shadow.innerHTML=`
             main.classList.remove("turn-over");
         })
     }
+    /**
+     * 工作区 = 扩展：扩展不在武将上单独设置，显示与归属都跟随设置页的当前工作区
+     * @returns {string}
+     */
+    get workspace() {
+        return this.configQuery("get", { member: "x19D6_editor.settings.workspace" }) || "";
+    }
+    /**
+     * 把「扩展」同步成当前工作区（显示 + 内部数据）
+     * @param {string} [workspace]
+     * @returns {string}
+     */
+    syncWorkspace(workspace = this.workspace) {
+        this.changeData("extension", workspace);
+        this.style.setProperty("--data-extension-name", workspace ? `"${workspace}"` : "");
+        return workspace;
+    }
     #listenExtension() {
         const extensionDataArea = this.getDataAreaDom("extension");
-        const extensionSetting = extensionDataArea.querySelector(".extension-setting");
         const extensionNameBtn = extensionDataArea.querySelector(".extension-name");
         const packageIdBtn = extensionDataArea.querySelector(".package-id");
         const characterSortBtn = extensionDataArea.querySelector(".character-sort");
-        const setExtensionName = async () => {
-            const { dialog, processing } = this.openExtensionDialog();
-            dialog.setAttribute("headline", "请设置武将所属扩展。");
-            return await processing;
-        }
+        //扩展不再是武将字段（由设置页的工作区决定），这里只显示
+        const requireWorkspace = () => {
+            if (this.workspace) return true;
+            alert("尚未选择工作区：请到左侧「设置 → 工作区」选择或新建一个扩展。");
+            return false;
+        };
         const setPackageName = async () => {
-            if (!this.getData("extension")) {
-                if (await setExtensionName() === false) return false;
-            }
-            const extensionName = this.getData("extension");
+            if (!requireWorkspace()) return false;
+            const extensionName = this.workspace;
             if (!this.configQuery("get", { member: `x19D6_editor.extensionModuleConfig.${extensionName}` })) {
                 await this.writeModuleConfig(extensionName);
             }
             const { processing } = this.openPackageSelectDialog(extensionName);
             return await processing;
-        }
+        };
         const setCharacterSort = async () => {
             if (!this.getData("packageId")) {
                 if (await setPackageName() === false) return;
@@ -658,10 +651,13 @@ shadow.innerHTML=`
             const packageId = this.getData("packageId")
             this.openCharacterSortDialog(packageId);
         }
-        extensionNameBtn.addEventListener("pointerup", setExtensionName);
+        extensionNameBtn.addEventListener("pointerup", () => {
+            alert(this.workspace
+                ? `当前工作区：${this.workspace}\n扩展由设置页的工作区决定，不再按武将单独设置。`
+                : "尚未选择工作区：请到左侧「设置 → 工作区」选择或新建一个扩展。");
+        });
         packageIdBtn.addEventListener("pointerup", setPackageName);
         characterSortBtn.addEventListener("pointerup", setCharacterSort);
-        extensionSetting.addEventListener("pointerup", setCharacterSort);
     }
     reloadAvatar(url, exported) {
         const avatarDataArea = this.getDataAreaDom("avatar");
@@ -1727,6 +1723,8 @@ shadow.innerHTML=`
         const data = this.configQuery("get", { member: `x19D6_editor.characters.${id}` });
         if (!data || typeof data !== "object") return false;
         this.applyData(data);
+        //草稿的扩展一律按当前工作区对待（保存时写回）
+        this.syncWorkspace();
         this.renderPerfectPair();
         return true;
     }
@@ -1753,6 +1751,8 @@ shadow.innerHTML=`
         this.characterAttributes.forEach((attr) => {
             dataList[attr] = this.getData(attr);
         });
+        //扩展 = 当前工作区（草稿归属以工作区为准，保存时写回）
+        if (this.workspace) dataList.extension = this.workspace;
         if (!dataList.trashBin) dataList.trashBin = [];
         if (!dataList.clans.length) delete dataList.clans;
         if (!dataList.perfectPair || !dataList.perfectPair.length) delete dataList.perfectPair;

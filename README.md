@@ -1,6 +1,6 @@
 # 魂氏编辑器
 
-无名杀（Noname）的可视化编辑器扩展：**武将编辑 + 技能编辑（内联）+ 基本设置**。
+无名杀（Noname）的可视化编辑器扩展：**工作区（= 扩展）+ 武将编辑 + 技能编辑（内联）+ 基本设置**。
 
 从《新将包》中分离而来，现为**完全独立**的扩展——不引用《新将包》的任何代码或全局符号，《新将包》也只通过本扩展的对外接口调用。
 
@@ -22,7 +22,7 @@
 | 扩展菜单「魂氏编辑器」 | 扩展菜单 |
 | 「直接打开技能编辑」/「直接打开武将编辑」 | 扩展菜单 |
 | nav「技」 | 编辑器侧边栏导航（在 `mainArea` 内联打开技能编辑） |
-| nav「设置」 | 基本设置面板 |
+| nav「设置」 | 基本设置面板（含工作区切换/新建与工作区资源目录） |
 | nav「武将」 | 武将编辑 + 已保存武将列表 |
 
 ## 对外接口（其他扩展唯一允许的调用方式）
@@ -69,11 +69,27 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
 | 配置键 | 内容 |
 |---|---|
 | `x19D6_editor.characters.<武将id>` | 武将草稿全量字段（编辑时 400ms 防抖自动保存，关闭编辑页立即落盘） |
-| `x19D6_editor.settings.*` | 基本设置（字号缩放、界面动画、默认挂载父元素、记住上次所在页） |
+| `x19D6_editor.settings.*` | 基本设置（字号缩放、界面动画、默认挂载父元素、记住上次所在页、当前工作区） |
 | `x19D6_editor.ui.*` | 外壳状态（侧栏宽度比、导航顺序、上次所在页） |
 | `x19D6_editor.skillEditor.*` | 技能编辑器的配置与缓存 |
-| `x19D6_editor.extensionFileConfig.*` | 各扩展的资源路径配置 |
+| `x19D6_editor.extensionFileConfig.*` | 各工作区（扩展）的资源目录：立绘 / 卡图 / 技能语音 / 阵亡语音 |
 | `x19D6_editor.extensionModuleConfig.*` | 扩展目录扫描缓存（可在基本设置里清除） |
+## 工作区（= 扩展）
+
+**一个工作区就是一个扩展**（磁盘上的 `extension/<名字>/`），当前工作区显示在编辑器标题旁。
+
+- **切换 / 新建**：侧栏「设置 → 工作区」下拉切换；「新建工作区」输入扩展名后会
+  建 `extension/<名>/` → 写 `extension.js` 骨架与 `info.json` →
+  `lib.config.extensions.add(名)` + `game.saveConfig("extensions", lib.config.extensions)` →
+  `game.saveExtensionConfig(名, "enable", true)`。**新扩展要重启游戏才会被加载。**
+- **骨架是老式 `game.import` 形态**：worker 的扩展扫描（`getExtensionAllPackage`）只解析老式扩展；
+  新式 ESM 骨架会让「武将包 / 分包」扫描失效（《魂氏编辑器》自身是新式，但不参与该扫描）。
+- **武将归属**：扩展不再按武将单独设置，草稿的 `extension` 一律取当前工作区（保存时写回）；
+  侧栏「武将」列表按工作区过滤，未归属的旧草稿照常显示。
+- **资源目录**：立绘 / 卡图 / 技能语音 / 阵亡语音四个目录写在 `x19D6_editor.extensionFileConfig.<工作区>`，
+  供 `downloadExtensionAsset()` 下载资源时使用；目录名可手填，datalist 会列出扩展内已有目录。
+
+
 
 ## 目录结构
 
@@ -113,6 +129,8 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
   数据本质是全局表 `lib.perfectPair`（`noname/library/index.js:11994` 初始化，由 `character/perfectPairs.js` 经 `noname/init/loading.js:459` 载入），**不是武将字段**——当前导出代码会剔除 `perfectPair`（见 `worker-ast.worker.js:genCharacterCode`），「把搭档关系写入 perfectPairs 表」的导出仍待设计。
 - **对话框并轨**：技能编辑器内核仍带着自己的一套对话框/UI 层（约 90KB，与 `<noname-dialog>` 重复）。
   计划先给 `component-dialog.mjs` 补齐 多行输入 / 数值滑条 / 开关列表 / 搜索选择 / 列表管理 五类，再切换内核约 30 处调用并删除重复实现。
+- **技能按工作区过滤**：技能目前只有一份全局缓存（`x19D6_editorSkillCache`，无 `extension` 归属），
+  要先有「带扩展归属的技能草稿列表」才能像武将那样过滤（下一轮）。
 - `module/editor/mindmap.mjs` 是无人引用的孤儿文件。
 
 已实现（本轮起）：武将**称号**（`component.mjs` 的 `characterAttributes` 含 `title`，纳入草稿持久化与导出数据）。

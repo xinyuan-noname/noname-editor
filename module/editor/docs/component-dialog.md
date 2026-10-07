@@ -78,11 +78,6 @@ dialog.headline = '文本编辑';
 dialog.message = '<p>初始文本内容</p>';
 ```
 
-### 扩展设置 (extension-setting)
-```javascript
-dialog.type = 'extension-setting';
-dialog.headline = '扩展设置';
-```
 
 ## 属性
 

@@ -19,7 +19,7 @@ export class HTMLNonameFocusUIElement extends HTMLElement {
     /**
      * @template {"readFile"|"readFolder"|
      *            "getAllFolderList"|"getAllFileList"|"getAllFolderAndFileList"|
-     *            "submitFile"|"download"|"writeTextFile"} T
+     *            "submitFile"|"download"|"writeTextFile"|"createDir"} T
      * @param {T} mode 
      * @param { T extends "readFile"?{format: ("url"|"arrayBuffer"|"text"),file: Blob}:
      *          T extends "submitFile"?{format: (string|string[]),multiple?:boolean}:
@@ -29,6 +29,7 @@ export class HTMLNonameFocusUIElement extends HTMLElement {
      *          T extends "getAllFolderList"?{path:string,folderFilter:function}
      *          T extends "download"?{path:string,name:string,url:string}
      *          T extends "writeTextFile"?{path:string,content:string}
+     *          T extends "createDir"?{path:string}
      *          Object<string,any>
      * } query 
      * @returns {Promise<any>}
@@ -66,6 +67,10 @@ export class HTMLNonameFocusUIElement extends HTMLElement {
             case "writeTextFile": {
                 const { path, content } = query;
                 return this.#server.writeTextFile(path, content);
+            }
+            case "createDir": {
+                const { path } = query;
+                return this.#server.createDir(path);
             }
         }
     }

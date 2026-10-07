@@ -383,6 +383,9 @@ export class NonameData {
         const [dirPath, filePath] = path.split(/\/(?=[^/]*$)/);
         return game.promises.writeFile(content, dirPath, filePath);
     }
+    async createDir(path) {
+        return game.promises.createDir(path);
+    }
     checkId(val, type, ...args) {
         switch (type) {
             case "character": return !(val in Object.assign({}, ...Object.values(lib.characterPack)));

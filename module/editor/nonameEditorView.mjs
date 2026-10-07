@@ -148,6 +148,26 @@ export class NonameEditorView {
     /**
      * @param {HTMLElement} parentNode 
      */
+    /**
+     * 标题旁显示当前工作区（= 扩展名）
+     */
+    syncTitleWorkspace() {
+        const node = this.operationPage.querySelector(".xy-ED-title-workspace");
+        if (!node) return;
+        const workspace = this.serveFor.data.getConfig("x19D6_editor.settings.workspace") || "";
+        node.textContent = workspace ? ` ｜ ${workspace}` : " ｜ 未选择工作区";
+        node.classList.toggle("xy-ED-title-workspace-empty", !workspace);
+    }
+    /**
+     * 工作区（= 扩展）切换：刷新标题与草稿列表，并让已打开的武将编辑器跟上
+     */
+    listenWorkspaceChange() {
+        this.operationPage.addEventListener("workspaceChange", () => {
+            this.syncTitleWorkspace();
+            this.loadSideBarCharacter();
+            this.mainPanes.forEach(pane => pane.syncWorkspace?.());
+        });
+    }
     init(parentNode) {
         const mainPage = this.mainPage;
         //$: mainPage , html/index.html//
@@ -156,7 +176,7 @@ mainPage.innerHTML=`
 <div class="xy-ED-operationPage">
     <header>
         <div class="xy-ED-header-left">
-            <div class="xy-ED-title">魂氏编辑器</div>
+            <div class="xy-ED-title">魂氏编辑器<span class="xy-ED-title-workspace"></span></div>
         </div>
         <div class="xy-ED-header-right">
             <div class="xy-ED-control-minize"></div>
@@ -239,6 +259,8 @@ mainPage.innerHTML=`
         //
         this.listenExpanable();
         this.restoreShellState();
+        this.syncTitleWorkspace();
+        this.listenWorkspaceChange();
         this.listenStopPropagation()
     }
     //
@@ -431,7 +453,9 @@ mainPage.innerHTML=`
         const sideBarCharacter = this.sideBarCharacter;
         if (!sideBarCharacter) return 0;
         const records = this.serveFor.data.getConfig("x19D6_editor.characters");
-        const ids = records && typeof records === "object" ? Object.keys(records) : [];
+        //工作区过滤：只列本工作区的草稿；未归属（旧数据）照常显示，避免旧草稿消失
+        const workspace = this.serveFor.data.getConfig("x19D6_editor.settings.workspace") || "";
+        const ids = records && typeof records === "object" ? Object.keys(records).filter(id => !workspace || !records[id]?.extension || records[id].extension === workspace) : [];
         const emptyCard = sideBarCharacter.querySelector(".xy-ED-nocharacterCard");
         const showBox = sideBarCharacter.querySelector(".xy-ED-characte-show");
         const counter = showBox.querySelector(".xy-ED-characte-count");

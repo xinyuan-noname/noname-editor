@@ -1,11 +1,58 @@
 "use script";
 import { HTMLNonameFocusUIElement } from "./component-base.mjs";
 import url from "./url.mjs";
+import "./component-dialog.mjs";
 /**
  * 基本设置面板（侧边栏「设置」页）。
  * 所有设置项都写入 lib.config.x19D6_editor.settings.*，随引擎配置一起落到 IndexedDB。
  */
 const PREFIX = "x19D6_editor.settings.";
+const EXT_FILE_CONFIG_PREFIX = "x19D6_editor.extensionFileConfig.";
+/**
+ * 工作区资源目录：键名沿用原「扩展设置」弹窗，老配置继续可用
+ */
+const WORKSPACE_RESOURCE_INPUTS = {
+    workspaceCharacterImage: "extension-character-image",
+    workspaceCardImage: "extension-card-image",
+    workspaceSkillAudio: "extension-skill-audio",
+    workspaceDieAudio: "extension-die-audio"
+};
+/**
+ * 新建工作区时写入的扩展骨架。
+ * 必须是 game.import 形态：worker 的 getExtensionAllPackage 只解析老式扩展
+ * （worker-ast.worker.js 里匹配 game.import）。
+ * @param {string} name
+ */
+const buildExtensionSkeleton = name => `game.import("extension", function (lib, game, ui, get, ai, _status) {
+\treturn {
+\t\tname: "${name}",
+\t\tcontent: function (config, pack) {
+\t\t},
+\t\tprecontent: function () {
+\t\t},
+\t\tconfig: {},
+\t\thelp: {},
+\t\tpackage: {
+\t\t\tcharacter: { character: {}, translate: {} },
+\t\t\tcard: { card: {}, translate: {}, list: [] },
+\t\t\tskill: { skill: {}, translate: {} },
+\t\t\tauthor: "",
+\t\t\tversion: "1.0",
+\t\t},
+\t};
+});
+`;
+/**
+ * @param {string} name
+ */
+const buildExtensionInfo = name => `{
+    "name": "${name}",
+    "author": "",
+    "diskURL": "",
+    "forumURL": "",
+    "version": "1.0.0"
+}
+`;
 class HTMLNonameSettingPanelElement extends HTMLNonameFocusUIElement {
     constructor() {
         super();
@@ -13,6 +60,19 @@ class HTMLNonameSettingPanelElement extends HTMLNonameFocusUIElement {
         //$: shadow , html/setting.html//
 shadow.innerHTML=`
 <div class="panel">
+    <section>
+        <h3>工作区</h3>
+        <label class="row"><span>当前工作区</span>
+            <select id="workspace"></select>
+        </label>
+        <div class="row"><button id="workspaceNew">新建工作区</button><button id="workspaceRefresh">刷新列表</button></div>
+        <div class="row muted" id="workspaceHint"></div>
+        <label class="row"><span>武将立绘目录</span><input id="workspaceCharacterImage" list="workspaceFolderList" placeholder="image/character"></label>
+        <label class="row"><span>卡牌图片目录</span><input id="workspaceCardImage" list="workspaceFolderList" placeholder="image/card"></label>
+        <label class="row"><span>技能语音目录</span><input id="workspaceSkillAudio" list="workspaceFolderList" placeholder="audio/skill"></label>
+        <label class="row"><span>阵亡语音目录</span><input id="workspaceDieAudio" list="workspaceFolderList" placeholder="audio/die"></label>
+        <datalist id="workspaceFolderList"></datalist>
+    </section>
     <section>
         <h3>外观</h3>
         <label class="row"><span>字号缩放</span><input type="range" id="fontScale" min="0.7" max="1.5" step="0.05"><b id="fontScaleValue"></b></label>
@@ -117,6 +177,168 @@ shadow.innerHTML=`
             this.configQuery("write", { member: "x19D6_editor.extensionModuleConfig", value: null });
             alert("已清除扩展扫描缓存。");
         });
+        // ---------------- 工作区（= 扩展） ----------------
+        query("workspace").addEventListener("change", e => this.setWorkspace(e.target.value));
+        query("workspaceRefresh").addEventListener("pointerup", () => {
+            this.renderWorkspace();
+            this.refreshWorkspaceFiles(this.workspace);
+        });
+        query("workspaceNew").addEventListener("pointerup", () => this.promptNewWorkspace());
+        for (const [id, key] of Object.entries(WORKSPACE_RESOURCE_INPUTS)) {
+            query(id).addEventListener("change", e => {
+                if (!this.workspace) return;
+                this.writeExtensionFileConfig(this.workspace, { [key]: e.target.value.trim() });
+            });
+        }
+        this.renderWorkspace();
+        this.refreshWorkspaceFiles(this.workspace);
+    }
+    /* ---------------- 工作区（= 扩展） ---------------- */
+    /**
+     * 当前工作区名（= 扩展名）
+     * @returns {string}
+     */
+    get workspace() {
+        return this.read("workspace", "") || "";
+    }
+    /**
+     * 已安装扩展列表（= lib.config.extensions）
+     * @returns {string[]}
+     */
+    get extensionList() {
+        return Array.from(this.infoQuery("extensionList") || []);
+    }
+    /**
+     * @param {string} extensionName
+     * @returns {object} 该扩展的资源目录配置
+     */
+    readExtensionFileConfig(extensionName) {
+        if (!extensionName) return {};
+        return this.configQuery("get", { member: EXT_FILE_CONFIG_PREFIX + extensionName }) || {};
+    }
+    /**
+     * 合并写入某扩展的资源目录配置
+     * @param {string} extensionName
+     * @param {object} patch
+     */
+    writeExtensionFileConfig(extensionName, patch) {
+        if (!extensionName) return;
+        const value = { ...this.readExtensionFileConfig(extensionName), ...patch };
+        return this.configQuery("write", { member: EXT_FILE_CONFIG_PREFIX + extensionName, value });
+    }
+    /**
+     * 扩展目录里已有 image/character、audio/skill 这类约定目录时给出默认值
+     * （规则沿用原「扩展设置」弹窗）
+     * @param {string} extensionName
+     * @param {string[]} folderList
+     */
+    suggestResourceDirs(extensionName, folderList = []) {
+        const pick = candidates => candidates.find(dir => folderList.includes(dir)) || extensionName;
+        return {
+            "extension-character-image": pick([extensionName + "/image/character", extensionName + "/image"]),
+            "extension-card-image": pick([extensionName + "/image/card", extensionName + "/image"]),
+            "extension-skill-audio": pick([extensionName + "/audio/skill", extensionName + "/audio"]),
+            "extension-die-audio": pick([extensionName + "/audio/die", extensionName + "/audio"])
+        };
+    }
+    /**
+     * 拉一次工作区目录树：填 datalist、补齐缺失的默认资源目录
+     * @param {string} extensionName
+     */
+    async refreshWorkspaceFiles(extensionName) {
+        const datalist = this.shadowRoot.getElementById("workspaceFolderList");
+        if (datalist) datalist.innerHTML = "";
+        if (!extensionName) return;
+        const [folderList] = await this.fileQuery("getAllFolderAndFileList", { path: "extension/" + extensionName }) || [[], []];
+        if (datalist) {
+            datalist.innerHTML = [extensionName, ...folderList.map(folder => extensionName + "/" + folder)]
+                .map(path => `<option value="${path}"></option>`).join("");
+        }
+        const config = this.readExtensionFileConfig(extensionName);
+        const patch = {};
+        for (const [key, suggestion] of Object.entries(this.suggestResourceDirs(extensionName, folderList))) {
+            if (!config[key]) patch[key] = suggestion;
+        }
+        if (Object.keys(patch).length) this.writeExtensionFileConfig(extensionName, patch);
+        this.renderWorkspace();
+    }
+    /**
+     * 把当前工作区与它的资源目录回填到界面
+     */
+    renderWorkspace() {
+        const query = id => this.shadowRoot.getElementById(id);
+        const workspace = this.workspace;
+        const names = this.extensionList;
+        const select = query("workspace");
+        if (select) {
+            select.innerHTML = `<option value="">未选择工作区</option>` + names.map(name => `<option value="${name}">${name}</option>`).join("");
+            select.value = names.includes(workspace) ? workspace : "";
+        }
+        const config = this.readExtensionFileConfig(workspace);
+        for (const [id, key] of Object.entries(WORKSPACE_RESOURCE_INPUTS)) {
+            const input = query(id);
+            if (input) input.value = config[key] || "";
+        }
+        const hint = query("workspaceHint");
+        if (hint) {
+            hint.textContent = workspace
+                ? `工作区「${workspace}」：武将草稿与资源目录都归它，新建的武将会写入该扩展。`
+                : "工作区即扩展：先在上面选择或新建一个扩展，武将草稿列表会按它过滤。";
+        }
+    }
+    /**
+     * 切换工作区：写配置 + 通知外壳刷新标题与草稿列表
+     * @param {string} extensionName
+     */
+    setWorkspace(extensionName) {
+        this.write("workspace", extensionName || "");
+        this.renderWorkspace();
+        this.refreshWorkspaceFiles(extensionName || "");
+        this.triggerEvent("workspaceChange", { workspace: extensionName || "" });
+    }
+    /**
+     * 新建工作区：建目录 + 写扩展骨架 + 注册进引擎并启用
+     * @param {string} inputName
+     * @returns {Promise<boolean>}
+     */
+    async createWorkspace(inputName) {
+        const name = String(inputName || "").trim();
+        if (!name) return false;
+        if (/[\\/:*?"<>|]/.test(name)) {
+            alert('扩展名不能包含 \\ / : * ? " < > | 这些字符');
+            return false;
+        }
+        const installed = this.extensionList.includes(name);
+        await this.fileQuery("createDir", { path: "extension/" + name });
+        const [, files] = await this.fileQuery("getAllFolderAndFileList", { path: "extension/" + name });
+        //已有入口文件或本就在册的扩展不动它的文件，只补注册/启用
+        if (!installed && !files.includes("extension.js")) {
+            await this.fileQuery("writeTextFile", { path: `extension/${name}/extension.js`, content: buildExtensionSkeleton(name) });
+            await this.fileQuery("writeTextFile", { path: `extension/${name}/info.json`, content: buildExtensionInfo(name) });
+        }
+        if (!lib.config.extensions.includes(name)) {
+            lib.config.extensions.add(name);
+            game.saveConfig("extensions", lib.config.extensions);
+        }
+        game.saveExtensionConfig(name, "enable", true);
+        this.setWorkspace(name);
+        alert(`工作区「${name}」已创建并注册。\n新扩展要重启游戏才会被加载，当前会话里还不会生效。`);
+        return true;
+    }
+    /**
+     * 弹输入框新建工作区
+     * @returns {Promise<boolean>}
+     */
+    async promptNewWorkspace() {
+        const dialog = document.createElement("noname-dialog");
+        dialog.setAttribute("type", "prompt");
+        dialog.setAttribute("headline", "新建工作区（= 新建扩展）");
+        dialog.setAttribute("message", "扩展名同时是文件夹名；创建后需重启游戏才会加载。");
+        dialog.setAttribute("placeholder", "例如：我的扩展");
+        this.shadowRoot.append(dialog);
+        const name = await dialog.wait();
+        if (name === false || name === null || name === undefined) return false;
+        return await this.createWorkspace(name);
     }
     /**
      * 导出全部 x19D6_editor 数据为 JSON 文件

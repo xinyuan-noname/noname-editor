@@ -82,44 +82,6 @@ const textFragment = (() => {
     fragment.append(textEditorWrapper);
     return fragment;
 })();
-const extensionSettringFragment = (() => {
-    const fragment = new DocumentFragment();
-
-    const form = document.createElement("form");
-
-    const extensionChoiceContainer = document.createElement("div");
-    extensionChoiceContainer.innerHTML = `<label for="extension-name">扩展名称</label><select name="extension-name" id="extension" required></select>`
-
-    const extensionCharacterImage = document.createElement("div");
-    extensionCharacterImage.innerHTML = `<label for="extension-character-image">扩展武将图片文件夹</label><input name="extension-character-image" id="extension-character-image" list="extension-folder-list">`
-
-    const extensionCardImage = document.createElement("div");
-    extensionCardImage.innerHTML = `<label for="extension-card-image">扩展卡牌图片文件夹</label><input name="extension-card-image" id="extension-card-image" list="extension-folder-list">`
-
-    const extensionSkillAudio = document.createElement("div");
-    extensionSkillAudio.innerHTML = `<label for="extension-skill-audio">扩展技能语音文件夹</label><input name="extension-skill-audio" id="extension-skill-audio" list="extension-folder-list">`
-
-    const extensionDieAudio = document.createElement("div");
-    extensionDieAudio.innerHTML = `<label for="extension-die-audio">扩展阵亡语音文件夹</label><input name="extension-die-audio" id="extension-die-audio" list="extension-folder-list">`
-
-    const dirDataList = document.createElement("datalist");
-    dirDataList.id = "extension-folder-list";
-
-    const fileDataList = document.createElement("datalist");
-    fileDataList.id = "extension-file-list";
-    form.append(extensionChoiceContainer, extensionCharacterImage, extensionCardImage, extensionSkillAudio, extensionDieAudio, dirDataList, fileDataList);
-    fragment.append(form);
-    return fragment;
-})();
-const extensionSettingStyle = (() => {
-    const style = document.createElement("style");
-    //第一行样式不生效也没关系,本来也不重要,本来设置了disabled就可以防止输入 :has() chorme 105
-    style.textContent =
-        `.content div:has(#extension:invalid) ~ div{ display: none; }
-        .content input{ width:50% }`
-    return style;
-})();
-const extensionFolderListRecord = {}
 class HTMLNonameDialogHTML extends HTMLNonameFocusUIElement {
     static dialogStack = [];
     constructor() {
@@ -678,89 +640,6 @@ button { font: inherit; padding: 1px 6px; border-radius: 3px; border: 1px solid 
                                 })
                             }
 
-                        });
-                    }; break;
-                    case "extension-setting": {
-                        this.appendTempStyle(extensionSettingStyle.cloneNode(true))
-                        const content = this.shadowRoot.querySelector(".content");
-                        content.append(extensionSettringFragment.cloneNode(true));
-                        const [...extensionConcerning] = content.querySelectorAll("input");
-                        const [characterImage, cardImage, skillAudio, dieAudio] = extensionConcerning;
-                        const extensionList = content.querySelector("select");
-                        const dirDataList = content.querySelector("datalist#extension-folder-list");
-                        const fileDataList = content.querySelector("datalist#extension-file-list");
-                        const form = content.querySelector("form");
-                        extensionList.addEventListener("change", async () => {
-                            const disabled = !extensionList.checkValidity();
-                            extensionConcerning.forEach(node => {
-                                node.disabled = disabled;
-                                node.value = "";
-                            });
-                            if (disabled) return;
-                            const map = new Map(new FormData(form));
-                            const extensionName = map.get("extension-name");
-                            if (!extensionFolderListRecord[extensionName]) {
-                                const [folderList, fileList] = await this.fileQuery("getAllFolderAndFileList", { path: "extension/" + extensionName });
-                                const folderDatalistContent = `<option value="${extensionName}">${extensionName}<option>` + folderList.map(folder => `<option value="${extensionName + "/" + folder}">${extensionName + "/" + folder}</option>`).join("");
-                                const fileDatalistContent = fileList.map(file => `<option value="${extensionName + "/" + file}">${extensionName + "/" + file}</option>`).join("");
-                                extensionFolderListRecord[extensionName] = {
-                                    folderList,
-                                    fileList,
-                                    folderDatalistContent,
-                                    fileDatalistContent
-                                }
-                            }
-                            const { folderDatalistContent, folderList, fileDatalistContent } = extensionFolderListRecord[extensionName]
-                            dirDataList.innerHTML = folderDatalistContent;
-                            fileDataList.innerHTML = fileDatalistContent;
-                            const config = this.#config?.[extensionName];
-                            if (config) {
-                                characterImage.value = config["extension-character-image"];
-                                cardImage.value = config["extension-card-image"];
-                                skillAudio.value = config["extension-skill-audio"];
-                                dieAudio.value = config["extension-die-audio"];
-                            } else {
-                                if (folderList.includes("image/character")) {
-                                    characterImage.value = extensionName + "/image/character";
-                                } else if (folderList.includes("image")) {
-                                    characterImage.value = extensionName + "/image";
-                                } else {
-                                    characterImage.value = extensionName;
-                                }
-                                if (folderList.includes("image/card")) {
-                                    cardImage.value = extensionName + "/image/card";
-                                } else if (folderList.includes("image")) {
-                                    cardImage.value = extensionName + "/image";
-                                } else {
-                                    cardImage.value = extensionName;
-                                }
-                                if (folderList.includes("audio/skill")) {
-                                    skillAudio.value = extensionName + "/audio/skill";
-                                } else if (folderList.includes("audio")) {
-                                    skillAudio.value = extensionName + "/audio";
-                                } else {
-                                    skillAudio.value = extensionName;
-                                }
-                                if (folderList.includes("audio/die")) {
-                                    dieAudio.value = extensionName + "/audio/die";
-                                } else if (folderList.includes("audio")) {
-                                    dieAudio.value = extensionName + "/audio";
-                                } else {
-                                    dieAudio.value = extensionName;
-                                }
-                            }
-                        });
-                        extensionList.innerHTML = "<option value=''>请选择扩展</option>" + this.infoQuery("extensionList").map(name => {
-                            return `<option value="${name}">${name}</option>`
-                        }).join("");
-                        this.setAttribute("headline", "扩展设置");
-                        this.#whenEnd((e) => {
-                            e.preventDefault();
-                            const map = new Map(new FormData(form));
-                            this.#finishReslove({
-                                ...Object.fromEntries(map)
-                            });
-                            this.remove();
                         });
                     }; break;
                     default: break;

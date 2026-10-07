@@ -649,3 +649,16 @@ body.xy-ED-col-resizing * {
 .xy-ED-sideBar-character .xy-ED-refresh-button:hover {
     background: #f3e6c9;
 }
+
+/* 标题旁的工作区名：左栏原为定宽 100px（正好是「魂氏编辑器」五个字），装不下工作区名 */
+.xy-ED-operationPage>header .xy-ED-header-left {
+    width: auto;
+    min-width: 100px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.xy-ED-operationPage>header .xy-ED-title-workspace {
+    opacity: 0.72;
+    font-weight: 400;
+}
