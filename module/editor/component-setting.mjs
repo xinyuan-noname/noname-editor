@@ -335,8 +335,16 @@ shadow.innerHTML=`
         dialog.setAttribute("headline", "新建工作区（= 新建扩展）");
         dialog.setAttribute("message", "扩展名同时是文件夹名；创建后需重启游戏才会加载。");
         dialog.setAttribute("placeholder", "例如：我的扩展");
-        this.shadowRoot.append(dialog);
-        const name = await dialog.wait();
+        //必须挂在 ui.window：<noname-dialog> 的 :host 是 position:absolute !important + width/height:100%，
+        //挂在侧栏组件（<setting-panel>）的 shadowRoot 里会以窄侧栏为包含块，被面板的 overflow 裁掉——
+        //表现为弹窗只剩右半边、输入框贴着屏幕外沿（2026-10 实测）。与 api.mjs 的 choose 弹窗同款挂法。
+        (ui.window || document.body).appendChild(dialog);
+        let name;
+        try {
+            name = await dialog.wait();
+        } finally {
+            dialog.remove();
+        }
         if (name === false || name === null || name === undefined) return false;
         return await this.createWorkspace(name);
     }
