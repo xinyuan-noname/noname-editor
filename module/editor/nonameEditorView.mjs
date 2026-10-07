@@ -266,6 +266,13 @@ mainPage.innerHTML=`
         this.restoreShellState();
         this.syncTitleWorkspace();
         this.listenWorkspaceChange();
+        //扩展被删/取消注册时清空工作区；有效则把登记表同步进 live lib
+        this.serveFor.data.checkWorkspace().then(workspace => {
+            if (workspace) this.applyWorkspaceMetaToLib();
+            this.syncTitleWorkspace();
+            this.renderCharacterFilter();
+            this.loadSideBarCharacter();
+        });
         this.listenStopPropagation()
     }
     //
@@ -636,6 +643,93 @@ mainPage.innerHTML=`
         if (corrected) this.loadSideBarCharacter();
     }
     /**
+     * 生成「落盘区块」：把工作区登记表写成对 `lib` 的注册代码（幂等——靠首尾标记整块替换）。
+     * 引擎只加载扩展入口及其 import 图，所以这段代码必须写进 `extension.js` 才会在重启后生效。
+     * @param {{packages: object, sorts: object}} meta
+     * @param {string} [eol]
+     * @returns {string}
+     */
+    buildWorkspaceMetaBlock(meta, eol = "\n") {
+        const packages = (meta && meta.packages) || {};
+        const sorts = (meta && meta.sorts) || {};
+        const lines = [];
+        lines.push("//#noname-editor-workspace-begin 由《魂氏编辑器》生成：工作区武将包 / 分包登记（整块覆盖，勿手改）");
+        lines.push(";(function (lib) {");
+        lines.push("    if (!lib) return;");
+        lines.push("    lib.characterPack = lib.characterPack || {};");
+        lines.push("    lib.characterSort = lib.characterSort || {};");
+        lines.push("    lib.translate = lib.translate || {};");
+        Object.entries(packages).forEach(([packageId, packageName]) => {
+            lines.push(`    //武将包：${packageName}`);
+            lines.push(`    lib.characterPack[${JSON.stringify(packageId)}] = lib.characterPack[${JSON.stringify(packageId)}] || {};`);
+            lines.push(`    lib.characterSort[${JSON.stringify(packageId)}] = lib.characterSort[${JSON.stringify(packageId)}] || {};`);
+            lines.push(`    lib.translate[${JSON.stringify(packageId + "_character_config")}] = ${JSON.stringify(packageName)};`);
+            Object.entries(sorts[packageId] || {}).forEach(([sortId, sortName]) => {
+                lines.push(`    lib.characterSort[${JSON.stringify(packageId)}][${JSON.stringify(sortId)}] = lib.characterSort[${JSON.stringify(packageId)}][${JSON.stringify(sortId)}] || [];`);
+                lines.push(`    lib.translate[${JSON.stringify(sortId)}] = ${JSON.stringify(sortName)};`);
+            });
+        });
+        lines.push('})(typeof lib !== "undefined" ? lib : (typeof window !== "undefined" ? window.lib : null));');
+        lines.push("//#noname-editor-workspace-end");
+        return lines.join(eol) + eol;
+    }
+    /**
+     * 把登记表同步进 live lib（幂等）。扩展入口里的落盘区块同理，这里只是让本会话立刻一致。
+     * @param {{packages: object, sorts: object}} [meta]
+     */
+    applyWorkspaceMetaToLib(meta = this.workspaceMeta) {
+        lib.characterPack = lib.characterPack || {};
+        lib.characterSort = lib.characterSort || {};
+        lib.translate = lib.translate || {};
+        Object.entries(meta.packages || {}).forEach(([packageId, packageName]) => {
+            if (!lib.characterPack[packageId]) lib.characterPack[packageId] = {};
+            if (!lib.characterSort[packageId]) lib.characterSort[packageId] = {};
+            lib.translate[packageId + "_character_config"] = packageName;
+            Object.entries((meta.sorts || {})[packageId] || {}).forEach(([sortId, sortName]) => {
+                if (!lib.characterSort[packageId][sortId]) lib.characterSort[packageId][sortId] = [];
+                lib.translate[sortId] = sortName;
+            });
+        });
+    }
+    /**
+     * 把武将包 / 分包**落盘**到 `extension/<工作区>/extension.js` 的标记区块（整块替换，幂等）
+     * @returns {Promise<boolean>}
+     */
+    async syncWorkspaceMetaToFile() {
+        const workspace = this.serveFor.data.getConfig("x19D6_editor.settings.workspace") || "";
+        if (!workspace) return false;
+        const path = `extension/${workspace}/extension.js`;
+        let content;
+        try {
+            content = await this.serveFor.data.readTextFile(path);
+        } catch (err) {
+            console.warn("读取扩展入口失败", path, err);
+            return false;
+        }
+        if (typeof content !== "string") return false;
+        this.applyWorkspaceMetaToLib();
+        const eol = content.includes("\r\n") ? "\r\n" : "\n";
+        const block = this.buildWorkspaceMetaBlock(this.workspaceMeta, eol).replace(/\r?\n$/, "");
+        const markBegin = "//#noname-editor-workspace-begin";
+        const markEnd = "//#noname-editor-workspace-end";
+        let next;
+        const start = content.indexOf(markBegin);
+        const end = content.indexOf(markEnd);
+        if (start >= 0 && end > start) {
+            next = content.slice(0, start) + block + content.slice(end + markEnd.length);
+        } else {
+            const tail = content.endsWith(eol) ? "" : eol;
+            next = content + tail + eol + block + eol;
+        }
+        try {
+            await this.serveFor.data.writeTextFile(path, next);
+        } catch (err) {
+            console.warn("写入扩展入口失败", path, err);
+            return false;
+        }
+        return true;
+    }
+    /**
      * 工作区的「武将包 / 分包」登记表：`x19D6_editor.workspaceMeta.<工作区>`
      * 形如 `{ packages: { <包id>: <中文名> }, sorts: { <包id>: { <分包id>: <中文名> } } }`。
      * 编辑器里新建的包/分包登记在这（live lib 的注册只在本次会话有效，重启后靠这份登记 + 导出的代码恢复）。
@@ -672,14 +766,15 @@ mainPage.innerHTML=`
      */
     async promptIdAndName(config) {
         const dialog = document.createElement("noname-dialog");
-        //type 分支开头会清空 headline/message，先设 type 再设文案
-        dialog.setAttribute("type", "multi-input");
-        dialog.setAttribute("headline", config.headline);
-        if (config.message) dialog.setAttribute("message", config.message);
+        //⚠️ payload 必须在 type 之前设：type 分支会当场读 payload 渲染字段，
+        //而 payload 不在 observedAttributes 里，设晚了这一遍就白设（实测：弹窗只有标题、没有输入框）。
         dialog.setAttribute("payload", JSON.stringify([
             { label: "英文名(id)", placeholder: config.idPlaceholder || "仅字母/数字/下划线" },
             { label: "中文名" }
         ]));
+        dialog.setAttribute("type", "multi-input");
+        dialog.setAttribute("headline", config.headline);
+        if (config.message) dialog.setAttribute("message", config.message);
         (ui.window || document.body).appendChild(dialog);
         try {
             const result = await dialog.wait();
@@ -717,12 +812,11 @@ mainPage.innerHTML=`
         }
         meta.packages[packageId] = packageName;
         this.writeWorkspaceMeta(meta);
-        //live lib：让本次会话里各处立即可选（重启后靠登记表 + 导出代码恢复）
-        lib.characterPack = lib.characterPack || {};
-        if (!lib.characterPack[packageId]) lib.characterPack[packageId] = {};
-        lib.characterSort = lib.characterSort || {};
-        if (!lib.characterSort[packageId]) lib.characterSort[packageId] = {};
-        lib.translate[packageId + "_character_config"] = packageName;
+        this.applyWorkspaceMetaToLib(meta);
+        const ok = await this.syncWorkspaceMetaToFile();
+        alert(ok
+            ? `武将包「${packageName}」已创建，并落盘到 extension/${workspace}/extension.js（重启游戏后生效）。`
+            : `武将包「${packageName}」已创建，但落盘失败（扩展入口读不到或写不进去，见控制台）。`);
         //过滤栏切到新建的包，省得再手动选一次
         const state = this.characterFilterState;
         state.packageId = packageId;
@@ -768,11 +862,11 @@ mainPage.innerHTML=`
         }
         meta.sorts[packageId][sortId] = sortName;
         this.writeWorkspaceMeta(meta);
-        //live lib（data 层的 setCharacterSort 也是这么改 lib.characterSort 的）
-        lib.characterSort = lib.characterSort || {};
-        if (!lib.characterSort[packageId]) lib.characterSort[packageId] = {};
-        if (!lib.characterSort[packageId][sortId]) lib.characterSort[packageId][sortId] = [];
-        lib.translate[sortId] = sortName;
+        this.applyWorkspaceMetaToLib(meta);
+        const ok = await this.syncWorkspaceMetaToFile();
+        alert(ok
+            ? `分包「${sortName}」已创建，并落盘到 extension/${workspace}/extension.js（重启游戏后生效）。`
+            : `分包「${sortName}」已创建，但落盘失败（扩展入口读不到或写不进去，见控制台）。`);
         state.characterSort = sortId;
         this.characterFilterState = state;
         await this.renderCharacterFilter();

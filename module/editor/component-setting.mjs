@@ -490,8 +490,13 @@ shadow.innerHTML=`
      */
     renderWorkspace() {
         const query = id => this.shadowRoot.getElementById(id);
-        const workspace = this.workspace;
         const names = this.extensionList;
+        let workspace = this.workspace;
+        //扩展被删/取消注册：清掉失效的工作区，别让编辑器继续指向一个不存在的扩展
+        if (workspace && !names.includes(workspace)) {
+            this.write("workspace", "");
+            workspace = "";
+        }
         const select = query("workspace");
         if (select) {
             select.innerHTML = `<option value="">未选择工作区</option>` + names.map(name => `<option value="${name}">${name}</option>`).join("");

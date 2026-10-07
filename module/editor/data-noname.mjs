@@ -386,6 +386,36 @@ export class NonameData {
     async createDir(path) {
         return game.promises.createDir(path);
     }
+    /**
+     * 按路径读文本（引擎 readFileAsText 走 node fs，utf-8）
+     * @param {string} path
+     * @returns {Promise<string>}
+     */
+    async readTextFile(path) {
+        return game.promises.readFileAsText(path);
+    }
+    /**
+     * 校验当前工作区：不在 `lib.config.extensions` 里，或磁盘上已没有该扩展目录 → 清空设置。
+     * （引擎自己的「重置无效扩展」也是用 checkDir 判目录，`lib.config.extensions` 里可能残留已删扩展的名字。）
+     * @returns {Promise<string>} 有效的工作区名；无效则 ""
+     */
+    async checkWorkspace() {
+        const workspace = this.getConfig("x19D6_editor.settings.workspace") || "";
+        if (!workspace) return "";
+        let valid = Array.from(this.getExtensionList() || []).includes(workspace);
+        if (valid) {
+            try {
+                valid = (await game.promises.checkDir(`extension/${workspace}`)) === 1;
+            } catch (err) {
+                valid = false;
+            }
+        }
+        if (!valid) {
+            this.writeConfig("x19D6_editor.settings.workspace", "");
+            return "";
+        }
+        return workspace;
+    }
     checkId(val, type, ...args) {
         switch (type) {
             case "character": return !(val in Object.assign({}, ...Object.values(lib.characterPack)));

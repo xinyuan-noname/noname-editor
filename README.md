@@ -74,7 +74,7 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
 | `x19D6_editor.skillEditor.*` | 技能编辑器的配置与缓存 |
 | `x19D6_editor.extensionFileConfig.*` | 各工作区（扩展）的资源目录：立绘 / 卡图 / 技能语音 / 阵亡语音 |
 | `x19D6_editor.extensionModuleConfig.*` | 扩展目录扫描缓存（可在基本设置里清除） |
-| `x19D6_editor.workspaceMeta.<工作区>` | 编辑器里新建的武将包 / 分包登记（id → 中文名），重启后仍能列出来 |
+| `x19D6_editor.workspaceMeta.<工作区>` | 编辑器里新建的武将包 / 分包登记（id → 中文名）；同时会**落盘**到该扩展 `extension.js` 的标记区块 |
 ## 工作区（= 扩展）
 
 **一个工作区就是一个扩展**（磁盘上的 `extension/<名字>/`），当前工作区显示在编辑器标题旁。
@@ -98,6 +98,10 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
   - **打开资源管理器**：按钮直接调起系统文件管理器定位到 `resources/app/extension/<工作区>`，方便手动整理
     立绘/语音；底层是 `require("electron").shell.openPath`，失败退回 `child_process.exec` 调 `explorer`。
     提示行会显示该目录的绝对路径；**建目录失败会在此处显式报错**（不再静默）。
+  - **工作区失效自动清空**：`extension/<工作区>` 目录不存在、或该名字不在 `lib.config.extensions` 里时，
+    `settings.workspace` 会被清空（标题回到「未选择工作区」、草稿列表不再按它过滤）。
+  - **武将包 / 分包落盘**：侧栏新建的包/分包除登记外，还会写进该扩展 `extension.js` 末尾的标记区块
+    （`//#noname-editor-workspace-begin … //#noname-editor-workspace-end`，整块覆盖、幂等），重启游戏后可见。
 
 
 
