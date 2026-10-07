@@ -261,6 +261,63 @@ shadow.innerHTML=`
                         this.setAttribute("forced", true);
                     }; break;
                     case "confirm": ; break;
+                    /*
+                     * 以下三类为《魂氏编辑器》新增：供技能编辑器内核并轨使用
+                     *  - multiline  多行文本（初始值取 payload，须在设置 type 之前设置）
+                     *  - range      数值滑条（min/max/step/value 属性，实时显示）
+                     *  - switch-list 开关列表（payload 传 JSON：{ key: { label, checked } }，须在设置 type 之前设置）
+                     */
+                    case "multiline": {
+                        const { container, input } = this.appendInput();
+                        const textarea = document.createElement("textarea");
+                        textarea.id = "multiline";
+                        textarea.value = this.getAttribute("payload") || "";
+                        if (this.hasAttribute("placeholder")) textarea.placeholder = this.getAttribute("placeholder");
+                        container.replaceChild(textarea, input);
+                        this.#whenEnd(() => {
+                            this.#finishReslove(textarea.value);
+                        });
+                    }; break;
+                    case "range": {
+                        const { input } = this.appendInput();
+                        input.type = "range";
+                        input.min = this.getAttribute("min") ?? 0;
+                        input.max = this.getAttribute("max") ?? 100;
+                        input.step = this.getAttribute("step") ?? 1;
+                        input.value = this.getAttribute("value") ?? input.min;
+                        const shower = document.createElement("b");
+                        shower.textContent = input.value;
+                        input.after(shower);
+                        input.addEventListener("input", () => (shower.textContent = input.value));
+                        this.#whenEnd(() => {
+                            this.#finishReslove(Number(input.value));
+                        });
+                    }; break;
+                    case "switch-list": {
+                        let map = {};
+                        try {
+                            map = JSON.parse(this.getAttribute("payload") || "{}");
+                        } catch (err) {
+                            console.error("switch-list 的 payload 不是合法 JSON", err);
+                        }
+                        const state = {};
+                        const { form, container } = this.appendInput();
+                        container.remove();
+                        Object.keys(map).forEach(key => {
+                            const item = map[key] || {};
+                            const label = document.createElement("label");
+                            const box = document.createElement("input");
+                            box.type = "checkbox";
+                            box.checked = Boolean(item.checked);
+                            state[key] = box.checked;
+                            box.addEventListener("change", () => (state[key] = box.checked));
+                            label.append(box, document.createTextNode(item.label ?? key));
+                            form.append(label);
+                        });
+                        this.#whenEnd(() => {
+                            this.#finishReslove({ ...state });
+                        });
+                    }; break;
                     case "prompt": {
                         const { input } = this.appendInput();
                         this.#whenEnd(() => {
