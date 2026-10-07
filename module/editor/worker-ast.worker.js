@@ -352,8 +352,6 @@ const modifyCharacterClassInfo = (characterSetting, characterId, basicInfo, impo
         }
     }
     if (targetProperty) {
-        console.log(targetProperty.get("value"))
-        debugger;
         targetProperty.replaceWith(createNewCharacterExpressionParamNode(basicInfo, pattern));
     } else {
         characterSetting.pushContainer(
@@ -432,6 +430,8 @@ const modifyCharacterPackageCode = async (dataList, extensionModuleConfig) => {
         characterSort, characterSortName, packageId, extension,
         intro, pinyin, dieAudioText, name: characterName, ...basicInfo
     } = dataList;
+    //注意：intro / pinyin / dieAudioText 被显式剔出 basicInfo，但本函数只写入了 character 与 translate 两处，
+    //即 intro、pinyin、dieAudioText 目前不会随「一键导出」写回目标文件（仅存于编辑器草稿）。
     const modifedFileContentMap = {};
     //找到对应武将包路径
     const { file: filePath } = packageInfo.character.find(content => {
@@ -469,7 +469,9 @@ const modifyCharacterPackageCode = async (dataList, extensionModuleConfig) => {
             }
         }
         if (characterSort) {
-
+            //尚未实现：characterSort / characterSortName 在解构时已被剔出 basicInfo，
+            //这里也没有把它们写入目标文件的 characterSort 配置，
+            //因此「一键导出」目前不会更新分包排序（分包/排序仅停留在编辑器草稿里）。
         }
         for (let k in modifedFileContentMap) {
             modifedFileContentMap[k].content = await astObject.generateCode(modifedFileContentMap[k].ast);

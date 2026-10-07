@@ -112,3 +112,16 @@ skill/interact/dialog-adapter.mjs    ← 新建
 即「子技能 / 技能组」的查看与删除在修复前是静默失效的。
 
 修法：写入端改 `container.dataset.x19D6Id = attr`，读取端 4 处改为 `dataset.x19D6Id`。
+## 七、导出链路的三处缺陷（本轮核实）
+
+在排查对话框并轨顺带审查 `worker-ast.worker.js` 时核实：
+
+1. **已修**：`modifyCharacterClassInfo` 中残留 `console.log(...)` + `debugger;`。
+   Worker 内的 `debugger` 会在打开开发者工具时中断执行，属生产代码不该有的调试残留。
+2. **未实现（已加注）**：`modifyCharacterPackageCode` 里 `if (characterSort) { }` 是空实现。
+   `characterSort` / `characterSortName` 在解构时已被剔出 `basicInfo`，也未写入目标文件的 characterSort 配置，
+   因此「一键导出」不会更新分包排序——这两个字段目前只停留在编辑器草稿里。
+3. **未写回（已加注）**：`intro` / `pinyin` / `dieAudioText` 同样被从 `basicInfo` 剔出，
+   但该函数只写入了 `character` 与 `translate` 两处，因此这三项不会随导出写回目标文件。
+
+第 2、3 项需要实现目标文件的对应写入逻辑（AST 改写），属功能开发而非缺陷修补，故本轮只做事实标注，未擅自猜测写入格式。
