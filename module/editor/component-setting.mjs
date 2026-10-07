@@ -394,8 +394,56 @@ shadow.innerHTML=`
             dialog.remove();
         }
     }
+
     /**
-     * 弹「搜索选择」挑一个目录（含「＋ 新建目录…」）
+     * 系统「选择文件夹」对话框（Electron `dialog.showOpenDialog`）——界面就是 Windows 资源管理器那套。
+     * Electron ≥14 走 `@electron/remote`，更老的走 `electron.remote`（noname 自己在 `init/node.js:29` 也是这么分支的）。
+     * @param {string} [defaultPath] 打开时定位到的目录（绝对路径）
+     * @returns {Promise<string|null>} 选中的绝对路径；取消或环境不支持时为 null
+     */
+    async openNativeFolderDialog(defaultPath) {
+        const req = typeof window.require === "function" ? window.require : null;
+        if (!req) return null;
+        const electronVersion = parseFloat((window.process && window.process.versions && window.process.versions.electron) || "0");
+        let remote = null;
+        try {
+            remote = electronVersion >= 14 ? req("@electron/remote") : (req("electron") || {}).remote;
+        } catch (err) {
+            remote = null;
+        }
+        if (!remote || !remote.dialog || typeof remote.dialog.showOpenDialog !== "function") return null;
+        if (!this.workspaceDir()) return null;
+        const options = {
+            title: "选择文件夹",
+            defaultPath: defaultPath || this.workspaceDir(),
+            properties: ["openDirectory", "createDirectory"]
+        };
+        // 挂到游戏窗口上：全屏时对话框才不会跑到窗口后面
+        const currentWindow = typeof remote.getCurrentWindow === "function" ? remote.getCurrentWindow() : null;
+        const result = currentWindow
+            ? await remote.dialog.showOpenDialog(currentWindow, options)
+            : await remote.dialog.showOpenDialog(options);
+        if (!result || result.canceled || !result.filePaths || !result.filePaths.length) return null;
+        return result.filePaths[0];
+    }
+    /**
+     * 把绝对路径换算成 `extensionFileConfig` 里存的相对路径
+     * @param {string} absPath
+     * @returns {string} 不在该工作区内返回 ""；正好是工作区根时返回工作区名
+     */
+    toWorkspaceRelative(absPath) {
+        const workspace = this.workspace;
+        if (!workspace) return "";
+        const root = this.workspaceDir(workspace).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+        const target = String(absPath || "").replace(/\\/g, "/").replace(/\/+$/, "");
+        const lower = target.toLowerCase();
+        if (lower === root) return workspace;
+        if (!lower.startsWith(root + "/")) return "";
+        return `${workspace}/${target.slice(root.length + 1)}`;
+    }
+    /**
+     * 每行「…」：直接弹系统文件夹选择框（资源管理器界面），选完写进该行并建出目录。
+     * 原生对话框拿不到时（网页端 / 没启用 remote）退化为：直接在资源管理器里打开该工作区目录。
      * @param {string} key extensionFileConfig 的字段名
      */
     async pickWorkspaceDir(key) {
@@ -404,35 +452,21 @@ shadow.innerHTML=`
             alert("请先选择工作区。");
             return;
         }
-        const folders = this.workspaceFolders && this.workspaceFolders.length ? this.workspaceFolders : [workspace];
-        const map = { "__create__": "＋ 新建目录…" };
-        folders.forEach(folder => (map[folder] = folder));
-        const dialog = document.createElement("noname-dialog");
-        dialog.setAttribute("type", "search-select");
-        dialog.setAttribute("headline", "选择目录");
-        dialog.setAttribute("message", "点选一个目录；或选「＋ 新建目录…」新建（相对扩展根）。");
-        dialog.setAttribute("single", true);
-        dialog.setAttribute("payload", JSON.stringify(map));
-        (ui.window || document.body).appendChild(dialog);
-        let picked;
-        try {
-            picked = await dialog.wait();
-        } finally {
-            dialog.remove();
+        const current = this.readExtensionFileConfig(workspace)[key] || "";
+        const inner = current && current !== workspace ? current.replace(`${workspace}/`, "") : "";
+        const picked = await this.openNativeFolderDialog(inner ? `${this.workspaceDir(workspace)}/${inner}` : this.workspaceDir(workspace));
+        if (picked === null) {
+            //退化：打开资源管理器，自己建/整理后回面板「刷新列表」
+            this.openInExplorer(this.workspaceDir(workspace));
+            return;
         }
-        if (!picked) return;
-        if (picked === "__create__") {
-            const created = await this.promptText({
-                headline: "新建目录",
-                message: "输入相对扩展根的目录名，确认后会立即建出来。",
-                placeholder: "例如：image/character"
-            });
-            if (!created || created === true) return;
-            picked = String(created).trim();
-            if (!picked) return;
+        const value = this.toWorkspaceRelative(picked);
+        if (!value) {
+            alert(`请选择扩展目录内部的文件夹：\n${this.workspaceDir(workspace)}`);
+            return;
         }
-        await this.fileQuery("createDir", { path: `extension/${picked}` });
-        this.writeExtensionFileConfig(workspace, { [key]: picked });
+        await this.fileQuery("createDir", { path: `extension/${value}` });
+        this.writeExtensionFileConfig(workspace, { [key]: value });
         this.refreshWorkspaceFiles(workspace);
     }
 
