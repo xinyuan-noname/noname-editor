@@ -267,7 +267,7 @@ shadow.innerHTML=`
                 </span>
                 <section data-by="more" class="hidden flex-column">
                     <ul>
-                        <li class="checkbox" data-more-option="isZhugong">
+                        <li class="checkbox" data-more-option="isZhuGong">
                             <p>常备主公</p>
                             <span></span>
                         </li>

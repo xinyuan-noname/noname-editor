@@ -9,7 +9,42 @@ const PREFIX = "x19D6_editor.settings.";
 class HTMLNonameSettingPanelElement extends HTMLNonameFocusUIElement {
     constructor() {
         super();
-        this.attachShadow({ mode: "open" });
+        const shadow = this.attachShadow({ mode: "open" });
+        //$: shadow , html/setting.html//
+shadow.innerHTML=`
+<div class="panel">
+    <section>
+        <h3>外观</h3>
+        <label class="row"><span>字号缩放</span><input type="range" id="fontScale" min="0.7" max="1.5" step="0.05"><b id="fontScaleValue"></b></label>
+        <label class="row"><span>界面动画</span><input type="checkbox" id="animation"></label>
+    </section>
+    <section>
+        <h3>布局</h3>
+        <label class="row"><span>默认挂载父元素</span>
+            <select id="defaultParent">
+                <option value="ui.window">ui.window（游戏界面）</option>
+                <option value="ui.background">ui.background（背景层）</option>
+            </select>
+        </label>
+        <label class="row"><span>技能编辑器版本</span>
+            <select id="skillEditorVersion">
+                <option value="shya">新版（shya）</option>
+                <option value="legacy">旧版（中文语句）</option>
+            </select>
+        </label>
+        <label class="row"><span>记住上次所在页</span><input type="checkbox" id="rememberPage"></label>
+        <div class="row"><span>当前侧栏宽度比</span><span class="muted" id="ratioText">未记录</span></div>
+        <div class="row"><button id="resetRatio">重置侧栏宽度</button><button id="resetNav">重置导航顺序</button></div>
+    </section>
+    <section>
+        <h3>数据</h3>
+        <div class="row"><button id="exportAll">导出全部编辑器数据</button></div>
+        <div class="row"><button id="clearCache">清除扩展扫描缓存</button></div>
+        <div class="row muted">武将草稿、技能缓存、外观与布局设置都在此持久化。</div>
+    </section>
+</div>
+`
+//#: shadow , html/setting.html//
     }
     connectedCallback() {
         this.loadCss("setting", { root: this.shadowRoot, baseURL: `./${url}/style` });
@@ -32,41 +67,12 @@ class HTMLNonameSettingPanelElement extends HTMLNonameFocusUIElement {
         const rememberPage = this.read("rememberPage", true);
         const skillEditorVersion = this.read("skillEditorVersion", "shya");
         const ratio = this.configQuery("get", { member: "x19D6_editor.ui.widthRatio" });
-        this.shadowRoot.innerHTML = `
-<div class="panel">
-    <section>
-        <h3>外观</h3>
-        <label class="row"><span>字号缩放</span><input type="range" id="fontScale" min="0.7" max="1.5" step="0.05" value="${fontScale}"><b id="fontScaleValue">${fontScale.toFixed(2)}</b></label>
-        <label class="row"><span>界面动画</span><input type="checkbox" id="animation" ${animation ? "checked" : ""}></label>
-    </section>
-    <section>
-        <h3>布局</h3>
-        <label class="row"><span>默认挂载父元素</span>
-            <select id="defaultParent">
-                <option value="ui.window">ui.window（游戏界面）</option>
-                <option value="ui.background">ui.background（背景层）</option>
-            </select>
-        </label>
-        <label class="row"><span>技能编辑器版本</span>
-            <select id="skillEditorVersion">
-                <option value="shya">新版（shya）</option>
-                <option value="legacy">旧版（中文语句）</option>
-            </select>
-        </label>
-        <label class="row"><span>记住上次所在页</span><input type="checkbox" id="rememberPage" ${rememberPage ? "checked" : ""}></label>
-        <div class="row"><span>当前侧栏宽度比</span><span class="muted" id="ratioText">${ratio === null ? "未记录" : Number(ratio).toFixed(3)}</span></div>
-        <div class="row"><button id="resetRatio">重置侧栏宽度</button><button id="resetNav">重置导航顺序</button></div>
-    </section>
-    <section>
-        <h3>数据</h3>
-        <div class="row"><button id="exportAll">导出全部编辑器数据</button></div>
-        <div class="row"><button id="clearCache">清除扩展扫描缓存</button></div>
-        <div class="row muted">武将草稿、技能缓存、外观与布局设置都在此持久化。</div>
-    </section>
-</div>`;
         const root = this.editorRoot;
         const query = id => this.shadowRoot.getElementById(id);
         query("defaultParent").value = defaultParent;
+        query("fontScale").value = fontScale;
+        query("fontScaleValue").textContent = fontScale.toFixed(2);
+        query("animation").checked = Boolean(animation);
         const versionSelect = query("skillEditorVersion");
         if (versionSelect) versionSelect.value = skillEditorVersion;
         if (root) {
