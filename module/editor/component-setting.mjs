@@ -30,6 +30,7 @@ class HTMLNonameSettingPanelElement extends HTMLNonameFocusUIElement {
         const animation = this.read("animation", true);
         const defaultParent = this.read("defaultParent", "ui.window");
         const rememberPage = this.read("rememberPage", true);
+        const skillEditorVersion = this.read("skillEditorVersion", "shya");
         const ratio = this.configQuery("get", { member: "x19D6_editor.ui.widthRatio" });
         this.shadowRoot.innerHTML = `
 <div class="panel">
@@ -46,6 +47,12 @@ class HTMLNonameSettingPanelElement extends HTMLNonameFocusUIElement {
                 <option value="ui.background">ui.background（背景层）</option>
             </select>
         </label>
+        <label class="row"><span>技能编辑器版本</span>
+            <select id="skillEditorVersion">
+                <option value="shya">新版（shya）</option>
+                <option value="legacy">旧版（中文语句）</option>
+            </select>
+        </label>
         <label class="row"><span>记住上次所在页</span><input type="checkbox" id="rememberPage" ${rememberPage ? "checked" : ""}></label>
         <div class="row"><span>当前侧栏宽度比</span><span class="muted" id="ratioText">${ratio === null ? "未记录" : Number(ratio).toFixed(3)}</span></div>
         <div class="row"><button id="resetRatio">重置侧栏宽度</button><button id="resetNav">重置导航顺序</button></div>
@@ -60,6 +67,8 @@ class HTMLNonameSettingPanelElement extends HTMLNonameFocusUIElement {
         const root = this.editorRoot;
         const query = id => this.shadowRoot.getElementById(id);
         query("defaultParent").value = defaultParent;
+        const versionSelect = query("skillEditorVersion");
+        if (versionSelect) versionSelect.value = skillEditorVersion;
         if (root) {
             root.style.setProperty("--xy-ED-font-scale", String(fontScale));
             if (!animation) root.classList.add("xy-ED-no-animation");
@@ -76,6 +85,7 @@ class HTMLNonameSettingPanelElement extends HTMLNonameFocusUIElement {
             this.write("animation", value);
         });
         query("defaultParent").addEventListener("change", e => this.write("defaultParent", e.target.value));
+        if (versionSelect) versionSelect.addEventListener("change", e => this.write("skillEditorVersion", e.target.value));
         query("rememberPage").addEventListener("change", e => this.write("rememberPage", e.target.checked));
         query("resetRatio").addEventListener("pointerup", () => {
             this.configQuery("write", { member: "x19D6_editor.ui.widthRatio", value: 0.5 });

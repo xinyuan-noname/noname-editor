@@ -91,11 +91,59 @@ function openEditor(options = {}) {
  * 打开并切到技能编辑页，返回 <skill-editor> 组件
  * @param {{ parent?: HTMLElement, readCache?: boolean }} [options]
  */
-function openSkillEditor(options = {}) {
-    //新版 shya 编辑器尚未接入，此接口暂时指向旧版；新版就绪后改为 nav 路由到 <shya-editor>
-    return openLegacySkillEditor(options.readCache !== false);
+/** 读取编辑器设置项 */
+function readSetting(member, fallback) {
+    const settings = lib.config.x19D6_editor && lib.config.x19D6_editor.settings;
+    const value = settings ? settings[member] : undefined;
+    return value === undefined || value === null ? fallback : value;
+}
+/** 写入编辑器设置项（落到 lib.config.x19D6_editor.settings.*，随引擎持久化） */
+function writeSetting(member, value) {
+    if (!lib.config.x19D6_editor) lib.config.x19D6_editor = {};
+    if (!lib.config.x19D6_editor.settings) lib.config.x19D6_editor.settings = {};
+    lib.config.x19D6_editor.settings[member] = value;
+    return game.promises.saveConfigValue("x19D6_editor");
 }
 /**
+ * 用哪个技能编辑器：首次弹一次并记住，之后到「基本设置 → 技能编辑器版本」里改
+ * @returns {Promise<"shya"|"legacy">}
+ */
+async function resolveSkillEditorVersion() {
+    const saved = readSetting("skillEditorVersion");
+    if (saved === "shya" || saved === "legacy") return saved;
+    const dialog = document.createElement("noname-dialog");
+    dialog.setAttribute("headline", "选择技能编辑器");
+    dialog.setAttribute("message", "检测到两种技能编辑器。请选择使用哪一种——此选择只询问一次，之后可在左侧「设置」页随时更改。");
+    dialog.setAttribute("payload", JSON.stringify(["新版：用 shya 规则语言编写", "旧版：中文语句编辑器（原有）"]));
+    dialog.setAttribute("type", "choose");
+    (ui.window || document.body).appendChild(dialog);
+    let picked = -1;
+    try {
+        picked = await dialog.wait();
+    } finally {
+        dialog.remove();
+    }
+    const version = picked === 1 ? "legacy" : "shya";
+    writeSetting("skillEditorVersion", version);
+    return version;
+}
+/**
+ * 新版 shya 技能编辑器（接入中：组件与编译链路完成后替换此处）
+ */
+function openShyaSkillEditor() {
+    const dialog = document.createElement("noname-dialog");
+    dialog.setAttribute("headline", "新版技能编辑器");
+    dialog.setAttribute("message", "新版（shya）编辑器正在接入中。可先在「设置 → 技能编辑器版本」切回旧版使用。");
+    dialog.setAttribute("type", "alert");
+    (ui.window || document.body).appendChild(dialog);
+    dialog.wait().finally(() => dialog.remove());
+    return null;
+}
+async function openSkillEditor(options = {}) {
+    const version = await resolveSkillEditorVersion();
+    if (version === "legacy") return openLegacySkillEditor(options.readCache !== false);
+    return openShyaSkillEditor(options);
+}/**
  * 打开并切到武将编辑页，返回 <character-editor> 组件
  * @param {{ parent?: HTMLElement, id?: string, data?: object }} [options]
  */
@@ -193,4 +241,4 @@ export function installApi() {
     return game.x19D6_editor;
 }
 
-export { openEditor, openSkillEditor, openLegacySkillEditor, openCharacterEditor, createSkill, closeEditor, getEditor };
+export { openEditor, openSkillEditor, openShyaSkillEditor, resolveSkillEditorVersion, openLegacySkillEditor, openCharacterEditor, createSkill, closeEditor, getEditor };

@@ -270,6 +270,47 @@ shadow.innerHTML=`
                      * payload 传 JSON 数组：[{ label, placeholder, value, type }]
                      * 返回按顺序排列的字符串数组
                      */
+                    /*
+                     * choose：按钮式单选列表
+                     * payload 传 JSON 字符串数组，点选即 resolve 其下标（0 起）
+                     */
+                    case "choose": {
+                        let options = [];
+                        try {
+                            options = JSON.parse(this.getAttribute("payload") || "[]");
+                        } catch (err) {
+                            console.error("choose 的 payload 不是合法 JSON", err);
+                        }
+                        if (!Array.isArray(options)) options = [];
+                        const style = document.createElement("style");
+                        style.textContent = `
+.choose-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.choose-list>button { font: inherit; font-size: 1.1em; padding: 8px 14px; border-radius: 6px;
+  border: 1px solid #6b6b6b; background: #e4d5b7; color: #000; cursor: pointer; }
+.choose-list>button:hover { background: #f3e6c9; }
+.choose-list>button.selected { outline: 2px solid #7093DB; }
+`;
+                        this.appendTempStyle(style);
+                        const { form, container } = this.appendInput();
+                        container.remove();
+                        const list = document.createElement("div");
+                        list.className = "choose-list";
+                        let picked = -1;
+                        options.forEach((text, index) => {
+                            const btn = document.createElement("button");
+                            btn.type = "button";
+                            btn.textContent = text;
+                            btn.addEventListener("click", () => {
+                                picked = index;
+                                Array.from(list.children).forEach((n, i) => n.classList.toggle("selected", i === index));
+                            });
+                            list.appendChild(btn);
+                        });
+                        form.appendChild(list);
+                        this.#whenEnd(() => {
+                            this.#finishReslove(picked);
+                        });
+                    }; break;
                     case "multi-input": {
                         let fields = [];
                         try {

@@ -52,7 +52,7 @@ export default function () {
         help: {},
         config: {},
         package: {
-            intro: "无名杀的可视化编辑器：武将编辑 + 技能编辑（内联）。<br>对外接口：game.x19D6_openEditor / openSkillEditor / openCharacterEditor / createSkill / closeEditor。",
+            intro: "无名杀的可视化编辑器",
             author: "<a href=https://b23.tv/RHn9COW>新元noname</a>",
             diskURL: "",
             forumURL: "",
