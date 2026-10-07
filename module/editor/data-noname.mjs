@@ -35,6 +35,30 @@ const parseSkill = (skillId, characterId) => {
     const audios = get.Audio.skill({ skill: skillId, player: characterId }).audioList.filter(audio => audio.text);
     return { id: skillId, name: skillName, description, audios };
 }
+const parseCharacter = (characterId) => {
+    for (const packageId in lib.characterPack) {
+        const characterPack = lib.characterPack[packageId];
+        if (!(characterId in characterPack)) continue;
+        const packageName = lib.translate[packageId + "_character_config"];
+        const characterSort = lib.characterSort[packageId];
+        const characterSortId = (() => {
+            for (const sortId in characterSort) {
+                if (characterSort[sortId].includes(characterId)) return sortId;
+            }
+        })()
+        const characterSortName = lib.translate[characterSortId] ?? "未分包";
+        const character = characterPack[characterId];
+        const name = get.translation(characterId);
+        const group = character.doubleGroup.length ? character.doubleGroup.map(group => lib.translate[group]).join("/") : lib.translate[character.group];
+        const sex = character.trashBin.includes("sex:male_castrated") ? "男（太监）" : lib.translate[character.sex];
+        const clans = character.clans.length ? character.clans : "无"
+        const dieAudios = get.Audio.die({ player: characterId }).audioList.filter(audio => audio.text);
+        const skills = character.skills.map(skillId => parseSkill(skillId, characterId));
+        const skillList = skills.map(skill => `${skill.name}(${skill.id})`);
+        return { id: characterId, name, packageName, characterSortName, sex, group, clans, hp: character.hp, maxHp: character.maxHp, hujia: character.hujia, characterSortId, dieAudios, skillList, skills };
+    }
+    return null;
+}
 class Searcher {
     static cache = {
         skill: {},
@@ -393,6 +417,9 @@ export class NonameData {
     }
     parseSkill(skillId, characterId) {
         return parseSkill(skillId, characterId)
+    }
+    parseCharacter(characterId) {
+        return parseCharacter(characterId)
     }
     getConfig(member) {
         const properties = member.split(".");

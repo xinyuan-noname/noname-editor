@@ -18,6 +18,7 @@ class HTMLNonameCharacterEditorElement extends HTMLNonameFocusUIElement {
         "clans",
         "hp", "maxHp", "hujia",
         "skills",
+        "perfectPair",
         "isZhugong",
         "title",
         "hasHiddenSkill",
@@ -342,7 +343,8 @@ shadow.innerHTML=`
                 <section data-by="data-title" class="hidden">
                     <div class="title-input" contenteditable="true" spellcheck="false"></div>
                 </section>
-            </div>            <div class="data-setting" data-perfect-pair>
+            </div>
+            <div class="data-setting" data-perfect-pair="" id="noname-skill-editor-perfect-pair-setting">
                 <span>
                     <span>珠联璧合</span>
                     <span class="expandable-collapsed" data-for="data-perfect-pair"></span>
@@ -353,12 +355,12 @@ shadow.innerHTML=`
                         <div class="flex-center-center" contenteditable="true" spellcheck="false"></div>
                         <span class="search"></span>
                     </ruby>
-                    <p class="note">搜索武将，将侧边栏武将拖入该区域，或选择技能卡片中的⬅️以添加武将</p>
+                    <p class="note">搜索武将，将侧边栏武将拖入该区域，或选择武将卡片中的⬅️以添加武将</p>
                     <section>
                         <ul data-by="character-list"></ul>
                     </section>
                 </section>
-            </div> -->
+            </div>
         </div>
     </div>
     <div class="code">
@@ -388,6 +390,7 @@ shadow.innerHTML=`
         this.#listenClans();
         this.#listenHp();
         this.#listenSkills();
+        this.#listenPerfectPair();
         this.#listenMore();
         this.#listenIntro();
         this.#listenTitle();
@@ -1383,6 +1386,98 @@ shadow.innerHTML=`
             this.removeSkill(node)
         })
     }
+    addPerfectPairCharacter(arg) {
+        const perfectPairDataArea = this.getDataAreaDom("perfectPair");
+        const ul = perfectPairDataArea.querySelector("ul");
+        let id;
+        if (arg instanceof HTMLElement && arg.tagName === "CHARACTER-INFO-CARD") {
+            const node = arg;
+            id = node.getAttribute("character-id");
+            if (!id || id === this.getData("id")) return;
+            if ((perfectPairDataArea.dataset.perfectPair || "").split(" ").includes(id)) return;
+            node.removeAttribute("usable");
+            node.removeAttribute("likable");
+            node.removeAttribute("skill-usable");
+            node.removeAttribute("skill-likable");
+            node.removeAttribute("id");
+            node.removeAttribute("markWords");
+            ul.append(node);
+        } else if (typeof arg === "string" && arg.trim().length !== 0) {
+            id = arg;
+            if (id === this.getData("id")) return;
+            if ((perfectPairDataArea.dataset.perfectPair || "").split(" ").includes(id)) return;
+            const nowCharacterInfo = this.infoQuery("character", { characterId: id });
+            const characterCard = document.createElement("character-info-card");
+            characterCard.setAttribute("character-id", id);
+            characterCard.characterInfo = nowCharacterInfo || { id, name: this.textQuery("characterTranslation", { attr: "name", text: id }) || id };
+            characterCard.setAttribute("removable", true);
+            ul.append(characterCard);
+        } else return;
+        this.changeData("perfectPair", id, { mode: "append" });
+    }
+    removePerfectPairCharacter(arg) {
+        const perfectPairDataArea = this.getDataAreaDom("perfectPair");
+        const ul = perfectPairDataArea.querySelector("ul");
+        let id, node;
+        if (arg instanceof HTMLElement) {
+            node = arg;
+            id = node.getAttribute("character-id");
+        } else if (typeof arg === "string" && arg.trim().length !== 0) {
+            id = arg;
+            node = ul.querySelector("[character-id=" + id + "]");
+        } else return;
+        node?.remove?.();
+        this.changeData("perfectPair", id, { mode: "remove" });
+    }
+    renderPerfectPair() {
+        const perfectPairDataArea = this.getDataAreaDom("perfectPair");
+        const ul = perfectPairDataArea.querySelector("ul");
+        ul.innerHTML = "";
+        const ids = (perfectPairDataArea.dataset.perfectPair || "").split(" ").filter(Boolean);
+        ids.forEach(id => {
+            const info = this.infoQuery("character", { characterId: id });
+            const characterCard = document.createElement("character-info-card");
+            characterCard.setAttribute("character-id", id);
+            characterCard.characterInfo = info || { id, name: this.textQuery("characterTranslation", { attr: "name", text: id }) || id };
+            characterCard.setAttribute("removable", true);
+            ul.append(characterCard);
+        });
+    }
+    #listenPerfectPair() {
+        const perfectPairDataArea = this.getDataAreaDom("perfectPair");
+        const searchInput = perfectPairDataArea.querySelector("ruby>[contenteditable]");
+        const searchInputManager = this.createEditableElementManager("perfectPairSearch", searchInput);
+        const search = perfectPairDataArea.querySelector("ruby>span");
+        searchInputManager.inputSearch({
+            searchCallback: (e, { filter, keyWords }) => {
+                this.triggerEvent("searchCharacter", { from: perfectPairDataArea, toggleNav: true, keyWords, filter });
+            },
+            associated: {
+                element: search,
+                listenerType: "pointerup"
+            }
+        });
+        perfectPairDataArea.addEventListener("requestUseSkill", (e) => {
+            const { from: node } = e.detail;
+            this.addPerfectPairCharacter(node);
+        });
+        ["dragenter", "dragover", "dragleave", "drop"].forEach(event => {
+            perfectPairDataArea.addEventListener(event, e => {
+                e.preventDefault();
+                e.stopPropagation();
+            }, false);
+        });
+        perfectPairDataArea.addEventListener("drop", e => {
+            const id = e.dataTransfer.getData("text");
+            const node = document.getElementById(id);
+            if (!node) return;
+            this.addPerfectPairCharacter(node);
+        });
+        perfectPairDataArea.addEventListener("removeCard", (e) => {
+            const { from: node } = e.detail;
+            this.removePerfectPairCharacter(node);
+        });
+    }
     changeMoreSetting(attrName, val) {
         const moreDataArea = this.getDataAreaDom("more");
         const attr = "data-" + this.textQuery("formatTransfer", { text: attrName, to: "kebab" })
@@ -1596,6 +1691,20 @@ shadow.innerHTML=`
                     );
                 }
             }; break;
+            case "perfectPair": {
+                const perfectPairDataArea = this.getDataAreaDom("perfectPair");
+                if (config.mode === "append") {
+                    perfectPairDataArea.dataset[type] = perfectPairDataArea.dataset[type].split(" ").filter(Boolean).concat(val).join(" ");
+                } else if (config.mode === "remove") {
+                    perfectPairDataArea.dataset[type] = perfectPairDataArea.dataset[type].split(" ").filter(id => id && id !== val).join(" ");
+                } else if (config.mode === "rewrite" || config.mode === "replace") {
+                    if (Array.isArray(val)) {
+                        perfectPairDataArea.dataset[type] = val.join(" ");
+                    } else {
+                        perfectPairDataArea.dataset[type] = val;
+                    }
+                }
+            }; break;
             case "avatar": {
                 this.getDataAreaDom(type).dataset[type] = val;
                 this.style.setProperty("--data-" + type, `url(${val})`);
@@ -1659,6 +1768,7 @@ shadow.innerHTML=`
         const data = this.configQuery("get", { member: `x19D6_editor.characters.${id}` });
         if (!data || typeof data !== "object") return false;
         this.applyData(data);
+        this.renderPerfectPair();
         return true;
     }
     /**
@@ -1670,7 +1780,7 @@ shadow.innerHTML=`
         let result = this.getDataAreaDom(type)?.dataset?.[camelizedType];
         switch (camelizedType) {
             case "hp": case "maxHp": case "hujia": return Number(result);
-            case "dieAudios": case "clans": case "skills": case "doubleGroup": return result.split(" ").filter(Boolean);
+            case "dieAudios": case "clans": case "skills": case "perfectPair": case "doubleGroup": return result.split(" ").filter(Boolean);
             case "pinyin": return result.split(",");
             case "intro": return result.trim();
             default: {
@@ -1686,6 +1796,7 @@ shadow.innerHTML=`
         });
         if (!dataList.trashBin) dataList.trashBin = [];
         if (!dataList.clans.length) delete dataList.clans;
+        if (!dataList.perfectPair || !dataList.perfectPair.length) delete dataList.perfectPair;
         if (!dataList.doubleGroup.length) delete dataList.doubleGroup;
         if (!dataList.dieAudios.length) delete dataList.dieAudios;
         if (!dataList.hujia) delete dataList.hujia;

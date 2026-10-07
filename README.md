@@ -109,9 +109,8 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
 ## 已知待办
 
 - **皮肤**：尚无编辑项（`skin-info-card` 目前只服务 bwiki 搜索结果，不进武将草稿）。
-- **珠联璧合**：经核实**不是武将字段**，而是全局表 `lib.perfectPair`（`noname/library/index.js:11994` 初始化，由 `character/perfectPairs.js` 经 `noname/init/loading.js:459` 载入）。
-  因此**不能**像「武将称号」那样作为 character attribute 直接启用（导出的武将代码没有承载它的位置），需要单独设计成「把搭档关系写入 perfectPairs 表」的独立功能。
-  HTML 中那段被注释的 `data-perfect-pair` 区块在完成该设计前保持不启用。
+- **珠联璧合**：编辑器内已启用（搜索武将、卡片⬅️/拖拽添加、🗑️移除，草稿持久化并回填）。
+  数据本质是全局表 `lib.perfectPair`（`noname/library/index.js:11994` 初始化，由 `character/perfectPairs.js` 经 `noname/init/loading.js:459` 载入），**不是武将字段**——当前导出代码会剔除 `perfectPair`（见 `worker-ast.worker.js:genCharacterCode`），「把搭档关系写入 perfectPairs 表」的导出仍待设计。
 - **对话框并轨**：技能编辑器内核仍带着自己的一套对话框/UI 层（约 90KB，与 `<noname-dialog>` 重复）。
   计划先给 `component-dialog.mjs` 补齐 多行输入 / 数值滑条 / 开关列表 / 搜索选择 / 列表管理 五类，再切换内核约 30 处调用并删除重复实现。
 - `module/editor/mindmap.mjs` 是无人引用的孤儿文件。

@@ -130,7 +130,7 @@ const createTranslateAssignmentExpression = (en, cn) => {
     });
 }
 const genCharacterCode = (characterInfo, pattern) => {
-    const { extension, packageId, id, intro, pinyin, dieAudioText, name, ...basicInfo } = characterInfo;
+    const { extension, packageId, id, intro, pinyin, dieAudioText, name, perfectPair, ...basicInfo } = characterInfo;
     const statements = [];
     if (packageId) {
         const createCharacter = astObject.template("%%left%% = new lib.element.Character(%%basicInfo%%);")({

@@ -219,6 +219,10 @@ export class HTMLNonameFocusUIElement extends HTMLElement {
                 const { skillId, characterId } = query;
                 return this.#server.parseSkill(skillId, characterId);
             };
+            case "character": {
+                const { characterId } = query;
+                return this.#server.parseCharacter(characterId);
+            };
             case "extensionList": {
                 const { filter } = query;
                 return this.#server.getExtensionList(filter);

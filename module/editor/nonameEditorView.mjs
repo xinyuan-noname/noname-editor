@@ -830,6 +830,13 @@ mainPage.innerHTML=`
                 this.search(keyWords, "skill", { requestFrom: from, filter });
             }
         })
+        viewArea.addEventListener("searchCharacter", (e) => {
+            const { from, keyWords, filter, toggleNav } = e.detail;
+            if (toggleNav === true) {
+                this.toggleNav("search");
+                this.search(keyWords, "character", { requestFrom: from, filter });
+            }
+        })
     }
     //
     listenExpanable() {
