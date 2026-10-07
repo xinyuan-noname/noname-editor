@@ -160,10 +160,8 @@ shadow.innerHTML=`
     }
 
     .dialog {
-        height: var(--dialog-height, min(70vh, 315px));
-        width: var(--dialog-width, min(92vw, 560px));
-        max-height: 94vh;
-        max-width: 96vw;
+        height: var(--dialog-height, 315px);
+        width: var(--dialog-width, 560px);
         border-radius: 13px;
         background: #e0e0e0;
         box-shadow: 0 0 10px #bebebe, 0 0 10px #ffffff, 0 0 5px black;

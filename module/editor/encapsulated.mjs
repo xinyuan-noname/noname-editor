@@ -689,15 +689,9 @@ export class DragManager {
         preTop: 0,
         preLeft: 0,
         frame: null,
-        armed: false,
-        startX: 0,
-        startY: 0,
-        pendingX: 0,
-        pendingY: 0,
-        limitX: 0,
-        limitY: 0,
-        lastX: null,
-        lastY: null    }, {
+        longPressStartTimer: null,
+        leaveCountdownTimer: null
+    }, {
         set: (target, p, val) => {
             if (p === "canDrag" && val === true) {
                 this.eventMap.forEach((func, type) => {
@@ -718,90 +712,54 @@ export class DragManager {
     })
     eventMap = new Map([
         ["pointerdown", e => {
-            if (this.dragStatus.isDragging) return;
-            if (!this.draggableTargets.includes(e.target)) return;
-            if (typeof e.button === "number" && e.button !== 0) return;
-            const st = this.dragStatus, node = e.target, parent = this.draggableTargetsParentNode;
-            // 首次拖动时把当前视觉位置固化为内联 left/top，避免读到空值导致起手跳位
-            if (!node.style.left) {
-                const pRect = parent.getBoundingClientRect();
-                const nRect = node.getBoundingClientRect();
-                node.style.left = `${nRect.left - pRect.left}px`;
-                node.style.top = `${nRect.top - pRect.top}px`;
-            }
-            st.draggingNode = node;
-            st.preLeft = parseFloat(node.style.left) || 0;
-            st.preTop = parseFloat(node.style.top) || 0;
-            st.startX = e.clientX;
-            st.startY = e.clientY;
-            st.pendingX = 0;
-            st.pendingY = 0;
-            st.armed = true;
-            node.setPointerCapture?.(e.pointerId);
+            if (!this.draggableTargets.includes(e.target) || this.isDragging) return;
+            this.dragStatus.longPressStartTimer = setTimeout(() => {
+                const { left, top } = e.target.style;
+                this.dragStatus.isDragging = true;
+                this.dragStatus.draggingNode = e.target;
+                this.dragStatus.preLeft = left.replace("px", "") * 1;
+                this.dragStatus.preTop = top.replace("px", "") * 1;
+                this.dragStatus.preX = e.pageX;
+                this.dragStatus.preY = e.pageY;
+                this.dragStatus.longPressStartTimer = null;
+            }, 75)
         }],
         ["pointermove", e => {
-            const st = this.dragStatus;
-            if (!st.armed || st.draggingNode !== e.target) return;
-            const dx = e.clientX - st.startX, dy = e.clientY - st.startY;
-            if (!st.isDragging) {
-                // 3px 阈值：既能区分点击与拖动，又无需长按等待，起手立刻跟手
-                if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
-                this.beginDrag();
-            }
-            st.pendingX = dx;
-            st.pendingY = dy;
-            if (!st.frame) st.frame = requestAnimationFrame(() => this.flushDrag());
+            if (!this.dragStatus.isDragging) return;
+            if (this.dragStatus.frame) cancelAnimationFrame(this.dragStatus.frame);
+            this.dragStatus.frame = requestAnimationFrame(() => {
+                const { preX, preY, preLeft, preTop } = this.dragStatus;
+                let computedLeft = (preLeft + (e.pageX - preX) / devicePixelRatio),
+                    computedTop = (preTop + (e.pageY - preY) / devicePixelRatio);
+                const max_right = this.draggableTargetsParentNode.offsetWidth - this.dragStatus.draggingNode.offsetWidth,
+                    max_bottom = this.draggableTargetsParentNode.offsetHeight - this.dragStatus.draggingNode.offsetHeight
+                if (computedLeft < 0) computedLeft = 0;
+                if (computedLeft > max_right) computedLeft = max_right;
+                if (computedTop < 0) computedTop = 0;
+                if (computedTop > max_bottom) computedTop = max_bottom;
+                this.dragStatus.draggingNode.style.left = `${computedLeft}px`;
+                this.dragStatus.draggingNode.style.top = `${computedTop}px`;
+                this.dragStatus.frame = null;
+                clearTimeout(this.dragStatus.leaveCountdownTimer);
+            })
         }],
-        ["pointerup", e => this.endDrag(e)],
-        ["pointercancel", e => this.endDrag(e)]
-    ]);
-    /**
-     * 起手：一次性量取边界，拖动全过程不再读取布局，避免逐帧重排
-     */
-    beginDrag() {
-        const st = this.dragStatus, node = st.draggingNode, parent = this.draggableTargetsParentNode;
-        st.limitX = Math.max(0, parent.clientWidth - node.offsetWidth);
-        st.limitY = Math.max(0, parent.clientHeight - node.offsetHeight);
-        node.classList.add("xy-ED-dragging");
-        st.isDragging = true;
-    }
-    /**
-     * 每帧只写 transform，位移交给合成层
-     */
-    flushDrag() {
-        const st = this.dragStatus, node = st.draggingNode;
-        st.frame = null;
-        if (!node) return;
-        const x = Math.min(Math.max(st.preLeft + st.pendingX, 0), st.limitX);
-        const y = Math.min(Math.max(st.preTop + st.pendingY, 0), st.limitY);
-        st.lastX = x;
-        st.lastY = y;
-        node.style.transform = `translate3d(${x - st.preLeft}px, ${y - st.preTop}px, 0)`;
-    }
-    /**
-     * 收手：把最终位移写回 left/top，保持与最小化/展开逻辑的既有约定一致
-     */
-    endDrag(e) {
-        const st = this.dragStatus, node = st.draggingNode;
-        st.armed = false;
-        if (st.frame) {
-            cancelAnimationFrame(st.frame);
-            st.frame = null;
-        }
-        if (node) {
-            try {
-                if (e && node.hasPointerCapture?.(e.pointerId)) node.releasePointerCapture(e.pointerId);
-            } catch (err) { }
-            if (st.isDragging) {
-                node.style.transform = "";
-                node.style.left = `${st.lastX ?? st.preLeft}px`;
-                node.style.top = `${st.lastY ?? st.preTop}px`;
-                node.classList.remove("xy-ED-dragging");
+        ["pointerup", () => {
+            if (this.dragStatus.isDragging) {
+                this.dragStatus.isDragging = false;
             }
-        }
-        st.isDragging = false;
-        st.draggingNode = null;
-    }    beDraggable() {
+            else clearTimeout(this.dragStatus.longPressStartTimer);
+        }],
+        ["pointerleave", () => {
+            if (this.dragStatus.isDragging) {
+                this.dragStatus.leaveCountdownTimer = setTimeout(() => {
+                    this.dragStatus.isDragging = false;
+                    this.dragStatus.leaveCountdownTimer = null;
+                }, 300)
+            }
+            else clearTimeout(this.dragStatus.longPressStartTimer);
+        }]
+    ]);
+    beDraggable() {
         this.dragStatus.canDrag = true;
         return this;
     }

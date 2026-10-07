@@ -1,10 +1,10 @@
 .xy-ED-nonameEditor {
     /* 响应式尺度变量：随视口自适应，可由基本设置覆盖 */
-    --xy-ED-header-h: clamp(18px, 2.4vh, 28px);
-    --xy-ED-nav-w: clamp(44px, 5.5vw, 80px);
-    --xy-ED-nav-item: clamp(44px, 5.5vw, 80px);
-    --xy-ED-nav-icon: clamp(26px, 3.4vw, 50px);
-    --xy-ED-ball-size: clamp(34px, 4.4vw, 50px);
+    --xy-ED-header-h: 20px;
+    --xy-ED-nav-w: 80px;
+    --xy-ED-nav-item: 80px;
+    --xy-ED-nav-icon: 50px;
+    --xy-ED-ball-size: 50px;
     --xy-ED-font-scale: 1;
     font-size: calc(1em * var(--xy-ED-font-scale));
     position: absolute;
@@ -423,48 +423,6 @@ character-info-card {
     min-height: 0;
     overflow: hidden;
 }
-/* ================= 响应式断点 ================= */
-@media (max-width: 1280px) {
-    .xy-ED-viewArea>.xy-ED-sideBar {
-        flex: 0 0 min(38%, 340px);
-    }
-}
-
-@media (max-width: 900px) {
-    .xy-ED-nonameEditor {
-        --xy-ED-font-scale: 0.9;
-    }
-
-    .xy-ED-viewArea>.xy-ED-mainArea {
-        min-width: 0;
-    }
-
-    .xy-ED-sideBar-content {
-        min-width: 0;
-    }
-}
-
-@media (max-width: 640px) {
-    .xy-ED-nonameEditor {
-        --xy-ED-font-scale: 0.78;
-    }
-
-    /* 窄屏改为上下布局：编辑区在上，侧栏在下 */
-    .xy-ED-viewArea {
-        flex-direction: column;
-    }
-
-    .xy-ED-viewArea>.xy-ED-sideBar {
-        flex: 0 0 46%;
-        width: 100%;
-    }
-
-    .xy-ED-viewArea>.xy-ED-mainArea {
-        min-width: 0;
-        min-height: 0;
-    }
-}
-
 /* 拖拽中的统一表现：只走合成层，禁止选中与回弹 */
 .xy-ED-dragging {
     transition: none !important;

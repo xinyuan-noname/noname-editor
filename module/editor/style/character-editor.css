@@ -11,7 +11,7 @@
         rgb(78 117 140) 0 0 2px,
         rgb(78 117 140) 0 0 2px,
         black 0 0 1px;
-    --font-size: clamp(15px, 1.1vw + 12px, 22px);
+    --font-size: 22px;
     --data-name: "";
     --data-pinyin: "";
     --data-id: "";

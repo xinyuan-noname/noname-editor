@@ -295,62 +295,30 @@ mainPage.innerHTML=`
         const { viewArea, resizeLine } = this;
         const resizeStatus = {
             isResizing: false,
-            frame: null,
-            left: 0,
-            width: 0,
-            pendingX: 0
+            frame: null
         }
-        const apply = () => {
-            resizeStatus.frame = null;
-            if (!resizeStatus.isResizing || !resizeStatus.width) return;
-            // 全程只用起手时量到的几何信息，避免逐帧读取布局
-            const minWidth = 160;
-            let sidebarWidth = resizeStatus.width - resizeStatus.pendingX;
-            const maxWidth = Math.max(minWidth, resizeStatus.width - minWidth);
-            sidebarWidth = Math.min(Math.max(sidebarWidth, minWidth), maxWidth);
-            const mainWidth = resizeStatus.width - sidebarWidth;
-            if (mainWidth <= 0) return;
-            viewArea.style.setProperty("--xy-ED-WidthRatio", String(sidebarWidth / mainWidth));
-        };
         viewArea.addEventListener("pointerdown", e => {
             if (e.target !== resizeLine) return;
-            const rect = viewArea.getBoundingClientRect();
             resizeStatus.isResizing = true;
-            resizeStatus.left = rect.left;
-            resizeStatus.width = rect.width;
-            resizeStatus.pendingX = e.clientX - rect.left;
-            resizeLine.setPointerCapture?.(e.pointerId);
-            document.body.classList.add("xy-ED-col-resizing");
-        });
+        })
         viewArea.addEventListener("pointermove", e => {
             if (!resizeStatus.isResizing) return;
-            resizeStatus.pendingX = e.clientX - resizeStatus.left;
-            if (!resizeStatus.frame) resizeStatus.frame = requestAnimationFrame(apply);
+            if (this.frame) cancelAnimationFrame(this.frame);
+            this.frame = requestAnimationFrame(() => {
+                let r = e.clientX / devicePixelRatio / viewArea.clientWidth;
+                viewArea.style.setProperty("--xy-ED-WidthRatio", (1 - r) / r);
+                this.frame = null;
+            })
         });
-        const finish = e => {
+        viewArea.addEventListener("pointerup", () => {
             if (!resizeStatus.isResizing) return;
             resizeStatus.isResizing = false;
-            if (resizeStatus.frame) {
-                cancelAnimationFrame(resizeStatus.frame);
-                resizeStatus.frame = null;
-            }
-            document.body.classList.remove("xy-ED-col-resizing");
+        });
+        //收手后记录宽度比（供基本设置查看与重置）
+        viewArea.addEventListener("pointerup", () => {
             const ratio = viewArea.style.getPropertyValue("--xy-ED-WidthRatio");
             if (ratio) this.saveShellState("widthRatio", Number(ratio));
-            try {
-                if (e && resizeLine.hasPointerCapture?.(e.pointerId)) resizeLine.releasePointerCapture(e.pointerId);
-            } catch (err) { }
-        };
-        viewArea.addEventListener("pointerup", finish);
-        viewArea.addEventListener("pointercancel", finish);
-    }    //
-    createSkillEditor() {
-        let node = this.mainArea.querySelector("skill-editor");
-        if (!node) {
-            node = document.createElement("skill-editor");
-            this.mainArea.appendChild(node);
-        }
-        return node;
+        });
     }
     /**
      * @param {string} [characterId] 传入则挂载时自动载入该武将的草稿
@@ -583,63 +551,32 @@ mainPage.innerHTML=`
     }
     //
     listenNavsReOrder() {
-        const nav = this.nav;
         let draggingNode = null;
-        let frame = null;
-        let pointX = 0, pointY = 0;
-        const applyReorder = () => {
-            frame = null;
-            if (!draggingNode) return;
-            const hit = document.elementFromPoint(pointX, pointY);
-            const sibling = hit && hit.closest ? hit.closest("[class^=xy-ED-nav]") : null;
-            if (!sibling || sibling === draggingNode || sibling.parentNode !== nav) return;
-            const list = Array.from(nav.children);
-            const from = list.indexOf(draggingNode);
-            const to = list.indexOf(sibling);
-            if (from < 0 || to < 0 || from === to) return;
-            nav.insertBefore(draggingNode, from < to ? sibling.nextSibling : sibling);
-        };
         this.navs.forEach(node => {
-            // 关掉原生 HTML5 拖拽：dragover 有节流，改用指针事件 + rAF 更跟手
-            node.draggable = false;
-            node.addEventListener("pointerdown", e => {
-                if (typeof e.button === "number" && e.button !== 0) return;
-                draggingNode = node;
-                pointX = e.clientX;
-                pointY = e.clientY;
-                node.setPointerCapture?.(e.pointerId);
-                if (!frame) frame = requestAnimationFrame(applyReorder);
+            node.addEventListener("dragstart", e => (draggingNode = e.target));
+            node.addEventListener("dragover", e => {
+                e.preventDefault()
+                const navArray = Array.from(this.navs)
+                let i = navArray.indexOf(draggingNode),
+                    j = navArray.indexOf(e.target);
+                i < j ?
+                    this.nav.insertBefore(e.target, draggingNode) : this.nav.insertBefore(draggingNode, e.target);
             });
-            node.addEventListener("pointermove", e => {
-                if (draggingNode !== node) return;
-                pointX = e.clientX;
-                pointY = e.clientY;
-                if (!frame) frame = requestAnimationFrame(applyReorder);
-            });
-            const finish = e => {
-                if (draggingNode !== node) return;
-                draggingNode = null;
-                if (frame) {
-                    cancelAnimationFrame(frame);
-                    frame = null;
-                }
-                try {
-                    if (e && node.hasPointerCapture?.(e.pointerId)) node.releasePointerCapture(e.pointerId);
-                } catch (err) { }
-                this.saveShellState("navOrder", Array.from(this.navs).map(item => item.dataset.for));
-            };
-            node.addEventListener("pointerup", finish);
-            node.addEventListener("pointercancel", finish);
-        });
-    }    listenNavChoose() {
+        })
+    }
+    listenNavChoose() {
         const navsArray = Array.from(this.navs).map(node => [node, new Map([
             [node, ["xy-ED-nav-chosen"]],
             [this.sideBarContent.querySelector(`[data-by=${node.dataset.for}]`), ["xy-ED-shown-flex"]]
         ])]);
+        const navClassMap = new WeakMap(navsArray);
         this.navsController = new UniqueChoiceManager(...this.navs)
             .listenSiblings("pointerup")
-            .forClassByNodeClassMap(new WeakMap(navsArray))
-            .setCallback((last, now) => {
+            .forClassByNodeClassMap(navClassMap)
+            .setCallback((last, now, funMap) => {
+                //注意：setCallback 是覆盖 this.callback 而不是追加，
+                //必须用它的 funMap 参数把上一步的类切换重新执行一次，否则切换导航不会生效
+                funMap.forClassByNodeClassMap(navClassMap);
                 if (now && now.dataset && now.dataset.for) this.saveShellState("lastNav", now.dataset.for);
             })
     }
