@@ -59,7 +59,7 @@ game.x19D6_create.multiprompt(function () {
     .appendPrompt('替换为', void 0, '这里替换后的文字')
 ```
 
-因此 `multiline`（单框）覆盖不了它。并轨前需要**二选一**：
+因此 `multiline`（单框）覆盖不了它。**已补 `multi-input` 类型解决**（`payload` 传 JSON 数组 `[{label, placeholder, value, type}]`，返回字符串数组），下面两个方案仅作记录：
 
 1. 再补一类 `multi-input`：`payload` 传 JSON 数组 `[{label, placeholder, value}]`，返回字符串数组；
 2. 或在适配器里把 `multiprompt` 拆成多次串行 `prompt`（会多几次点击确认，体验变差）。

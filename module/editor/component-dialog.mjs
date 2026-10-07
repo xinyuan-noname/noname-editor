@@ -267,6 +267,33 @@ shadow.innerHTML=`
                      *  - range      数值滑条（min/max/step/value 属性，实时显示）
                      *  - switch-list 开关列表（payload 传 JSON：{ key: { label, checked } }，须在设置 type 之前设置）
                      */
+                    /*
+                     * multi-input：多字段输入（对应内核的 multiprompt + appendPrompt 链式追加）
+                     * payload 传 JSON 数组：[{ label, placeholder, value, type }]
+                     * 返回按顺序排列的字符串数组
+                     */
+                    case "multi-input": {
+                        let fields = [];
+                        try {
+                            fields = JSON.parse(this.getAttribute("payload") || "[]");
+                        } catch (err) {
+                            console.error("multi-input 的 payload 不是合法 JSON", err);
+                        }
+                        if (!Array.isArray(fields)) fields = [];
+                        const inputs = [];
+                        fields.forEach((field, index) => {
+                            const item = field || {};
+                            const config = { id: `multi-input-${index}` };
+                            if (item.type) config.type = item.type;
+                            const { input } = this.appendInput(item.label || "", config);
+                            if (item.placeholder) input.placeholder = item.placeholder;
+                            if (item.value !== undefined && item.value !== null) input.value = item.value;
+                            inputs.push(input);
+                        });
+                        this.#whenEnd(() => {
+                            this.#finishReslove(inputs.map(input => input.value));
+                        });
+                    }; break;
                     case "multiline": {
                         const { container, input } = this.appendInput();
                         const textarea = document.createElement("textarea");
