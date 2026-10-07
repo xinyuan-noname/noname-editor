@@ -477,24 +477,8 @@ body.xy-ED-col-resizing * {
     padding: 0;
 }
 
-.xy-ED-sideBar-character .xy-ED-characte-show>ul>li {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 8px;
-    padding: 5px 8px;
-    margin-bottom: 4px;
-    border-radius: 4px;
-    background: rgba(0, 0, 0, 0.18);
-    cursor: pointer;
-    font-size: 0.9em;
-}
-
-.xy-ED-sideBar-character .xy-ED-characte-show>ul>li:hover {
-    background: rgba(255, 255, 255, 0.16);
-}
-
-.xy-ED-sideBar-character .xy-ED-characte-show>ul>li>span {
-    opacity: 0.6;
-    font-size: 0.85em;
+/* 卡片由 <character-info-card> 自带样式，这里只控制容器间距 */
+.xy-ED-sideBar-character .xy-ED-characte-show>ul>character-info-card {
+    display: block;
+    margin-bottom: 6px;
 }

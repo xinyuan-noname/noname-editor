@@ -336,6 +336,12 @@ mainPage.innerHTML=`
      * 渲染「历史武将」：数据源是已持久化的草稿 x19D6_editor.characters
      * @returns {number} 已保存的武将数量
      */
+    /**
+     * 渲染「历史武将」：数据源是已持久化的草稿 x19D6_editor.characters。
+     * 使用既有组件 <character-info-card>（component-infoCard.mjs 定义），
+     * 而不是自己拼列表项——它自带武将名/包/分包/体力/技能等展示与「使用/删除」操作条。
+     * @returns {number} 已保存的武将数量
+     */
     loadSideBarCharacter() {
         const sideBarCharacter = this.sideBarCharacter;
         if (!sideBarCharacter) return 0;
@@ -345,16 +351,32 @@ mainPage.innerHTML=`
         const showBox = sideBarCharacter.querySelector(".xy-ED-characte-show");
         const header = showBox.querySelector("header");
         const ul = showBox.querySelector("ul");
-        ul.innerHTML = "";
+        ul.replaceChildren();
         ids.forEach(id => {
             const data = records[id] || {};
-            const li = document.createElement("li");
-            li.dataset.characterId = id;
-            li.innerHTML = `<b>${data.name || id}</b><span>${id}</span>`;
-            if (data.savedAt) li.title = `最后保存：${new Date(data.savedAt).toLocaleString()}`;
-            ul.appendChild(li);
+            const card = document.createElement("character-info-card");
+            card.setAttribute("character-id", id);
+            //removable 开启「删除」，usable 开启「使用」（点击后发 useCardData 事件）
+            card.setAttribute("removable", "true");
+            card.setAttribute("usable", "true");
+            card.characterInfo = {
+                id,
+                name: data.name || id,
+                packageName: data.packageId || data.extension,
+                characterSortName: data.characterSortName || data.characterSort,
+                sex: data.sex,
+                group: data.group,
+                hp: data.hp,
+                maxHp: data.maxHp,
+                hujia: data.hujia,
+                clans: Array.isArray(data.clans) ? data.clans.join("、") : data.clans,
+                skillList: Array.isArray(data.skills) ? data.skills : [],
+                dieAudios: []
+            };
+            if (data.savedAt) card.title = `最后保存：${new Date(data.savedAt).toLocaleString()}`;
+            ul.appendChild(card);
         });
-        header.innerHTML = ids.length ? `已保存 ${ids.length} 位武将（点击继续编辑）` : "";
+        header.textContent = ids.length ? `已保存 ${ids.length} 位武将（使用→继续编辑，删除→丢弃草稿）` : "";
         if (emptyCard) emptyCard.classList.toggle("xy-ED-hidden", ids.length > 0);
         if (showBox) showBox.classList.toggle("xy-ED-hidden", ids.length === 0);
         return ids.length;
@@ -367,13 +389,25 @@ mainPage.innerHTML=`
         });
         //每次点开「武将」页都刷新一次列表，保证刚保存的草稿立刻可见
         this.navCharacter.addEventListener("pointerup", () => this.loadSideBarCharacter());
-        sideBarCharacter.querySelector("ul").addEventListener("pointerup", e => {
-            const item = e.target.closest("li[data-character-id]");
-            if (!item) return;
-            //已在编辑中的同一份草稿不重复打开
-            const opened = this.mainArea.querySelector(`character-editor[character-id="${item.dataset.characterId}"]`);
-            if (opened) return;
-            this.createCharacterEditor(item.dataset.characterId);
+        const ul = sideBarCharacter.querySelector("ul");
+        //点击卡片操作条上的「使用」：继续编辑该草稿
+        ul.addEventListener("useCardData", e => {
+            const node = e.detail && e.detail.from;
+            const id = node && node.getAttribute && node.getAttribute("character-id");
+            if (!id) return;
+            if (this.mainArea.querySelector(`character-editor[character-id="${id}"]`)) return;
+            this.createCharacterEditor(id);
+        });
+        //点击卡片操作条上的「删除」：丢弃该草稿（写入配置持久化）
+        ul.addEventListener("removeCard", e => {
+            const node = e.detail && e.detail.from;
+            const id = node && node.getAttribute && node.getAttribute("character-id");
+            if (!id) return;
+            const records = this.serveFor.data.getConfig("x19D6_editor.characters");
+            if (!records || !(id in records)) return;
+            delete records[id];
+            this.serveFor.data.writeConfig("x19D6_editor.characters", records);
+            this.loadSideBarCharacter();
         });
         this.loadSideBarCharacter();
     }
