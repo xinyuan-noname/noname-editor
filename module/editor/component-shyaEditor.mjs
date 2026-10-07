@@ -82,6 +82,8 @@ shadow.innerHTML=`
         const q = sel => this.shadowRoot.querySelector(sel);
         this.sourceArea = q(".source");
         if (this.sourceArea && !this.sourceArea.value) this.sourceArea.value = EXAMPLE_SOURCE;
+        const idInput = q(".skill-id");
+        if (idInput) idInput.addEventListener("input", () => this.triggerEvent("tabTitleChange"));
         q(".compile").addEventListener("pointerup", () => this.compile());
         q(".generate").addEventListener("pointerup", () => this.generate());
         q(".copy").addEventListener("pointerup", () => this.copyCode());
@@ -96,6 +98,15 @@ shadow.innerHTML=`
             this.renderTagPanel();
         });
         this.renderTagPanel();
+    }
+    /**
+     * 主区标签栏用的标题（技能：id）
+     * @returns {string}
+     */
+    getTabTitle() {
+        const input = this.shadowRoot.querySelector(".skill-id");
+        const id = input && input.value ? input.value.trim() : "";
+        return id ? `技能：${id}` : "技能：未命名";
     }
     escape(text) {
         return String(text).replace(/[&<>]/g, ch => (ch === "&" ? "&amp;" : ch === "<" ? "&lt;" : "&gt;"));

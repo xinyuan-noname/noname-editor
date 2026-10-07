@@ -165,6 +165,8 @@ mainPage.innerHTML=`
     </header>
     <div class="xy-ED-viewArea">
         <div class="xy-ED-mainArea">
+            <div class="xy-ED-mainTabs xy-ED-hidden"></div>
+            <div class="xy-ED-mainEmpty">未打开任何编辑器<br>从左侧「武将」或「技」页打开</div>
         </div>
         <div class="xy-ED-sideBar">
             <hr>
@@ -266,29 +268,114 @@ mainPage.innerHTML=`
             .choose(minimizeControl);
     }
     //
+    /**
+     * 标签栏元素（html/index.html 里 mainArea 的第一个子元素）
+     * @type {HTMLElement|null}
+     */
+    get mainTabs() {
+        return this.mainArea.querySelector(":scope>.xy-ED-mainTabs");
+    }
+    /**
+     * 主区里的编辑器面板（排除标签栏与空态提示）
+     * @type {HTMLElement[]}
+     */
+    get mainPanes() {
+        return Array.from(this.mainArea.children).filter(node =>
+            !node.classList.contains("xy-ED-mainTabs") && !node.classList.contains("xy-ED-mainEmpty"));
+    }
+    /**
+     * 当前可见的武将编辑器（标签页形式下，往技能栏放技能要落到看得见的那个）
+     * @type {HTMLElement|null}
+     */
+    get activeCharacterEditor() {
+        const list = this.mainPanes.filter(node => node.tagName === "CHARACTER-EDITOR");
+        return list.find(node => !node.classList.contains("xy-ED-pane-hidden")) || list[list.length - 1] || null;
+    }
+    /**
+     * 主区改成「标签栏 + 单面板」：同一时刻只有一个编辑器可见（占满宽度），
+     * 面板之间用标签切换、✕ 关闭。原先的多栏网格会把武将编辑器挤到半宽变形。
+     */
     listenMainAreaChange() {
-        const observer = new MutationObserver((mutationsList) => {
-            for (const mutation of mutationsList) {
-                if (mutation.type === 'childList') {
-                    this.mainArea.className = this.mainArea.className.replace(/xy-ED-grid-(one|two|three|four)item/, "");
-                    switch (this.mainArea.children.length) {
-                        case 1:
-                            this.mainArea.classList.add('xy-ED-grid-oneitem');
-                            break;
-                        case 2:
-                            this.mainArea.classList.add('xy-ED-grid-twoitem');
-                            break;
-                        case 3:
-                            this.mainArea.classList.add('xy-ED-grid-threeitem');
-                            break;
-                        default:
-                            this.mainArea.classList.add('xy-ED-grid-fouritem');
-                            break;
-                    }
-                }
-            }
-        });
+        const observer = new MutationObserver(() => this.syncMainTabs());
         observer.observe(this.mainArea, { attributes: false, childList: true, subtree: false });
+        //组件内改了 id/名字 → 冒泡 tabTitleChange → 只刷那一个标签
+        this.mainArea.addEventListener("tabTitleChange", e => this.updateMainTab(e.target));
+        //「使用」是把 requestUseSkill 派发到武将编辑器的技能区上：若它此刻在别的标签页后面，
+        //用户会以为点了没反应，这里顺手把它的标签切到前台
+        this.mainArea.addEventListener("requestUseSkill", e => {
+            const pane = e.target;
+            if (pane && pane.tagName === "CHARACTER-EDITOR") this.activateMainPane(pane);
+        });
+        this.syncMainTabs();
+    }
+    /**
+     * 同步标签栏与面板可见性：给每个面板补/删标签，并保证有且只有一个面板可见。
+     * @param {HTMLElement} [activate] 需要切过去的面板（新建面板时自动激活最后加入的那个）
+     */
+    syncMainTabs(activate) {
+        const tabs = this.mainTabs;
+        if (!tabs) return;
+        const panes = this.mainPanes;
+        tabs.classList.toggle("xy-ED-hidden", panes.length === 0);
+        //1. 清掉已经没有面板的标签
+        Array.from(tabs.children).forEach(tab => {
+            if (!panes.includes(tab.paneNode)) tab.remove();
+        });
+        //2. 给还没有标签的面板补上
+        panes.forEach(pane => {
+            let tab = Array.from(tabs.children).find(node => node.paneNode === pane);
+            if (!tab) {
+                tab = document.createElement("div");
+                tab.className = "xy-ED-mainTab";
+                tab.paneNode = pane;
+                const title = document.createElement("span");
+                const close = document.createElement("span");
+                close.className = "xy-ED-mainTab-close";
+                close.textContent = "✕";
+                close.title = "关闭";
+                tab.append(title, close);
+                tab.addEventListener("pointerdown", e => {
+                    if (e.target === close) return;
+                    this.activateMainPane(pane);
+                });
+                close.addEventListener("pointerdown", e => {
+                    e.stopPropagation();
+                    pane.remove();
+                });
+                tabs.appendChild(tab);
+            }
+            this.updateMainTab(pane, tab);
+        });
+        //3. 决定可见面板：切换目标 > 原本可见的 > 最新加入的
+        const visible = panes.find(pane => !pane.classList.contains("xy-ED-pane-hidden"));
+        const next = activate && panes.includes(activate) ? activate : (visible || panes[panes.length - 1]);
+        panes.forEach(pane => pane.classList.toggle("xy-ED-pane-hidden", pane !== next));
+        Array.from(tabs.children).forEach(tab => tab.classList.toggle("xy-ED-mainTab-chosen", tab.paneNode === next));
+        //4. 空态提示
+        const empty = this.mainArea.querySelector(":scope>.xy-ED-mainEmpty");
+        if (empty) empty.classList.toggle("xy-ED-hidden", panes.length > 0);
+    }
+    /**
+     * 切换到某个面板（同时高亮对应标签）
+     * @param {HTMLElement} pane
+     */
+    activateMainPane(pane) {
+        if (!pane || !this.mainPanes.includes(pane)) return;
+        this.syncMainTabs(pane);
+    }
+    /**
+     * 刷新一个标签的标题：面板可自定义 getTabTitle()（武将：id / 技能：id），否则退回标签名
+     * @param {HTMLElement} pane
+     * @param {HTMLElement} [tab]
+     */
+    updateMainTab(pane, tab = Array.from(this.mainTabs ? this.mainTabs.children : []).find(node => node.paneNode === pane)) {
+        if (!pane || !tab) return;
+        const title = tab.firstElementChild;
+        if (!title) return;
+        const fallback = pane.tagName ? pane.tagName.toLowerCase() : "面板";
+        const text = typeof pane.getTabTitle === "function" ? pane.getTabTitle() : fallback;
+        title.textContent = text || fallback;
+        tab.title = `${title.textContent}｜点击切换，点 ✕ 关闭`;
     }
     //
     listenSideBarResize() {
@@ -409,7 +496,12 @@ mainPage.innerHTML=`
             const node = e.detail && e.detail.from;
             const id = node && node.getAttribute && node.getAttribute("character-id");
             if (!id) return;
-            if (this.mainArea.querySelector(`character-editor[character-id="${id}"]`)) return;
+            const opened = this.mainArea.querySelector(`character-editor[character-id="${CSS.escape(id)}"]`);
+            if (opened) {
+                //已经开着的草稿：切到它的标签页（主区改标签页后，直接 return 会表现为点了没反应）
+                this.activateMainPane(opened);
+                return;
+            }
             this.createCharacterEditor(id);
         });
         //点击卡片操作条上的「删除」：丢弃该草稿（写回配置持久化）
@@ -655,9 +747,9 @@ mainPage.innerHTML=`
         const useCard = node => {
             const characterId = node?.getAttribute?.("character-id");
             if (characterId) {
-                if (!this.mainArea.querySelector(`character-editor[character-id="${CSS.escape(characterId)}"]`)) {
-                    this.createCharacterEditor(characterId);
-                }
+                const opened = this.mainArea.querySelector(`character-editor[character-id="${CSS.escape(characterId)}"]`);
+                if (opened) this.activateMainPane(opened);
+                else this.createCharacterEditor(characterId);
                 return;
             }
             const skillId = node?.getAttribute?.("skill-id");
@@ -667,7 +759,9 @@ mainPage.innerHTML=`
             if (node.hasAttribute("usefor") && node.useForNode?.isConnected) return;
             //技能可能已被删除（上个版本收藏下来的）
             if (!this.serveFor.data.checkSkillTags(skillId, [])) return;
-            const editor = this.mainArea.querySelector("character-editor") || this.createCharacterEditor();
+            //落到「当前看得见的那个」武将编辑器；一个都没有就新建（否则这个箭头点了看不出反应）
+            const editor = this.activeCharacterEditor || this.createCharacterEditor();
+            this.activateMainPane(editor);
             editor.addSkill(skillId);
         };
         //结果列表与收藏列表共用一套交互：武将卡内嵌的技能卡事件会冒泡到收藏列表，所以两边都要监听

@@ -1521,6 +1521,18 @@ shadow.innerHTML=`
             input.blur();
         });
     }
+    /**
+     * 主区标签栏用的标题（武将：id）
+     * @returns {string}
+     */
+    getTabTitle() {
+        const label = this.getData("id") || this.getData("name");
+        return label ? `武将：${label}` : "武将：未命名";
+    }
+    /** 标题相关数据变了 → 冒泡通知主区标签栏刷新 */
+    notifyTabTitle() {
+        this.triggerEvent("tabTitleChange");
+    }
     getDataAreaDom(type) {
         return this.shadowRoot.querySelector(`[data-${this.textQuery("formatTransfer", { to: "kebab", text: type })}]`)
     }
@@ -1535,10 +1547,12 @@ shadow.innerHTML=`
             case "name": {
                 this.getDataAreaDom("name").dataset["name"] = val;
                 this.style.setProperty("--data-name", `'${val}'`);
+                this.notifyTabTitle();
             }; break;
             case "id": {
                 this.getDataAreaDom("id").dataset["id"] = val;
                 this.style.setProperty("--data-id", `'${val}'`);
+                this.notifyTabTitle();
             }; break;
             case "pinyin": {
                 this.getDataAreaDom("pinyin").dataset["pinyin"] = val;

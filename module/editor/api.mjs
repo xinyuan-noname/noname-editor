@@ -136,7 +136,10 @@ async function openShyaSkillEditor(options = {}) {
     //组件定义按需载入（WASM 在组件内首次编译时才拉，避免拖慢启动）
     await import("./component-shyaEditor.mjs");
     let node = instance.view.mainArea.querySelector("shya-editor");
-    if (!node) {
+    if (node) {
+        //主区是标签页形式：已经开着就切到它的标签，不能「已存在就直接返回」（那样看不出反应）
+        instance.view.activateMainPane(node);
+    } else {
         node = document.createElement("shya-editor");
         instance.view.mainArea.appendChild(node);
     }
