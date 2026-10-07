@@ -450,6 +450,11 @@ shadow.innerHTML=`
                 options[character.packageId] = translation;
             })
         }
+        //编辑器里新建的包（x19D6_editor.workspaceMeta）也要能选
+        const meta = this.configQuery("get", { member: `x19D6_editor.workspaceMeta.${this.workspace}` });
+        if (meta && meta.packages) {
+            Object.entries(meta.packages).forEach(([packageId, packageName]) => (options[packageId] = packageName));
+        }
         const dialog = document.createElement("noname-dialog");
         dialog.type = "select";
         dialog.options = options;

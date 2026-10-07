@@ -196,8 +196,8 @@ mainPage.innerHTML=`
                 <div class="xy-ED-sideBar-skill" data-by="skill"></div>
                 <div class="xy-ED-sideBar-character" data-by="character">
                     <div class="xy-ED-characterFilter">
-                        <label class="xy-ED-filter-row"><span>武将包</span><select data-character-filter="packageId"></select></label>
-                        <label class="xy-ED-filter-row"><span>分包</span><select data-character-filter="characterSort"></select></label>
+                        <label class="xy-ED-filter-row"><span>武将包</span><select data-character-filter="packageId"></select><button class="xy-ED-filter-add" type="button" data-character-add="packageId" title="在本扩展下新建武将包">＋</button></label>
+                        <label class="xy-ED-filter-row"><span>分包</span><select data-character-filter="characterSort"></select><button class="xy-ED-filter-add" type="button" data-character-add="characterSort" title="在所选武将包下新建分包">＋</button></label>
                     </div>
                     <div class="xy-ED-nocharacterCard">
                         <div>暂未创建过武将!</div>
@@ -432,11 +432,20 @@ mainPage.innerHTML=`
      * @param {string} [characterId] 传入则挂载时自动载入该武将的草稿
      * @returns {HTMLElement}
      */
-    createCharacterEditor(characterId) {
+    createCharacterEditor(characterId, data) {
         const characterEditor = document.createElement("character-editor");
         //必须在挂载前设置：组件的 connectedCallback 会按 character-id 载入草稿
         if (characterId) characterEditor.setAttribute("character-id", characterId);
         this.mainArea.appendChild(characterEditor);
+        //带初始数据（侧栏过滤栏选了武将包/分包时，新武将直接落在该包该分包下）
+        if (data && Object.keys(data).length) {
+            characterEditor.applyData(data);
+            if (data.packageId) {
+                const packageName = lib.translate[data.packageId + "_character_config"] || data.packageId;
+                characterEditor.style.setProperty("--data-package-id", `"${packageName}"`);
+            }
+            if (data.characterSortName) characterEditor.style.setProperty("--data-character-sort", `"${data.characterSortName}"`);
+        }
         return characterEditor;
     }
     /**
@@ -554,6 +563,8 @@ mainPage.innerHTML=`
                 if (item && item.packageId) names.add(item.packageId);
             });
         }
+        //编辑器里新建的包（登记在 workspaceMeta）
+        Object.keys(this.workspaceMeta.packages).forEach(id => names.add(id));
         return Array.from(names);
     }
     /**
@@ -576,21 +587,27 @@ mainPage.innerHTML=`
             if (packageId && (record.packageId || workspace) !== packageId) return;
             sorts.add(record.characterSort);
         });
+        //编辑器里新建的分包（登记在 workspaceMeta）
+        const meta = this.workspaceMeta;
+        if (packageId && meta.sorts[packageId]) Object.keys(meta.sorts[packageId]).forEach(id => sorts.add(id));
         return Array.from(sorts);
     }
+
     /**
      * @param {HTMLSelectElement} select
      * @param {string[]} options
      * @param {string} current
      * @param {string} allLabel
+     * @param {object} [labels] id → 中文名
      */
-    fillCharacterFilterSelect(select, options, current, allLabel) {
+    fillCharacterFilterSelect(select, options, current, allLabel, labels = {}) {
         if (!select) return;
         const values = options.filter(Boolean);
         select.innerHTML = `<option value="">${allLabel}</option>` + values
-            .map(value => `<option value="${value}">${value}</option>`).join("");
+            .map(value => `<option value="${value}">${labels[value] ? `${labels[value]}（${value}）` : value}</option>`).join("");
         select.value = values.includes(current) ? current : "";
     }
+
     /**
      * 回填过滤栏（武将包 + 该包下的分包）；若选中的值已失效会清掉并重刷列表，
      * 否则列表会被一个「看不见的条件」过滤成空。
@@ -601,14 +618,16 @@ mainPage.innerHTML=`
         const state = this.characterFilterState;
         const workspace = this.serveFor.data.getConfig("x19D6_editor.settings.workspace") || "";
         let corrected = false;
+        const labels = this.getFilterLabels(state.packageId);
         const packages = await this.getWorkspacePackages(workspace);
-        this.fillCharacterFilterSelect(packageSelect, packages, state.packageId, "全部武将包");
+        this.fillCharacterFilterSelect(packageSelect, packages, state.packageId, "全部武将包", labels.packages);
         if (packageSelect.value !== state.packageId) {
             state.packageId = packageSelect.value;
             corrected = true;
         }
+        const sortLabels = this.getFilterLabels(state.packageId).sorts;
         const sorts = this.getPackageSorts(state.packageId, workspace);
-        this.fillCharacterFilterSelect(sortSelect, sorts, state.characterSort, "全部分包");
+        this.fillCharacterFilterSelect(sortSelect, sorts, state.characterSort, "全部分包", sortLabels);
         if (sortSelect.value !== state.characterSort) {
             state.characterSort = sortSelect.value;
             corrected = true;
@@ -616,11 +635,183 @@ mainPage.innerHTML=`
         this.characterFilterState = state;
         if (corrected) this.loadSideBarCharacter();
     }
+    /**
+     * 工作区的「武将包 / 分包」登记表：`x19D6_editor.workspaceMeta.<工作区>`
+     * 形如 `{ packages: { <包id>: <中文名> }, sorts: { <包id>: { <分包id>: <中文名> } } }`。
+     * 编辑器里新建的包/分包登记在这（live lib 的注册只在本次会话有效，重启后靠这份登记 + 导出的代码恢复）。
+     * @returns {{packages: object, sorts: object}}
+     */
+    get workspaceMeta() {
+        const workspace = this.serveFor.data.getConfig("x19D6_editor.settings.workspace") || "";
+        const saved = workspace ? this.serveFor.data.getConfig(`x19D6_editor.workspaceMeta.${workspace}`) : null;
+        return {
+            packages: (saved && saved.packages) || {},
+            sorts: (saved && saved.sorts) || {}
+        };
+    }
+    /**
+     * @param {{packages: object, sorts: object}} meta
+     */
+    writeWorkspaceMeta(meta) {
+        const workspace = this.serveFor.data.getConfig("x19D6_editor.settings.workspace") || "";
+        if (!workspace) return;
+        return this.serveFor.data.writeConfig(`x19D6_editor.workspaceMeta.${workspace}`, meta);
+    }
+    /**
+     * 包/分包 id 校验：生成的代码里要当标识符用（`lib.characterSort.<包>.<分包>`），限制 ASCII 字母数字下划线
+     * @param {string} id
+     * @returns {boolean}
+     */
+    isValidPackageId(id) {
+        return /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(id || "").trim());
+    }
+    /**
+     * 弹「两个输入框」的对话框（id + 中文名）。与其它弹窗一样必须挂 ui.window，否则被侧栏裁掉。
+     * @param {{headline: string, message?: string, idPlaceholder?: string}} config
+     * @returns {Promise<string[]|false>}
+     */
+    async promptIdAndName(config) {
+        const dialog = document.createElement("noname-dialog");
+        //type 分支开头会清空 headline/message，先设 type 再设文案
+        dialog.setAttribute("type", "multi-input");
+        dialog.setAttribute("headline", config.headline);
+        if (config.message) dialog.setAttribute("message", config.message);
+        dialog.setAttribute("payload", JSON.stringify([
+            { label: "英文名(id)", placeholder: config.idPlaceholder || "仅字母/数字/下划线" },
+            { label: "中文名" }
+        ]));
+        (ui.window || document.body).appendChild(dialog);
+        try {
+            const result = await dialog.wait();
+            return Array.isArray(result) ? result : false;
+        } finally {
+            dialog.remove();
+        }
+    }
+    /**
+     * 在当前工作区（= 扩展）下**新建武将包**：登记进 workspaceMeta + 注册进 live lib（本次会话立即可选）
+     * @returns {Promise<boolean>}
+     */
+    async createWorkspacePackage() {
+        const workspace = this.serveFor.data.getConfig("x19D6_editor.settings.workspace") || "";
+        if (!workspace) {
+            alert("请先在设置页选择工作区。");
+            return false;
+        }
+        const result = await this.promptIdAndName({
+            headline: `在扩展「${workspace}」下新建武将包`,
+            message: "武将包只属于当前工作区（扩展），新建后会立刻出现在两栏与武将编辑器的「武将包」里。",
+            idPlaceholder: "例如：xjb_soul"
+        });
+        if (!result) return false;
+        const packageId = String(result[0] || "").trim();
+        const packageName = String(result[1] || "").trim() || packageId;
+        if (!this.isValidPackageId(packageId)) {
+            alert("武将包 id 只能用字母、数字、下划线，且以字母或下划线开头。");
+            return false;
+        }
+        const meta = this.workspaceMeta;
+        if (meta.packages[packageId]) {
+            alert(`武将包「${packageId}」已存在。`);
+            return false;
+        }
+        meta.packages[packageId] = packageName;
+        this.writeWorkspaceMeta(meta);
+        //live lib：让本次会话里各处立即可选（重启后靠登记表 + 导出代码恢复）
+        lib.characterPack = lib.characterPack || {};
+        if (!lib.characterPack[packageId]) lib.characterPack[packageId] = {};
+        lib.characterSort = lib.characterSort || {};
+        if (!lib.characterSort[packageId]) lib.characterSort[packageId] = {};
+        lib.translate[packageId + "_character_config"] = packageName;
+        //过滤栏切到新建的包，省得再手动选一次
+        const state = this.characterFilterState;
+        state.packageId = packageId;
+        state.characterSort = "";
+        this.characterFilterState = state;
+        await this.renderCharacterFilter();
+        this.loadSideBarCharacter();
+        return true;
+    }
+    /**
+     * 在当前选中的武将包下**新建分包**
+     * @returns {Promise<boolean>}
+     */
+    async createWorkspaceSort() {
+        const workspace = this.serveFor.data.getConfig("x19D6_editor.settings.workspace") || "";
+        if (!workspace) {
+            alert("请先在设置页选择工作区。");
+            return false;
+        }
+        const state = this.characterFilterState;
+        if (!state.packageId) {
+            alert("请先选一个武将包（或点武将包旁的「＋」新建一个）。");
+            return false;
+        }
+        const packageId = state.packageId;
+        const result = await this.promptIdAndName({
+            headline: `在武将包「${packageId}」下新建分包`,
+            message: "分包属于该武将包；新建后会自动选中，之后从侧栏新建的武将会带上它。",
+            idPlaceholder: "例如：soul"
+        });
+        if (!result) return false;
+        const sortId = String(result[0] || "").trim();
+        const sortName = String(result[1] || "").trim() || sortId;
+        if (!this.isValidPackageId(sortId)) {
+            alert("分包 id 只能用字母、数字、下划线，且以字母或下划线开头。");
+            return false;
+        }
+        const meta = this.workspaceMeta;
+        if (!meta.sorts[packageId]) meta.sorts[packageId] = {};
+        if (meta.sorts[packageId][sortId]) {
+            alert(`分包「${sortId}」已存在。`);
+            return false;
+        }
+        meta.sorts[packageId][sortId] = sortName;
+        this.writeWorkspaceMeta(meta);
+        //live lib（data 层的 setCharacterSort 也是这么改 lib.characterSort 的）
+        lib.characterSort = lib.characterSort || {};
+        if (!lib.characterSort[packageId]) lib.characterSort[packageId] = {};
+        if (!lib.characterSort[packageId][sortId]) lib.characterSort[packageId][sortId] = [];
+        lib.translate[sortId] = sortName;
+        state.characterSort = sortId;
+        this.characterFilterState = state;
+        await this.renderCharacterFilter();
+        this.loadSideBarCharacter();
+        return true;
+    }
+    /**
+     * 过滤栏下拉的显示名（编辑器里新建的包/分包带中文名 → 显示「中文名（id）」）
+     * @param {string} packageId
+     * @returns {{packages: object, sorts: object}}
+     */
+    getFilterLabels(packageId) {
+        const meta = this.workspaceMeta;
+        return {
+            packages: { ...meta.packages },
+            sorts: { ...((packageId && meta.sorts[packageId]) || {}) }
+        };
+    }
+    /**
+     * 侧栏过滤栏当前的武将包/分包 → 新草稿的初始数据（否则从侧栏新建的武将会落在默认包里、当场被过滤掉）
+     * @returns {object}
+     */
+    filterDraftData() {
+        const state = this.characterFilterState;
+        const data = {};
+        if (!state.packageId) return data;
+        data.packageId = state.packageId;
+        if (state.characterSort) {
+            data.characterSort = state.characterSort;
+            const meta = this.workspaceMeta;
+            data.characterSortName = (meta.sorts[state.packageId] || {})[state.characterSort] || state.characterSort;
+        }
+        return data;
+    }
     listenSideBarCharacter() {
         const { sideBarCharacter } = this;
         const noneCharacterCardButton = sideBarCharacter.querySelector("button");
         noneCharacterCardButton.addEventListener("pointerup", () => {
-            this.createCharacterEditor();
+            this.createCharacterEditor("", this.filterDraftData());
         });
         //每次点开「武将」页都刷新一次列表
         this.navCharacter.addEventListener("pointerup", () => this.loadSideBarCharacter());
@@ -668,6 +859,13 @@ mainPage.innerHTML=`
                 this.characterFilterState = state;
                 this.renderCharacterFilter();
                 this.loadSideBarCharacter();
+            });
+        });
+        //「＋」新建武将包 / 新建分包
+        this.operationPage.querySelectorAll("[data-character-add]").forEach(button => {
+            button.addEventListener("pointerup", () => {
+                if (button.dataset.characterAdd === "packageId") this.createWorkspacePackage();
+                else this.createWorkspaceSort();
             });
         });
         this.renderCharacterFilter();

@@ -694,3 +694,15 @@ body.xy-ED-col-resizing * {
     background: #e4d5b7;
     color: #000;
 }
+
+.xy-ED-sideBar-character>.xy-ED-characterFilter .xy-ED-filter-add {
+    flex: 0 0 auto;
+    font: inherit;
+    line-height: 1;
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid #6b6b6b;
+    background: #e4d5b7;
+    color: #000;
+    cursor: pointer;
+}
