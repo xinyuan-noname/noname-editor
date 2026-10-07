@@ -662,3 +662,35 @@ body.xy-ED-col-resizing * {
     opacity: 0.72;
     font-weight: 400;
 }
+
+/* 侧栏「武将」顶部的武将包 / 分包过滤栏 */
+.xy-ED-sideBar-character>.xy-ED-characterFilter {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 2px 0 4px;
+    border-bottom: 1px solid #ffffff3d;
+}
+
+.xy-ED-sideBar-character>.xy-ED-characterFilter .xy-ED-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85em;
+}
+
+.xy-ED-sideBar-character>.xy-ED-characterFilter .xy-ED-filter-row>span {
+    flex: 0 0 3.4em;
+    opacity: 0.85;
+}
+
+.xy-ED-sideBar-character>.xy-ED-characterFilter .xy-ED-filter-row>select {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    padding: 1px 4px;
+    border-radius: 4px;
+    border: 1px solid #6b6b6b;
+    background: #e4d5b7;
+    color: #000;
+}
