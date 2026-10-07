@@ -1050,3 +1050,16 @@ div[contenteditable="true"] {
         transform: rotate(360deg);
     }
 }
+/* 武将称号输入 */
+.title-input {
+    min-height: 1.6em;
+    padding: 3px 6px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.18);
+    outline: none;
+    font-size: 1em;
+}
+
+.title-input:focus {
+    background: rgba(0, 0, 0, 0.3);
+}

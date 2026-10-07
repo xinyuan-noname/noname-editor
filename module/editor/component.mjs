@@ -19,6 +19,7 @@ class HTMLNonameCharacterEditorElement extends HTMLNonameFocusUIElement {
         "hp", "maxHp", "hujia",
         "skills",
         "isZhugong",
+        "title",
         "hasHiddenSkill",
         "isAiForbidden",
         "isBoss",
@@ -332,16 +333,16 @@ shadow.innerHTML=`
                     </footer>
                 </section>
             </div>
-            <!-- <div class="data-setting" data-title>
+            <div class="data-setting" data-title>
                 <span>
                     <span>武将称号</span>
                     <span class="expandable-collapsed" data-for="data-title"></span>
                     <span></span>
                 </span>
                 <section data-by="data-title" class="hidden">
+                    <div class="title-input" contenteditable="true" spellcheck="false"></div>
                 </section>
-            </div>
-            <div class="data-setting" data-perfect-pair>
+            </div>            <div class="data-setting" data-perfect-pair>
                 <span>
                     <span>珠联璧合</span>
                     <span class="expandable-collapsed" data-for="data-perfect-pair"></span>
@@ -389,6 +390,7 @@ shadow.innerHTML=`
         this.#listenSkills();
         this.#listenMore();
         this.#listenIntro();
+        this.#listenTitle();
         //
         this.#listenExpanable();
         //按 id 载入已保存的草稿（新建武将时 id 为空，不载入）
@@ -1505,6 +1507,20 @@ shadow.innerHTML=`
      * @param {dataType} type 
      * @returns {HTMLElement}
      */
+    /**
+     * 武将称号输入：失焦或回车时写入（changeData 会触发草稿自动保存）
+     */
+    #listenTitle() {
+        const input = this.shadowRoot.querySelector("[data-title] .title-input");
+        if (!input) return;
+        const submit = () => this.changeData("title", input.innerText.trim());
+        input.addEventListener("blur", submit);
+        input.addEventListener("keyup", e => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            input.blur();
+        });
+    }
     getDataAreaDom(type) {
         return this.shadowRoot.querySelector(`[data-${this.textQuery("formatTransfer", { to: "kebab", text: type })}]`)
     }
