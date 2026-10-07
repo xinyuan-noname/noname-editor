@@ -1,15 +1,18 @@
 "use script";
 import { lib, game, ui, get, ai, _status } from "../../../../noname.js";
 import { HTMLNonameFocusUIElement } from "./component-base.mjs";
+import { getVisibleTagGroups, TAG_VISIBLE_LIMIT } from "./shya/tags.mjs";
 
 const EXAMPLE_SOURCE = [
     "// 示例：给「你」写一个受伤后回血的触发技",
     "// 宿主声明与宏库见 shya/host/*.shya",
     "declare Player { hp: number  maxHp: number  recover(n: number): void }",
-    "fn onDamaged(p: Player) {",
-    "  if p.hp < p.maxHp {",
-    "    p.recover(1)",
-    "  }",
+    "@trigger {",
+    "   #skill:mySkill",
+    "   #trigger:\"phaseEnd\"",
+    "   #content:{",
+    "       player draw(2)",
+    "   }",
     "}"
 ].join("\n");
 
@@ -23,6 +26,10 @@ class HTMLNonameShyaEditorElement extends HTMLNonameFocusUIElement {
     compiler = null;
     /** 上一次成功编译出的 JS */
     generatedCode = "";
+    /** 已选标签（内部键） */
+    chosenTags = new Set();
+    /** 当前技能类型标记（决定显示哪些标签组） */
+    skillTypes = [];
     sourceArea = null;
     constructor() {
         super();
@@ -39,6 +46,21 @@ shadow.innerHTML=`
             <button class="copy" type="button">复制代码</button>
             <button class="close" type="button" title="关闭编辑器">关闭</button>
         </span>
+    </div>
+    <div class="tools">
+        <div class="tools-tabs">
+            <button class="tool-tab chosen" type="button" data-tool="tag">标签</button>
+        </div>
+        <div class="tools-body">
+            <div class="tool-panel" data-tool-panel="tag">
+                <div class="tag-groups"></div>
+                <div class="tag-footer">
+                    <span class="tag-count">已选 0 项</span>
+                    <button class="tag-insert" type="button">插入到光标处</button>
+                    <button class="tag-clear" type="button">清空</button>
+                </div>
+            </div>
+        </div>
     </div>
     <div class="body">
         <div class="pane">
@@ -65,6 +87,15 @@ shadow.innerHTML=`
         q(".copy").addEventListener("pointerup", () => this.copyCode());
         const closeButton = q(".close");
         if (closeButton) closeButton.addEventListener("pointerup", () => this.remove());
+        //标签工具
+        const tagInsert = q(".tag-insert");
+        const tagClear = q(".tag-clear");
+        if (tagInsert) tagInsert.addEventListener("pointerup", () => this.insertTags());
+        if (tagClear) tagClear.addEventListener("pointerup", () => {
+            this.chosenTags.clear();
+            this.renderTagPanel();
+        });
+        this.renderTagPanel();
     }
     escape(text) {
         return String(text).replace(/[&<>]/g, ch => (ch === "&" ? "&amp;" : ch === "<" ? "&lt;" : "&gt;"));
@@ -139,6 +170,78 @@ shadow.innerHTML=`
         } finally {
             area.remove();
         }
+    }
+    /**
+     * 渲染标签面板：按技能类型分组，点击切换选中
+     * 冷色调：选中态用冷蓝，未选为半透明冷灰
+     */
+    renderTagPanel() {
+        const root = this.shadowRoot.querySelector(".tag-groups");
+        if (!root) return;
+        const groups = getVisibleTagGroups(lib, this.skillTypes);
+        root.replaceChildren();
+        let index = 0;
+        groups.forEach(group => {
+            const box = document.createElement("div");
+            box.className = "tag-group";
+            const title = document.createElement("div");
+            title.className = "tag-group-title";
+            title.textContent = group.name;
+            title.title = group.description || "";
+            box.appendChild(title);
+            const list = document.createElement("div");
+            list.className = "tag-list";
+            group.tags.forEach(tag => {
+                const chip = document.createElement("button");
+                chip.type = "button";
+                chip.className = "tag-chip";
+                chip.dataset.tagKey = tag.key;
+                chip.textContent = tag.name;
+                chip.title = tag.effect || tag.name;
+                if (this.chosenTags.has(tag.key)) chip.classList.add("chosen");
+                if (index >= TAG_VISIBLE_LIMIT) chip.classList.add("xy-ED-hidden");
+                chip.addEventListener("pointerup", () => {
+                    if (this.chosenTags.has(tag.key)) this.chosenTags.delete(tag.key);
+                    else this.chosenTags.add(tag.key);
+                    this.renderTagPanel();
+                });
+                list.appendChild(chip);
+                index++;
+            });
+            box.appendChild(list);
+            root.appendChild(box);
+        });
+        const counter = this.shadowRoot.querySelector(".tag-count");
+        if (counter) {
+            const names = groups.flatMap(g => g.tags).filter(t => this.chosenTags.has(t.key)).map(t => t.name);
+            counter.textContent = names.length ? `已选 ${names.length} 项：${names.join("、")}` : "已选 0 项";
+        }
+    }
+    /**
+     * 把已选标签的内部键插入源码光标处（宏的 #tags 槽）
+     */
+    insertTags() {
+        if (!this.sourceArea) return;
+        if (!this.chosenTags.size) {
+            this.setDiagnostics('<span class="warn">请先选择标签</span>');
+            return;
+        }
+        const text = Array.from(this.chosenTags).join(", ");
+        const start = this.sourceArea.selectionStart ?? this.sourceArea.value.length;
+        const end = this.sourceArea.selectionEnd ?? start;
+        const value = this.sourceArea.value;
+        this.sourceArea.value = value.slice(0, start) + text + value.slice(end);
+        this.sourceArea.selectionStart = this.sourceArea.selectionEnd = start + text.length;
+        this.sourceArea.focus();
+        this.setDiagnostics(`<span class="ok">已插入 ${this.chosenTags.size} 个标签</span>`);
+    }
+    /**
+     * 设置技能类型标记（决定标签组可见性），供外部或后续「基本设置」工具调用
+     * @param {string[]} types
+     */
+    setSkillTypes(types) {
+        this.skillTypes = Array.isArray(types) ? types : [];
+        this.renderTagPanel();
     }
 }
 customElements.define("shya-editor", HTMLNonameShyaEditorElement);
