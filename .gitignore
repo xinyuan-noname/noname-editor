@@ -1,3 +1,5 @@
 # 忽略编辑器自身的版本库与临时产物
 backup/
 *.log
+# shya 构建脚本生成的 wasm 时间戳备份（不上库，本地留着回滚用）
+module/editor/shya/bin/backup_wasm_*/
