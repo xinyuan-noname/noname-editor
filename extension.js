@@ -8,9 +8,6 @@ import {
 } from "../../noname.js";
 import { installApi } from "./module/editor/api.mjs";
 
-//魂氏编辑器（独立扩展）
-//对外只暴露 game.x19D6_* 接口；内部模块一律不对外引用。
-//默认挂载父元素为 ui.window。
 const menuLabel = "<div>魂氏编辑器</div>";
 export const type = "extension";
 export default function () {
@@ -38,17 +35,6 @@ export default function () {
                     alert("魂氏编辑器尚未载入完成，请重启游戏后再试。");
                 }
             };
-            skillItem.name = "<div>直接打开技能编辑</div>";
-            extensionMenu.openSkillEditor = skillItem;
-            const characterItem = {
-                clear: true,
-                onclick: function () {
-                    if (typeof game.x19D6_openCharacterEditor === "function") return game.x19D6_openCharacterEditor();
-                    alert("魂氏编辑器尚未载入完成，请重启游戏后再试。");
-                }
-            };
-            characterItem.name = "<div>直接打开武将编辑</div>";
-            extensionMenu.openCharacterEditor = characterItem;
         },
         arenaReady: function () {
             if (!ui.system) return;

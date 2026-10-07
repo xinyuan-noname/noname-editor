@@ -17,7 +17,18 @@ let skillCoreLoader = null;
 let legacyStylesLoaded = false;
 
 function loadSkillCore() {
-    if (!skillCoreLoader) skillCoreLoader = import("./skill/editor.mjs");
+    if (!skillCoreLoader) {
+        //旧内核依赖两层「全局工具」（这正是本次崩溃的根因）：
+        //  interact/ui.mjs     定义 ui.create.x19D6_back / ui.create.x19D6_button / ui.x19D6_* 等
+        //  interact/dialog.mjs 定义 game.x19D6_create.* 等
+        //二者必须在内核之前载入，否则内核第一行就会抛
+        //  TypeError: ui.create.x19D6_back is not a function
+        skillCoreLoader = (async () => {
+            await import("./skill/interact/ui.mjs");
+            await import("./skill/interact/dialog.mjs");
+            return import("./skill/editor.mjs");
+        })();
+    }
     return skillCoreLoader;
 }
 /**
