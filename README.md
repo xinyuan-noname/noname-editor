@@ -117,7 +117,3 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
 - `module/editor/mindmap.mjs` 是无人引用的孤儿文件。
 
 已实现（本轮起）：武将**称号**（`component.mjs` 的 `characterAttributes` 含 `title`，纳入草稿持久化与导出数据）。
-
-## 致谢
-
-原《新将包》作者：新元noname

@@ -125,3 +125,44 @@ skill/interact/dialog-adapter.mjs    ← 新建
    但该函数只写入了 `character` 与 `translate` 两处，因此这三项不会随导出写回目标文件。
 
 第 2、3 项需要实现目标文件的对应写入逻辑（AST 改写），属功能开发而非缺陷修补，故本轮只做事实标注，未擅自猜测写入格式。
+## 八、characterSort 导出：目标格式已确认（实现待做）
+
+上一节提到「第 2、3 项需要先确认写入格式」，该格式其实**在本项目里已经存在**——
+编辑器生成展示代码时用的 `genCharacterSortCode`（`worker-ast.worker.js:170-196`）就是权威依据：
+
+```js
+lib.characterSort[packageId] ??= {};                  // 序号 173-179：分包不存在时先建空对象
+lib.characterSort[packageId][characterSort] ??= [];   // 序号 180-187：排序分组不存在时先建空数组
+lib.translate[characterSort] = characterSortName;     // 序号 186：分组名写进翻译表
+lib.characterSort[packageId][characterSort].push(id); // 序号 188-193：把该武将加入分组
+```
+
+即：`lib.characterSort` 是 `分包id → 分组id → [武将id...]` 的两层表，分组名走 `lib.translate[分组id]`。
+
+### 为什么本轮没有实现
+
+`modifyCharacterPackageCode` 里要给目标文件做的是 **AST 改写**，而这处与已实现的
+`character` / `translate` 两处**结构位置不同**：
+
+- `character` / `translate` 写在扩展配置对象（或 `package`）内部，现有代码用
+  `astObject.$ensureProperty(characterConfigObject, "translate", {})` 即可拿到；
+- `lib.characterSort` 却是**模块顶层的语句**（`lib.characterSort[x] = ...`），
+  不在配置对象里，需要定位/新建顶层语句再逐层插入数组元素。
+
+而这个函数的产物是**直接写回用户的武将包源文件**（`modifedFileContentMap` 会被上层落盘）。
+在没有任何实机验证的条件下实现 AST 插入，一旦结构判断出错，就是**把使用者的源文件改坏**。
+因此本轮只固化格式与实现路径，动笔前建议先用一个测试用武将包跑通「导出 → 文件正确 → 游戏内生效」。
+
+### 实现要点（备查）
+
+1. 在 `modifyCharacterPackageCode` 中，`characterSort` 分支需要独立的顶层语句处理，不能挂在 `characterConfigObject` 下；
+2. 可复用 `genCharacterSortCode` 已用到的 helper：`$createMemberExpression`、`$createNode`、
+   `createLeftRightExpressionStatement`、`$createCallMethodExpressionStatement`、`packStatementAsProgram`；
+   但**不能**直接把生成的代码字符串塞进目标文件——应改造成对目标 AST 的原地插入；
+3. `packageExistence` 这一入参来自 `characterSortInfo`，实现时需与现有分包扫描结果对齐。
+
+### 另注：intro / pinyin / dieAudioText
+
+这三项目前也被剔出 `basicInfo` 且未写回。它们的写入位置分别需要确认：
+`intro`/`pinyin` 通常属于 `lib.character[i]` 数组写法的固定下标或对象写法字段，
+`dieAudioText` 的归属（是否进 `translate` 或音频配置）尚未核实，实现前应先查引擎对应读取处。
