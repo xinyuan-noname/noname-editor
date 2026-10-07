@@ -206,13 +206,6 @@ mainPage.innerHTML=`
                             </header>
                             <section data-by=search-result></section>
                         </div>
-                        <div class="xy-ED-searchLiked">
-                            <header>
-                                <div class="xy-ED-expandable-expanded" data-for=search-like></div>
-                                <div>已收藏</div>
-                            </header>
-                            <section data-by=search-like></section>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -520,7 +513,6 @@ mainPage.innerHTML=`
     //
     /**
      * @typedef {{
-     *      noLike:boolean,
      *      noDelete:boolean,
      *      highlight:string[],
      *      useFor:HTMLElement
@@ -534,10 +526,9 @@ mainPage.innerHTML=`
     createSearchSkillListItem(searchResult, config = {}) {
         if (typeof searchResult !== "object") throw new Error("SearchResult must be a object");
         const skillCard = document.createElement("skill-info-card");
-        const { noLike, noDelete, highlight, useFor } = config;
+        const { noDelete, highlight, useFor } = config;
         skillCard.setAttribute("skill-id", searchResult.id);
         skillCard.skillInfo = searchResult;
-        if (!noLike) skillCard.setAttribute("likable", true);
         if (!noDelete) skillCard.setAttribute("removable", true);
         skillCard.setAttribute("usable", true);
         skillCard.setAttribute("markwords", highlight.join(" "));
@@ -545,8 +536,6 @@ mainPage.innerHTML=`
             skillCard.useForNode = useFor;
             skillCard.setAttribute("useFor", useFor.id);
         }
-        //已收藏过的条目，重新搜索时 ❤️ 也要是点亮状态（去重的前提）
-        if (!noLike) this.syncCardLikedState(skillCard);
         return skillCard;
     }
     /**
@@ -557,12 +546,10 @@ mainPage.innerHTML=`
     createSearchCharacterListItem(searchResult, config = {}) {
         if (typeof searchResult !== "object") throw new Error("SearchResult must be a object");
         const characterCard = document.createElement("character-info-card");
-        const { noLike, noDelete, highlight, useFor } = config;
+        const { noDelete, highlight, useFor } = config;
         characterCard.setAttribute("character-id", searchResult.id);
         characterCard.characterInfo = searchResult;
-        if (!noLike) characterCard.setAttribute("likable", true);
         if (!noDelete) characterCard.setAttribute("removable", true);
-        characterCard.setAttribute("skill-likable", true);
         characterCard.setAttribute("skill-usable", true);
         characterCard.setAttribute("usable", true);
         characterCard.setAttribute("markwords", highlight.join(" "));
@@ -570,8 +557,6 @@ mainPage.innerHTML=`
             characterCard.useForNode = useFor;
             characterCard.setAttribute("useFor", useFor.id);
         }
-        //已收藏过的条目，重新搜索时 ❤️ 也要是点亮状态（去重的前提）
-        if (!noLike) this.syncCardLikedState(characterCard);
         return characterCard;
     }
     createSearchBwikiSinkListItem(searchResult, config) {
@@ -616,50 +601,6 @@ mainPage.innerHTML=`
             if (typeof game.x19D6_openSkillEditor === "function") game.x19D6_openSkillEditor();
         });
     }
-    /**
-     * 收藏夹数据：技能 / 武将的卡片快照，持久化在 x19D6_editor.likes
-     * @returns {{skills: object[], characters: object[]}}
-     */
-    readLikes() {
-        const likes = this.serveFor.data.getConfig("x19D6_editor.likes") || {};
-        return {
-            skills: Array.isArray(likes.skills) ? likes.skills : [],
-            characters: Array.isArray(likes.characters) ? likes.characters : []
-        };
-    }
-    /**
-     * @param {{skills: object[], characters: object[]}} likes
-     */
-    saveLikes(likes) {
-        return this.serveFor.data.writeConfig("x19D6_editor.likes", likes);
-    }
-    /**
-     * 重建一张收藏卡片。必须走工厂方法：卡片数据在访问器字段上（skillInfo / characterInfo），
-     * cloneNode 的浅拷贝拿不到，只会渲染成空白条。
-     * @param {"skills"|"characters"} kind
-     * @param {object} info
-     * @returns {HTMLElement}
-     */
-    createLikedCard(kind, info) {
-        const card = kind === "skills"
-            ? this.createSearchSkillListItem(info, { noLike: true, highlight: [] })
-            : this.createSearchCharacterListItem(info, { noLike: true, highlight: [] });
-        //收藏行没有 usefor 目标节点：⬅️ 的「可用」外观要外部标记，点击走 useCardData 由收藏列表自己处理
-        card.markUsable(true);
-        //武将收藏卡自己不带 ❤️，但内嵌的技能卡带：一并同步（markLiked 找不到 ❤️ 时安全返回 false）
-        this.syncCardLikedState(card);
-        return card;
-    }
-    /**
-     * 把「已收藏」状态同步到卡片（武将卡连带内嵌技能卡）
-     * @param {HTMLElement} card
-     * @param {{skills: object[], characters: object[]}} [likes]
-     * @returns {HTMLElement}
-     */
-    syncCardLikedState(card, likes = this.readLikes()) {
-        card.syncLikedState?.((kind, id) => Boolean(id) && likes[kind].some(item => item?.id === id));
-        return card;
-    }
     listenSideBarSearch() {
         const { sideBarSearch } = this;
         const input = sideBarSearch.querySelector("input");
@@ -668,7 +609,7 @@ mainPage.innerHTML=`
         const searchModeControllerButtons = sideBarSearch.querySelectorAll("[data-search-mode]");
         const searchConcerning = sideBarSearch.querySelector(".xy-ED-search-concerning");
         const searchConcerningSections = Array.from(searchConcerning.querySelectorAll(":scope>div>section"));
-        const [resultSection, likedSection] = searchConcerningSections;
+        const [resultSection] = searchConcerningSections;
         let type = "skill";
         const getSearchRequest = () => {
             const request = { keyWords: [], filter: [] };
@@ -701,49 +642,7 @@ mainPage.innerHTML=`
             .listenSiblings("pointerdown")
             .choose(searchModeControllerButtons[0])
         //
-        // ---------- 收藏夹（技能 / 武将）：启动还原 + 去重 + 落盘 ----------
-        //数据源 x19D6_editor.likes = { skills: 技能快照[], characters: 武将快照[] }，数组顺序即展示顺序（最新在前）。
-        //卡片数据存在访问器字段里（技能 skillInfo / 武将 characterInfo），所以收藏卡片一律用工厂方法重建，不能 cloneNode。
-        const likes = this.readLikes();
-        likes.skills = likes.skills.filter(item => item && item.id);
-        likes.characters = likes.characters.filter(item => item && item.id);
-        likes.skills.forEach(info => likedSection.append(this.createLikedCard("skills", info)));
-        likes.characters.forEach(info => likedSection.append(this.createLikedCard("characters", info)));
-        const kindOf = node => node?.tagName === "SKILL-INFO-CARD" ? "skills"
-            : node?.tagName === "CHARACTER-INFO-CARD" ? "characters" : null;
-        const idAttrOf = kind => kind === "skills" ? "skill-id" : "character-id";
-        const infoOf = (node, kind) => kind === "skills" ? node.skillInfo : node.characterInfo;
-        const findLikedCard = (kind, id) => Array.from(likedSection.children)
-            .find(node => node.getAttribute(idAttrOf(kind)) === id);
-        /** 收藏：已在收藏里就只把 ❤️ 点亮，不再加一张（去重） */
-        const addLiked = node => {
-            const kind = kindOf(node);
-            const info = kind && infoOf(node, kind);
-            if (!info?.id) return;
-            node.markLiked?.(true);
-            if (findLikedCard(kind, info.id)) return;
-            likedSection.prepend(this.createLikedCard(kind, info));
-            likes[kind].unshift(info);
-            this.saveLikes(likes);
-        };
-        /** 取消收藏：删卡片 + 删配置 + 把搜索结果里同一条的 ❤️ 熄掉 */
-        const dropLiked = (kind, id) => {
-            if (!kind || !id) return;
-            findLikedCard(kind, id)?.remove();
-            const index = likes[kind].findIndex(item => item?.id === id);
-            if (index >= 0) {
-                likes[kind].splice(index, 1);
-                this.saveLikes(likes);
-            }
-            Array.from(resultSection.children)
-                .find(node => node.getAttribute(idAttrOf(kind)) === id)
-                ?.markLiked?.(false);
-        };
-        const dropLikedFromNode = node => {
-            const kind = kindOf(node);
-            if (kind) dropLiked(kind, node.getAttribute(idAttrOf(kind)));
-        };
-        /** ⬅️：技能→往当前武将编辑器里放一份副本（收藏条目不消耗）；武将→打开该武将草稿 */
+        /** ⬅️：技能→往当前武将编辑器里放一份副本；武将→打开该武将草稿 */
         const useCard = node => {
             const characterId = node?.getAttribute?.("character-id");
             if (characterId) {
@@ -757,21 +656,15 @@ mainPage.innerHTML=`
             //带 usefor 的结果卡片由组件自己的 requestUseSkill 处理（那条路径是「把卡片移进技能栏」）；
             //但目标编辑器已关闭时，那条路径只会把卡片挪进一个看不见的编辑器（卡片凭空消失），这时由这里接管
             if (node.hasAttribute("usefor") && node.useForNode?.isConnected) return;
-            //技能可能已被删除（上个版本收藏下来的）
+            //技能可能已被删除（历史草稿引用的技能）
             if (!this.serveFor.data.checkSkillTags(skillId, [])) return;
             //落到「当前看得见的那个」武将编辑器；一个都没有就新建（否则这个箭头点了看不出反应）
             const editor = this.activeCharacterEditor || this.createCharacterEditor();
             this.activateMainPane(editor);
             editor.addSkill(skillId);
         };
-        //结果列表与收藏列表共用一套交互：武将卡内嵌的技能卡事件会冒泡到收藏列表，所以两边都要监听
-        [resultSection, likedSection].forEach(section => {
-            section.addEventListener("like", e => addLiked(e.detail?.from));
-            section.addEventListener("likeCancel", e => dropLikedFromNode(e.detail?.from));
-            section.addEventListener("useCardData", e => useCard(e.detail?.from));
-        });
-        //🗑️ 只在收藏列表里表示「取消收藏」（结果列表的 🗑️ 只是把该条从结果里移除）
-        likedSection.addEventListener("removeCard", e => dropLikedFromNode(e.detail?.from));
+        //搜索结果卡片的 ⬅️ 交给 useCard（🗑️ 只是把该条从搜索结果里移除，卡片自己处理）
+        resultSection.addEventListener("useCardData", e => useCard(e.detail?.from));
         const config = {
             childList: true,
             attributes: true,

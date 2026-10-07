@@ -1313,7 +1313,6 @@ shadow.innerHTML=`
             const node = arg;
             id = node.getAttribute("skill-id")
             node.removeAttribute("usable");
-            node.removeAttribute("likable");
             node.removeAttribute("id");
             node.removeAttribute("markWords");
             ul.append(node);
@@ -1396,9 +1395,7 @@ shadow.innerHTML=`
             if (!id || id === this.getData("id")) return;
             if ((perfectPairDataArea.dataset.perfectPair || "").split(" ").includes(id)) return;
             node.removeAttribute("usable");
-            node.removeAttribute("likable");
             node.removeAttribute("skill-usable");
-            node.removeAttribute("skill-likable");
             node.removeAttribute("id");
             node.removeAttribute("markWords");
             ul.append(node);

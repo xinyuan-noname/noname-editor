@@ -65,13 +65,8 @@ const nonameCardStyle = (() => {
         filter: grayscale(0%);
     }
 
-    .interact-bar>.use,
-    .interact-bar>.like {
+    .interact-bar>.use {
         filter: grayscale(80%);
-    }
-
-    .interact-bar>.like.liked {
-        filter: grayscale(0%);
     }
 
     [data-audio-src]::after{
@@ -126,7 +121,7 @@ class HTMLNonameInfoCardElement extends HTMLNonameFocusUIElement {
         const shadow = this.attachShadow({ mode: "open" });
         shadow.append(nonameCardFragment.cloneNode(true));
     }
-    static observedAttributes = ["likable", "removable", "usable", "usefor", "markwords"];
+    static observedAttributes = ["removable", "usable", "usefor", "markwords"];
     connectedCallback() {
         this.shadowRoot.addEventListener("pointerup", (e) => {
             const node = e.target;
@@ -155,25 +150,6 @@ class HTMLNonameInfoCardElement extends HTMLNonameFocusUIElement {
                 } else {
                     interactBar.querySelector(":scope>.use")?.remove?.();
                     this.removeAttribute("usefor");
-                }
-            }; break;
-            case "likable": {
-                if (newValue === "true") {
-                    const likeSpan = document.createElement("span");
-                    likeSpan.className = "like";
-                    likeSpan.textContent = "❤️"
-                    likeSpan.addEventListener("pointerdown", () => {
-                        if (!likeSpan.classList.contains("liked")) {
-                            likeSpan.classList.add("liked");
-                            this.triggerEvent("like");
-                        } else if (likeSpan.classList.contains("like")) {
-                            likeSpan.classList.remove("liked")
-                            this.triggerEvent("likeCancel");
-                        }
-                    })
-                    interactBar.insertBefore(likeSpan, interactBar.children[2]);
-                } else {
-                    interactBar.querySelector(":scope>.like")?.remove?.();
                 }
             }; break;
             case "removable": {
@@ -230,14 +206,11 @@ class HTMLNonameInfoCardElement extends HTMLNonameFocusUIElement {
         }
     }
     /**
-     * @param {"like"|"use"|"remove"} type 
+     * @param {"use"|"remove"} type
      */
     triggerInteractEvent(type) {
         const event = new Event("pointerdown")
         switch (type) {
-            case "like": {
-                this.shadowRoot.querySelector(".interact-bar>.like")?.dispatchEvent?.(event);
-            }; break;
             case "use": {
                 this.shadowRoot.querySelector(".interact-bar>.use")?.dispatchEvent?.(event);
             }; break;
@@ -245,47 +218,6 @@ class HTMLNonameInfoCardElement extends HTMLNonameFocusUIElement {
                 this.shadowRoot.querySelector(".interact-bar>.remove")?.dispatchEvent?.(event);
             }; break;
         }
-    }
-    /**
-     * 外部同步「已收藏」外观。❤️ 在 shadowRoot 里，外部拿不到，只能由组件代劳。
-     * @param {boolean} [liked]
-     * @returns {boolean} 本卡片上是否存在 ❤️
-     */
-    markLiked(liked = true) {
-        const like = this.shadowRoot.querySelector(".interact-bar>.like");
-        if (!like) return false;
-        like.classList.toggle("liked", Boolean(liked));
-        return true;
-    }
-    /**
-     * 外部把 ⬅️ 标成「可用」外观（去掉灰滤色 + cursor:not-allowed）。
-     * 结果列表靠 usefor 属性自动加 .allowed；收藏列表没有 usefor 目标节点，只能外部标记。
-     * @param {boolean} [usable]
-     * @returns {boolean} 本卡片上是否存在 ⬅️
-     */
-    markUsable(usable = true) {
-        const use = this.shadowRoot.querySelector(".interact-bar>.use");
-        if (!use) return false;
-        use.classList.toggle("allowed", Boolean(usable));
-        return true;
-    }
-    /**
-     * 用外部判定同步本卡片（武将卡连带内嵌技能卡）的 ❤️ 点亮状态。
-     * @param {(kind: "skills"|"characters", id: string) => boolean} isLiked
-     * @returns {this}
-     */
-    syncLikedState(isLiked) {
-        if (typeof isLiked !== "function") return this;
-        const characterId = this.getAttribute("character-id");
-        if (characterId) {
-            this.markLiked(isLiked("characters", characterId));
-            this.shadowRoot.querySelectorAll("skill-info-card").forEach(card => {
-                card.markLiked(isLiked("skills", card.getAttribute("skill-id")));
-            });
-        } else {
-            this.markLiked(isLiked("skills", this.getAttribute("skill-id")));
-        }
-        return this;
     }
 }
 class HTMLNonameSkillInfoCardElement extends HTMLNonameInfoCardElement {
@@ -336,14 +268,14 @@ class HTMLNonameSkillInfoCardElement extends HTMLNonameInfoCardElement {
     }
     /**
      * 卡片数据挂在 #skillInfo 上（不在属性里），浅拷贝 cloneNode 拿不到 ——
-     * 收藏列表等需要「复制一张已有卡片」的场景必须读回原始数据
+     * 需要「复制一张已有卡片」的场景必须走工厂方法读回原始数据（别 cloneNode）
      */
     get skillInfo() {
         return this.#skillInfo;
     }
 }
 class HTMLNonameCharacterInfoCardElement extends HTMLNonameInfoCardElement {
-    static observedAttributes = super.observedAttributes.concat("character-info", "skill-likable", "skill-usable")
+    static observedAttributes = super.observedAttributes.concat("character-info", "skill-usable")
     #characterInfo;
     constructor() {
         super();
@@ -397,16 +329,6 @@ class HTMLNonameCharacterInfoCardElement extends HTMLNonameInfoCardElement {
                 }
                 showInfo.appendChild(fragment);
             }
-        } else if (name === "skill-likable") {
-            if (newValue === "true") {
-                this.shadowRoot.querySelectorAll("skill-info-card").forEach(skillCard => {
-                    skillCard.setAttribute("likable", "true");
-                })
-            } else {
-                this.shadowRoot.querySelectorAll("skill-info-card").forEach(skillCard => {
-                    skillCard.setAttribute("likable", "false");
-                })
-            }
         } else if (name === "skill-usable") {
             if (newValue === "true") {
                 this.shadowRoot.querySelectorAll("skill-info-card").forEach(skillCard => {
@@ -430,7 +352,7 @@ class HTMLNonameCharacterInfoCardElement extends HTMLNonameInfoCardElement {
     }
     /**
      * 与 skillInfo 同理：数据在 #characterInfo 上，浅拷贝 cloneNode 拿不到，
-     * 收藏列表等「复制一张已有卡片」的场景必须读回原始数据
+     * 「复制一张已有卡片」的场景必须走工厂方法读回原始数据（别 cloneNode）
      */
     get characterInfo() {
         return this.#characterInfo;
