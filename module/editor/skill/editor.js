@@ -41,7 +41,7 @@ import { EditorOrganize } from "./editor/organize.mjs";
 import { choiceMode } from "./editor/choiceMode.mjs";
 import { EditorDataAnalyze } from "./editor/dataAnalyze.mjs"
 const DEFAULT_EVENT = lib.config.touchscreen ? 'touchend' : 'click';
-if (!lib.config.x19D6_editorConfig) lib.config.x19D6_editorConfig = {};
+if (!lib.config.x19D6_editorSkillConfig) lib.config.x19D6_editorSkillConfig = {};
 lib.x19D6_class = {
 	player: ['_status.currentPhase', 'target', 'game.me',
 		'player', 'trigger.player', 'trigger.source', 'trigger.target',
@@ -589,7 +589,7 @@ game.x19D6_skillEditor = function (readCache = true, father) {
 
 	back.changableSKillKey = ["variable_content", "variable_filter"]
 	back.storeCache = function () {
-		if (lib.config.x19D6_editorCache) {
+		if (lib.config.x19D6_editorSkillCache) {
 			const cache = {
 				skill: get.copy(back.skill),
 				ele: {}
@@ -608,20 +608,20 @@ game.x19D6_skillEditor = function (readCache = true, father) {
 			for (const itemName of listEle) {
 				cache.ele[itemName] = back.ele[itemName].value;
 			};
-			game.saveConfig("x19D6_editorCache", cache)
+			game.saveConfig("x19D6_editorSkillCache", cache)
 		}
 	}
 	back.clearCache = function () {
-		lib.config.x19D6_editorCache = null;
-		game.saveConfig("x19D6_editorCache", lib.config.x19D6_editorCache)
+		lib.config.x19D6_editorSkillCache = null;
+		game.saveConfig("x19D6_editorSkillCache", lib.config.x19D6_editorSkillCache)
 	}
 	back.loadLastCache = function () {
-		if (lib.config.x19D6_editorCache && typeof lib.config.x19D6_editorCache === "object") {
-			for (const k in lib.config.x19D6_editorCache.ele) {
-				back.ele[k].value = lib.config.x19D6_editorCache.ele[k];
+		if (lib.config.x19D6_editorSkillCache && typeof lib.config.x19D6_editorSkillCache === "object") {
+			for (const k in lib.config.x19D6_editorSkillCache.ele) {
+				back.ele[k].value = lib.config.x19D6_editorSkillCache.ele[k];
 			};
-			for (const k in lib.config.x19D6_editorCache.skill) {
-				back.skill[k] = lib.config.x19D6_editorCache.skill[k];
+			for (const k in lib.config.x19D6_editorSkillCache.skill) {
+				back.skill[k] = lib.config.x19D6_editorSkillCache.skill[k];
 			}
 			back.organize()
 		}
@@ -629,7 +629,7 @@ game.x19D6_skillEditor = function (readCache = true, father) {
 
 	close.addEventListener(DEFAULT_EVENT, () => {
 		if (!readCache) return;
-		if (lib.config.x19D6_editorCache && (typeof lib.config.x19D6_editorCache === "object" || lib.config.x19D6_editorCache === true)) {
+		if (lib.config.x19D6_editorSkillCache && (typeof lib.config.x19D6_editorSkillCache === "object" || lib.config.x19D6_editorSkillCache === true)) {
 			back.storeCache();
 		}
 	})
@@ -811,33 +811,33 @@ game.x19D6_skillEditor = function (readCache = true, father) {
 		.addClass("hover-showChildren")
 		.listen(DEFAULT_EVENT, async e => {
 			if (e.target.innerText === "📓") {
-				if (lib.config.x19D6_editorCache) {
+				if (lib.config.x19D6_editorSkillCache) {
 					await game.x19D6_create.promise.alert("你已经处于缓存状态中！");
 					return;
 				}
 				const { bool } = await game.x19D6_create.promise.confirm("是否缓存？当你关闭时自动保存数据，这些数据将保存至你复制此技能时。");
 				if (bool) {
-					lib.config.x19D6_editorCache = true;
+					lib.config.x19D6_editorSkillCache = true;
 				}
 			} else if (e.target.innerText === "⚙️") {
-				if (!lib.config.x19D6_editorConfig) lib.config.x19D6_editorConfig = {}
+				if (!lib.config.x19D6_editorSkillConfig) lib.config.x19D6_editorSkillConfig = {}
 				const { result, bool, changedItems } = await game.x19D6_create.promise.setConfig(
 					"技能编辑器目前配置如下，可以进行修改。",
 					{
 						"autoCache": "自动缓存"
 					},
-					lib.config.x19D6_editorConfig
+					lib.config.x19D6_editorSkillConfig
 				);
 				if (bool) {
-					game.saveConfig("x19D6_editorConfig", result);
-					if (changedItems.includes("autoCache") && result.autoCache === true && !lib.config.x19D6_editorCache) {
-						lib.config.x19D6_editorCache = true;
+					game.saveConfig("x19D6_editorSkillConfig", result);
+					if (changedItems.includes("autoCache") && result.autoCache === true && !lib.config.x19D6_editorSkillCache) {
+						lib.config.x19D6_editorSkillCache = true;
 					}
 				}
 			} else if (e.target.innerText === "🆕") {
 				const { bool } = await game.x19D6_create.promise.alert("是否重置编辑器并开启一个新的技能？");
 				if (bool) {
-					if (lib.config.x19D6_editorCache) lib.config.x19D6_editorCache = true;
+					if (lib.config.x19D6_editorSkillCache) lib.config.x19D6_editorSkillCache = true;
 					game.x19D6_skillEditor();
 				}
 			}
@@ -2440,10 +2440,10 @@ game.x19D6_skillEditor = function (readCache = true, father) {
 	back.contentDoms = [contentContainer1, contentContainer2]
 	back.viewAsDoms = [chooseSeter]
 	back.choose = [choosePage];
-	if (lib.config.x19D6_editorCache && typeof lib.config.x19D6_editorCache === "object" && readCache) {
+	if (lib.config.x19D6_editorSkillCache && typeof lib.config.x19D6_editorSkillCache === "object" && readCache) {
 		back.loadLastCache();
-	} else if (lib.config.x19D6_editorConfig && lib.config.x19D6_editorConfig.autoCache && readCache) {
-		lib.config.x19D6_editorCache = true;
+	} else if (lib.config.x19D6_editorSkillConfig && lib.config.x19D6_editorSkillConfig.autoCache && readCache) {
+		lib.config.x19D6_editorSkillCache = true;
 		back.organize();
 	} else {
 		back.organize();
