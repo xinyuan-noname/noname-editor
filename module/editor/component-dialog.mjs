@@ -293,6 +293,140 @@ shadow.innerHTML=`
                             this.#finishReslove(Number(input.value));
                         });
                     }; break;
+                    case "search-select": {
+                        let map = {};
+                        try {
+                            map = JSON.parse(this.getAttribute("payload") || "{}");
+                        } catch (err) {
+                            console.error("search-select 的 payload 不是合法 JSON", err);
+                        }
+                        const single = this.hasAttribute("single");
+                        const chosen = new Set();
+                        const style = document.createElement("style");
+                        style.textContent = `
+.search-select-list { list-style: none; margin: 4px 0 0; padding: 0; max-height: 55%; overflow: auto; text-align: left; }
+.search-select-list>li { padding: 3px 6px; border-radius: 3px; cursor: pointer; font-size: 0.9em; }
+.search-select-list>li:hover { background: rgba(0, 0, 0, 0.12); }
+.search-select-list>li.chosen { background: #cfe3ff; }
+.search-select-list>li.empty { opacity: 0.6; cursor: default; }
+`;
+                        this.appendTempStyle(style);
+                        const { container, input } = this.appendInput("搜索");
+                        input.id = "search-select";
+                        const list = document.createElement("ul");
+                        list.className = "search-select-list";
+                        container.after(list);
+                        const render = (keyword = "") => {
+                            list.innerHTML = "";
+                            const keys = Object.keys(map).filter(key => {
+                                if (!keyword) return true;
+                                return String(map[key]).includes(keyword) || String(key).includes(keyword);
+                            }).slice(0, 200);
+                            keys.forEach(key => {
+                                const li = document.createElement("li");
+                                li.dataset.key = key;
+                                li.textContent = map[key];
+                                if (chosen.has(key)) li.classList.add("chosen");
+                                list.appendChild(li);
+                            });
+                            if (!keys.length) {
+                                const li = document.createElement("li");
+                                li.className = "empty";
+                                li.textContent = "无匹配项";
+                                list.appendChild(li);
+                            }
+                        };
+                        input.addEventListener("input", () => render(input.value.trim()));
+                        list.addEventListener("click", e => {
+                            const li = e.target.closest("li[data-key]");
+                            if (!li) return;
+                            const key = li.dataset.key;
+                            //单选：点选即出结果
+                            if (single) {
+                                this.#finishReslove(key);
+                                return;
+                            }
+                            if (chosen.has(key)) {
+                                chosen.delete(key);
+                                li.classList.remove("chosen");
+                            } else {
+                                chosen.add(key);
+                                li.classList.add("chosen");
+                            }
+                        });
+                        render();
+                        this.#whenEnd(() => {
+                            this.#finishReslove(single ? null : Array.from(chosen));
+                        });
+                    }; break;
+                    case "list-manage": {
+                        let map = {};
+                        try {
+                            map = JSON.parse(this.getAttribute("payload") || "{}");
+                        } catch (err) {
+                            console.error("list-manage 的 payload 不是合法 JSON", err);
+                        }
+                        const removed = [];
+                        const seeText = this.getAttribute("see-text") || "查看";
+                        const deleteText = this.getAttribute("delete-text") || "删除";
+                        const style = document.createElement("style");
+                        style.textContent = `
+.list-manage-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-bottom: 1px solid rgba(0, 0, 0, 0.12); font-size: 0.9em; text-align: left; }
+.list-manage-row>.desc { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-manage-row>.detail { flex-basis: 100%; opacity: 0.8; font-size: 0.9em; padding: 2px 0; }
+.list-manage-row.expanded { flex-wrap: wrap; }
+.list-manage-row.marked>.desc { text-decoration: line-through; opacity: 0.5; }
+button { font: inherit; padding: 1px 6px; border-radius: 3px; border: 1px solid #888; background: #e6e6e6; cursor: pointer; }
+`;
+                        this.appendTempStyle(style);
+                        const { form, container } = this.appendInput();
+                        container.remove();
+                        Object.keys(map).forEach(key => {
+                            const item = map[key] || {};
+                            const row = document.createElement("div");
+                            row.className = "list-manage-row";
+                            row.dataset.key = key;
+                            const desc = document.createElement("span");
+                            desc.className = "desc";
+                            desc.textContent = key;
+                            const seeButton = document.createElement("button");
+                            seeButton.type = "button";
+                            seeButton.textContent = seeText;
+                            seeButton.addEventListener("click", () => {
+                                const expanded = row.classList.toggle("expanded");
+                                seeButton.textContent = expanded ? "收起" : seeText;
+                                if (!expanded) return;
+                                let detail = row.querySelector(".detail");
+                                if (!detail) {
+                                    detail = document.createElement("div");
+                                    detail.className = "detail";
+                                    row.appendChild(detail);
+                                }
+                                //与原有 seeDelete 行为一致：详情按 HTML 渲染
+                                detail.innerHTML = item.desc || item.link || "（无详情）";
+                            });
+                            const delButton = document.createElement("button");
+                            delButton.type = "button";
+                            delButton.textContent = deleteText;
+                            delButton.addEventListener("click", () => {
+                                const index = removed.indexOf(key);
+                                if (index >= 0) {
+                                    removed.splice(index, 1);
+                                    row.classList.remove("marked");
+                                    delButton.textContent = deleteText;
+                                } else {
+                                    removed.push(key);
+                                    row.classList.add("marked");
+                                    delButton.textContent = "撤销";
+                                }
+                            });
+                            row.append(desc, seeButton, delButton);
+                            form.append(row);
+                        });
+                        this.#whenEnd(() => {
+                            this.#finishReslove(removed.slice());
+                        });
+                    }; break;
                     case "switch-list": {
                         let map = {};
                         try {
