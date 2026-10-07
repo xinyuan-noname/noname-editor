@@ -293,6 +293,13 @@ class HTMLNonameSkillInfoCardElement extends HTMLNonameInfoCardElement {
         this.#skillInfo = val;
         this.setAttribute("skill-info", Boolean(val));
     }
+    /**
+     * 卡片数据挂在 #skillInfo 上（不在属性里），浅拷贝 cloneNode 拿不到 ——
+     * 收藏列表等需要「复制一张已有卡片」的场景必须读回原始数据
+     */
+    get skillInfo() {
+        return this.#skillInfo;
+    }
 }
 class HTMLNonameCharacterInfoCardElement extends HTMLNonameInfoCardElement {
     static observedAttributes = super.observedAttributes.concat("character-info", "skill-likable", "skill-usable")

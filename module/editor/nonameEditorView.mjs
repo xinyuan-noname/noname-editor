@@ -564,9 +564,14 @@ mainPage.innerHTML=`
         resultSection.addEventListener("like", e => {
             const node = e.detail?.from;
             if (node?.tagName === "SKILL-INFO-CARD") {
-                const appendNode = node.cloneNode();
-                appendNode.setAttribute("likable", false);
-                appendNode.setAttribute("removable", true);
+                //注意：不能 cloneNode —— 技能数据挂在 skillInfo 这个 JS 访问器字段上（不在属性里），
+                //浅拷贝出的卡片 #skillInfo 是 undefined，只会渲染成「已收藏」里的空黑条
+                if (!node.skillInfo) return;
+                const appendNode = this.createSearchSkillListItem(node.skillInfo, {
+                    noLike: true,
+                    highlight: [],
+                    useFor: node.useForNode
+                });
                 likedSection.prepend(appendNode);
             } else if (node.tagName === "") {
             }
