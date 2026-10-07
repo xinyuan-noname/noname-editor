@@ -12,14 +12,18 @@ import { lib, game, ui, get, ai, _status } from "../../../../../../noname.js";
  * 接线方式：在内核首次载入时调用一次 installDialogAdapter()；
  * 若要回退，注释掉那一行即可。
  *
- * 已实现（语义最简单、调用点最多的 4 个，占外部调用 11/24）：
+ * 已实现（占外部调用 24 处中的 22 处）：
  *   alert(message, callback)
  *   confirm(message, func1, func2)
  *   promise.alert(message)
  *   promise.confirm(message)
+ *   range(title, min, max, value, callback, changeValue)
+ *   chooseAnswer(title, choices, single, callback)
+ *   multiprompt(callback) + appendPrompt(...)
+ *   promise.setConfig(title, map, configObject)
  *
  * 待实现（见计划文档的分步顺序）：
- *   range / chooseAnswer / multiprompt(→multi-input) / seeDelete(→list-manage) / promise.setConfig(→switch-list)
+ *   seeDelete(→list-manage)：语义与私有层差别较大（私有实现会直接移除行并回调），需单独处理
  */
 
 /** 对话框的挂载父元素 */
@@ -108,6 +112,114 @@ export function installDialogAdapter(target = game.x19D6_create) {
         return promise.then(result => toEventResult(result, Boolean(result && result.bool === true)));
     };
 
+    /**
+     * 数值滑条：range(title, min, max, value, callback, changeValue)
+     * 回调的 this.result 为数值（与私有层一致）
+     */
+    target.range = function (title, min, max, value = 0, callback, changeValue) {
+        if (isBaned()) return null;
+        const dialog = document.createElement("noname-dialog");
+        if (title) dialog.setAttribute("headline", title);
+        dialog.setAttribute("min", min);
+        dialog.setAttribute("max", max);
+        dialog.setAttribute("value", value);
+        dialog.setAttribute("type", "range");
+        getHost().appendChild(dialog);
+        const input = dialog.shadowRoot.querySelector('input[type="range"]');
+        if (input && typeof changeValue === "function") {
+            input.addEventListener("input", e => {
+                const fake = { value: Number(e.target.value), prompt: dialog };
+                changeValue.call(fake);
+            });
+        }
+        dialog.wait().then(result => {
+            const num = Number(result);
+            dialog.remove();
+            const fake = { result: num, value: num, prompt: dialog };
+            if (typeof callback === "function") callback.call(fake);
+        });
+        return dialog;
+    };
+
+    /**
+     * 选项列表：chooseAnswer(title, choices, single, callback)
+     * 回调的 this.resultIndex 为所选下标（与私有层一致）
+     */
+    target.chooseAnswer = function (title, choices, single, callback) {
+        if (isBaned()) return null;
+        const list = Array.isArray(choices) ? choices : [];
+        const payload = {};
+        list.forEach((text, index) => (payload[String(index)] = text));
+        const dialog = document.createElement("noname-dialog");
+        if (title) dialog.setAttribute("headline", title);
+        dialog.setAttribute("payload", JSON.stringify(payload));
+        if (single) dialog.setAttribute("single", true);
+        dialog.setAttribute("type", "search-select");
+        getHost().appendChild(dialog);
+        dialog.wait().then(key => {
+            dialog.remove();
+            const index = Number(key);
+            const fake = {
+                result: list[index],
+                resultIndex: index,
+                chosen: list[index]
+            };
+            if (typeof callback === "function") callback.call(fake);
+        });
+        return dialog;
+    };
+
+    /**
+     * 多字段输入：multiprompt(callback) 搭配 .appendPrompt(title, defaultValue, placeholder)
+     * 回调的 this.resultList 为按顺序排列的输入值数组（与私有层一致）
+     */
+    target.multiprompt = function (callback) {
+        if (isBaned()) return null;
+        const fields = [];
+        const api = {
+            appendPrompt(title, defaultValue, placeholder) {
+                fields.push({ label: title, value: defaultValue, placeholder });
+                return api;
+            },
+            appendInput(title, config = {}) {
+                fields.push({ label: title, value: config.value, placeholder: config.placeholder, type: config.type });
+                return api;
+            },
+            set dialog(value) { },
+            get dialog() { return api; }
+        };
+        //链式 appendPrompt 是同步调用，用微任务在其之后再真正弹窗
+        Promise.resolve().then(() => {
+            const { promise } = popDialog("multi-input", { payload: fields });
+            promise.then(result => {
+                const resultList = Array.isArray(result) ? result : [];
+                if (typeof callback === "function") callback.call({ resultList, ...api }, resultList);
+            });
+        });
+        return api;
+    };
+
+    /**
+     * 开关列表：promise.setConfig(title, map, configObject, { cost, exclude })
+     * 返回 { result, bool, changedItems }（与私有层 promise.setConfig 一致）
+     */
+    promiseApi.setConfig = function (title, map, configObject = {}, options = {}) {
+        const payload = {};
+        Object.keys(map || {}).forEach(key => {
+            payload[key] = { label: map[key], checked: Boolean(configObject[key]) };
+        });
+        if (isBaned()) return Promise.resolve({ result: { ...configObject }, bool: false, changedItems: [] });
+        const { promise } = popDialog("switch-list", { headline: title, payload });
+        return promise.then(state => {
+            const result = { ...configObject };
+            const changedItems = [];
+            Object.keys(state).forEach(key => {
+                result[key] = state[key];
+                if (Boolean(configObject[key]) !== state[key]) changedItems.push(key);
+            });
+            return { result, bool: true, changedItems };
+        });
+    };
     return function restore() {
         target.alert = backup.alert;
         target.confirm = backup.confirm;
