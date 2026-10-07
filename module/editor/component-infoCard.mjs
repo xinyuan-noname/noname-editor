@@ -275,7 +275,7 @@ class HTMLNonameSkillInfoCardElement extends HTMLNonameInfoCardElement {
     }
 }
 class HTMLNonameCharacterInfoCardElement extends HTMLNonameInfoCardElement {
-    static observedAttributes = super.observedAttributes.concat("character-info", "skill-usable")
+    static observedAttributes = super.observedAttributes.concat("character-info", "skill-usable", "compact")
     #characterInfo;
     constructor() {
         super();
@@ -284,51 +284,8 @@ class HTMLNonameCharacterInfoCardElement extends HTMLNonameInfoCardElement {
         super.connectedCallback();
     }
     attributeChangedCallback(name, oldValue, newValue) {
-        if (name === "character-info") {
-            const showInfo = this.shadowRoot.querySelector(".show-info");
-            showInfo.replaceChildren();
-            const characterInfo = this.#characterInfo;
-            if (characterInfo) {
-                const fragment = document.createDocumentFragment();
-                const mainContentDiv = document.createElement('div');
-                mainContentDiv.className = 'main-content';
-                let innerHTML = "";
-                innerHTML += `${characterInfo.name || "未命名武将"}(${characterInfo.id || ""})</br>`;
-                innerHTML += `武将包：${characterInfo.packageName || "无所属包"}</br>`;
-                innerHTML += `分包：${characterInfo.characterSortName || "未分包"}</br>`;;
-                if (characterInfo.sex) innerHTML += `性别：${characterInfo.sex}</br>`;
-                if (characterInfo.group) innerHTML += `势力：${characterInfo.group}</br>`;
-                if (characterInfo.hp) innerHTML += `体力：${characterInfo.hp}/${characterInfo.maxHp || characterInfo.hp}</br>`;
-                if (characterInfo.hujia) innerHTML += `护甲：${characterInfo.hujia}</br>`;
-                if (characterInfo.clans) innerHTML += `宗族：${characterInfo.clans}</br>`;
-                innerHTML += `技能：</br>${characterInfo?.skillList?.join?.("</br>") || "无"}`;
-                mainContentDiv.innerHTML = innerHTML;
-                mainContentDiv.setBackground(characterInfo.id, "character");
-                if (characterInfo.dieAudios?.length) {
-                    const audioUl = document.createElement('ul');
-                    characterInfo.dieAudios.forEach(audio => {
-                        const li = document.createElement('li');
-                        li.dataset.audioListItem = true;
-                        const span = document.createElement('span');
-                        span.dataset.audioSrc = audio.file
-                        li.append(audio.text, span);
-                        audioUl.appendChild(li);
-                    });
-                    mainContentDiv.appendChild(audioUl);
-                }
-                fragment.appendChild(mainContentDiv);
-                if (characterInfo.skills) {
-                    const skillsUl = document.createElement('ul');
-                    characterInfo.skills.forEach(skillInfoItem => {
-                        const skillCard = document.createElement('skill-info-card');
-                        skillCard.setAttribute('skill-id', skillInfoItem.id);
-                        skillCard.skillInfo = skillInfoItem;
-                        skillsUl.appendChild(skillCard);
-                    });
-                    fragment.appendChild(skillsUl);
-                }
-                showInfo.appendChild(fragment);
-            }
+        if (name === "character-info" || name === "compact") {
+            this.#renderCharacterInfo();
         } else if (name === "skill-usable") {
             if (newValue === "true") {
                 this.shadowRoot.querySelectorAll("skill-info-card").forEach(skillCard => {
@@ -342,6 +299,66 @@ class HTMLNonameCharacterInfoCardElement extends HTMLNonameInfoCardElement {
         } else {
             super.attributeChangedCallback(name, oldValue, newValue);
         }
+    }
+    /**
+     * 渲染武将卡。
+     * `compact` 形态只保留摘要（姓名(id) / 武将包·分包 / 技能）：整张卡（setBackground 立绘 +
+     * 死亡语音 + 内嵌技能卡）塞进列表会撑满整个屏幕，珠联璧合这类「列表条目」用它。
+     */
+    #renderCharacterInfo() {
+        const showInfo = this.shadowRoot.querySelector(".show-info");
+        showInfo.replaceChildren();
+        const characterInfo = this.#characterInfo;
+        if (!characterInfo) return;
+        const compact = this.hasAttribute("compact");
+        const fragment = document.createDocumentFragment();
+        const mainContentDiv = document.createElement('div');
+        mainContentDiv.className = 'main-content';
+        let innerHTML = "";
+        innerHTML += `${characterInfo.name || "未命名武将"}(${characterInfo.id || ""})</br>`;
+        if (compact) {
+            if (characterInfo.packageName || characterInfo.characterSortName) {
+                innerHTML += `武将包：${characterInfo.packageName || "无所属包"} / ${characterInfo.characterSortName || "未分包"}</br>`;
+            }
+            innerHTML += `技能：${characterInfo?.skillList?.join?.("、") || "无"}`;
+        } else {
+            innerHTML += `武将包：${characterInfo.packageName || "无所属包"}</br>`;
+            innerHTML += `分包：${characterInfo.characterSortName || "未分包"}</br>`;
+            if (characterInfo.sex) innerHTML += `性别：${characterInfo.sex}</br>`;
+            if (characterInfo.group) innerHTML += `势力：${characterInfo.group}</br>`;
+            if (characterInfo.hp) innerHTML += `体力：${characterInfo.hp}/${characterInfo.maxHp || characterInfo.hp}</br>`;
+            if (characterInfo.hujia) innerHTML += `护甲：${characterInfo.hujia}</br>`;
+            if (characterInfo.clans) innerHTML += `宗族：${characterInfo.clans}</br>`;
+            innerHTML += `技能：</br>${characterInfo?.skillList?.join?.("</br>") || "无"}`;
+        }
+        mainContentDiv.innerHTML = innerHTML;
+        if (!compact) {
+            mainContentDiv.setBackground(characterInfo.id, "character");
+            if (characterInfo.dieAudios?.length) {
+                const audioUl = document.createElement('ul');
+                characterInfo.dieAudios.forEach(audio => {
+                    const li = document.createElement('li');
+                    li.dataset.audioListItem = true;
+                    const span = document.createElement('span');
+                    span.dataset.audioSrc = audio.file
+                    li.append(audio.text, span);
+                    audioUl.appendChild(li);
+                });
+                mainContentDiv.appendChild(audioUl);
+            }
+        }
+        fragment.appendChild(mainContentDiv);
+        if (!compact && characterInfo.skills) {
+            const skillsUl = document.createElement('ul');
+            characterInfo.skills.forEach(skillInfoItem => {
+                const skillCard = document.createElement('skill-info-card');
+                skillCard.setAttribute('skill-id', skillInfoItem.id);
+                skillCard.skillInfo = skillInfoItem;
+                skillsUl.appendChild(skillCard);
+            });
+            fragment.appendChild(skillsUl);
+        }
+        showInfo.appendChild(fragment);
     }
     /**
      * @param {any} val

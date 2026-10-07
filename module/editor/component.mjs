@@ -1385,31 +1385,38 @@ shadow.innerHTML=`
             this.removeSkill(node)
         })
     }
+    /**
+     * 珠联璧合列表专用的**紧凑武将卡**（组件的 `compact` 形态）。
+     * 直接把搜索卡片搬进列表，会把「整张卡」（立绘 + 死亡语音 + 内嵌技能卡）一起带进来，撑满右栏。
+     * @param {string} id
+     * @param {object} [snapshot] 来源卡片的 characterInfo（草稿 id 不在 lib 里时兜底）
+     * @returns {HTMLElement}
+     */
+    createPerfectPairCard(id, snapshot) {
+        const card = document.createElement("character-info-card");
+        card.setAttribute("character-id", id);
+        card.setAttribute("compact", true);
+        card.setAttribute("removable", true);
+        card.characterInfo = this.infoQuery("character", { characterId: id })
+            || snapshot
+            || { id, name: this.textQuery("characterTranslation", { attr: "name", text: id }) || id };
+        return card;
+    }
     addPerfectPairCharacter(arg) {
         const perfectPairDataArea = this.getDataAreaDom("perfectPair");
         const ul = perfectPairDataArea.querySelector("ul");
-        let id;
+        let id, snapshot;
         if (arg instanceof HTMLElement && arg.tagName === "CHARACTER-INFO-CARD") {
-            const node = arg;
-            id = node.getAttribute("character-id");
-            if (!id || id === this.getData("id")) return;
-            if ((perfectPairDataArea.dataset.perfectPair || "").split(" ").includes(id)) return;
-            node.removeAttribute("usable");
-            node.removeAttribute("skill-usable");
-            node.removeAttribute("id");
-            node.removeAttribute("markWords");
-            ul.append(node);
+            //搜索/侧栏卡片带 characterInfo 访问器字段，作为草稿 id 不在 lib 里时的兜底
+            id = arg.getAttribute("character-id");
+            snapshot = arg.characterInfo;
         } else if (typeof arg === "string" && arg.trim().length !== 0) {
             id = arg;
-            if (id === this.getData("id")) return;
-            if ((perfectPairDataArea.dataset.perfectPair || "").split(" ").includes(id)) return;
-            const nowCharacterInfo = this.infoQuery("character", { characterId: id });
-            const characterCard = document.createElement("character-info-card");
-            characterCard.setAttribute("character-id", id);
-            characterCard.characterInfo = nowCharacterInfo || { id, name: this.textQuery("characterTranslation", { attr: "name", text: id }) || id };
-            characterCard.setAttribute("removable", true);
-            ul.append(characterCard);
         } else return;
+        if (!id || id === this.getData("id")) return;
+        if ((perfectPairDataArea.dataset.perfectPair || "").split(" ").includes(id)) return;
+        //一律重建紧凑卡，不搬运原节点（否则 usefor/拖拽态与整张卡的渲染会一起被搬进来）
+        ul.append(this.createPerfectPairCard(id, snapshot));
         this.changeData("perfectPair", id, { mode: "append" });
     }
     removePerfectPairCharacter(arg) {
@@ -1431,14 +1438,7 @@ shadow.innerHTML=`
         const ul = perfectPairDataArea.querySelector("ul");
         ul.innerHTML = "";
         const ids = (perfectPairDataArea.dataset.perfectPair || "").split(" ").filter(Boolean);
-        ids.forEach(id => {
-            const info = this.infoQuery("character", { characterId: id });
-            const characterCard = document.createElement("character-info-card");
-            characterCard.setAttribute("character-id", id);
-            characterCard.characterInfo = info || { id, name: this.textQuery("characterTranslation", { attr: "name", text: id }) || id };
-            characterCard.setAttribute("removable", true);
-            ul.append(characterCard);
-        });
+        ids.forEach(id => ul.append(this.createPerfectPairCard(id)));
     }
     #listenPerfectPair() {
         const perfectPairDataArea = this.getDataAreaDom("perfectPair");

@@ -988,6 +988,20 @@ div[contenteditable="true"] {
     font-size: 16px;
 }
 
+/* 珠联璧合：紧凑武将卡（组件的 compact 形态）+ 列表限高，避免整张卡撑满右栏 */
+[data-perfect-pair] section>ul {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 10em;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+[data-perfect-pair] character-info-card {
+    font-size: 16px;
+}
+
 [data-more] ul {
     display: flex;
     flex-wrap: wrap;
