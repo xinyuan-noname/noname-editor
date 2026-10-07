@@ -1023,7 +1023,7 @@ game.x19D6_create.seeDelete = function (map, seeStr = "查看", deleteStr = "删
     const promises = [];
     function addLi(attr, desc) {
         const container = element('li')
-            .setAttribute('x19D6_id', attr)
+            .dataset.x19D6Id = attr
             .block()
             .style({
                 position: 'relative',
@@ -1200,7 +1200,7 @@ game.x19D6_create.promise = {
         if (expandingSee) {
             seeCallback = function (expandingSee) {
                 if (this.innerText === "查看") {
-                    const id = this.container.dataset.x19D6_id;
+                    const id = this.container.dataset.x19D6Id;
                     this.descEle.innerHTML += `<span>${expandingSee(id)}</span>`
                     this.innerText = "收起"
                     this.seeExpanding = true;

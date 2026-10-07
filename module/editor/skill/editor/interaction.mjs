@@ -272,7 +272,7 @@ export class EditorInteraction {
             '使用',
             '隐藏',
             function () {
-                const id = this.container.dataset.x19D6_id;
+                const id = this.container.dataset.x19D6Id;
                 EditorInteraction.insertPhrase(node, "\n");
                 EditorInteraction.insertPhrase(node, id);
                 EditorInteraction.insertPhrase(node, "\n");

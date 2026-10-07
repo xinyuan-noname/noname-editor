@@ -96,3 +96,19 @@ skill/interact/dialog-adapter.mjs    ← 新建
 - 内核大量使用**回调式**接口（`alert(msg, cb)`），而 `<noname-dialog>` 是 **Promise** 式；适配器必须把回调转成 `wait().then(...)`，且要保证回调时序与原来一致（原来部分回调在对话框关闭动画后触发）。
 - `seeDelete` 原先会**直接把行从 DOM 移除**并回调；`list-manage` 改为「标记删除 + 确认后返回数组」，语义不同，适配器需要按原语义（删除即移除行、可撤销）包一层。
 - 私有层有 `ban` / `baned` 全局开关（17 处自调用，用于「禁止弹出对话框」的场景），适配器需要保留这个开关语义。
+## 六、关于 `seeDelete` 与一处既存 bug（已修）
+
+私有 `seeDelete` 的行内按钮上挂了 5 个属性供回调使用（`dialog` / `descEle` / `container` / `yesButton` / `id`），
+回调以 **按钮元素作为 `this`**，且「删除」会**当场把整行从 DOM 移除**（除非 `notAllowRemove`）。
+这与通用 type 的设计取向不同，因此它**不适合**直接映射到 `list-manage`：
+适配器若要做，必须自己构造这些按钮并挂属性，而不是复用 `type`。
+
+**同时发现并已修复一处既存 bug**：写入端用
+`element(...).setAttribute('x19D6_id', attr)`（非 `data-*` 属性），
+而 4 个调用点全部读 `this.container.dataset.x19D6_id`。
+非 `data-*` 属性不会进入 `dataset`，且 `dataset` 的键名不可能包含下划线，
+因此这 4 处的 `id` **恒为 `undefined`**：
+`lib.translate[undefined + '_info']` 取不到翻译、`yesButton.result.push(undefined)` 也拿不到真实 id。
+即「子技能 / 技能组」的查看与删除在修复前是静默失效的。
+
+修法：写入端改 `container.dataset.x19D6Id = attr`，读取端 4 处改为 `dataset.x19D6Id`。

@@ -3647,7 +3647,7 @@ export class NonameCN {
                 '查看',
                 '删除',
                 function () {
-                    const id = this.container.dataset.x19D6_id;
+                    const id = this.container.dataset.x19D6Id;
                     back.cachePrimarySkill();
                     back.readSubskillCache(id);
                     this.yesButton.click();
@@ -3662,7 +3662,7 @@ export class NonameCN {
                     back.organize()
                 },
                 function () {
-                    const id = this.container.dataset.x19D6_id
+                    const id = this.container.dataset.x19D6Id
                     delete back.skill.subSkill[id]
                     back.organize()
                 },
@@ -3696,7 +3696,7 @@ export class NonameCN {
                 '添加',
                 function () {
                     if (this.innerText === "查看") {
-                        const id = this.container.dataset.x19D6_id
+                        const id = this.container.dataset.x19D6Id
                         this.descEle.innerHTML += `<span>${lib.translate[id + '_info']}</span>`
                         this.innerText = "收起"
                         this.seeExpanding = true;
@@ -3712,7 +3712,7 @@ export class NonameCN {
                     }
                 },
                 function () {
-                    const id = this.container.dataset.x19D6_id
+                    const id = this.container.dataset.x19D6Id
                     this.yesButton.result.push(id)
                 },
                 function () {
@@ -3732,7 +3732,7 @@ export class NonameCN {
                 '删除',
                 function () {
                     if (this.innerText === "查看") {
-                        const id = this.container.dataset.x19D6_id
+                        const id = this.container.dataset.x19D6Id
                         this.descEle.innerHTML += `<span>${lib.translate[id + '_info']}</span>`
                         this.innerText = "收起"
                         this.seeExpanding = true;
@@ -3747,7 +3747,7 @@ export class NonameCN {
                     }
                 },
                 function () {
-                    const id = this.container.dataset.x19D6_id
+                    const id = this.container.dataset.x19D6Id
                     this.yesButton.result.remove(id)
                 },
                 function () {
