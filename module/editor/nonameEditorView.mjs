@@ -703,53 +703,71 @@ mainPage.innerHTML=`
         if (corrected) this.loadSideBarCharacter();
     }
 
+
     /**
-     * 生成「落盘区块」：把工作区登记表（武将包 / 分包）与**所有武将草稿**写成对 `lib` 的注册代码。
-     * 幂等——靠首尾标记整块替换；引擎只加载扩展入口及其 import 图，所以必须写进 `extension.js`。
+     * 生成一个武将包的源码：形态对齐游戏本体 `character/bingshi.js`
+     * （标准 `game.import("character", …)` 模块，含 character / characterSort / translate）
+     * @param {string} packageId
      * @param {{packages: object, sorts: object}} meta
-     * @param {string} [eol]
-     * @param {{codes?: string[], packages?: string[]}} [extra] 武将代码与它们用到的包
+     * @param {object} records 草稿表（`x19D6_editor.characters`）
+     * @param {boolean} isModule 扩展入口是不是 ESM（决定写不写 import 行、以及 game.import 回调的参数）
      * @returns {string}
      */
-    buildWorkspaceMetaBlock(meta, eol = "\n", extra = {}) {
-        const packages = (meta && meta.packages) || {};
-        const sorts = (meta && meta.sorts) || {};
-        const lines = [];
-        lines.push("//#noname-editor-workspace-begin 由《魂氏编辑器》生成：工作区武将包 / 分包 / 武将（整块覆盖，勿手改）");
-        lines.push(";(function (lib) {");
-        lines.push("    if (!lib) return;");
-        lines.push("    lib.characterPack = lib.characterPack || {};");
-        lines.push("    lib.character = lib.character || {};");
-        lines.push("    lib.characterSort = lib.characterSort || {};");
-        lines.push("    lib.translate = lib.translate || {};");
-        Object.entries(packages).forEach(([packageId, packageName]) => {
-            lines.push(`    //武将包：${packageName}`);
-            lines.push(`    lib.characterPack[${JSON.stringify(packageId)}] = lib.characterPack[${JSON.stringify(packageId)}] || {};`);
-            lines.push(`    lib.characterSort[${JSON.stringify(packageId)}] = lib.characterSort[${JSON.stringify(packageId)}] || {};`);
-            lines.push(`    lib.translate[${JSON.stringify(packageId + "_character_config")}] = ${JSON.stringify(packageName)};`);
-            Object.entries(sorts[packageId] || {}).forEach(([sortId, sortName]) => {
-                lines.push(`    lib.characterSort[${JSON.stringify(packageId)}][${JSON.stringify(sortId)}] = lib.characterSort[${JSON.stringify(packageId)}][${JSON.stringify(sortId)}] || [];`);
-                lines.push(`    lib.translate[${JSON.stringify(sortId)}] = ${JSON.stringify(sortName)};`);
-            });
+    buildPackageFileContent(packageId, meta, records, isModule) {
+        const packageName = ((meta && meta.packages) || {})[packageId] || packageId;
+        const sortNames = ((meta && meta.sorts) || {})[packageId] || {};
+        const characterLines = [];
+        const translateLines = [];
+        const introLines = [];
+        const pinyinLines = [];
+        const sortMembers = {};
+        Object.keys(sortNames).forEach(sortId => (sortMembers[sortId] = []));
+        const editorOnly = new Set(["id", "extension", "packageId", "characterSort", "characterSortName", "name", "intro", "pinyin", "dieAudioText", "perfectPair", "avatar", "dieAudios", "savedAt"]);
+        Object.values(records || {}).forEach(record => {
+            if (!record || !record.id) return;
+            if ((record.packageId || "") !== packageId) return;
+            const fields = Object.entries(record)
+                .filter(([key, value]) => !editorOnly.has(key))
+                .filter(([, value]) => {
+                    if (value === undefined || value === null || value === "") return false;
+                    if (Array.isArray(value) && !value.length) return false;
+                    return true;
+                })
+                .map(([key, value]) => `        ${key}: ${JSON.stringify(value)}`);
+            characterLines.push(`    ${JSON.stringify(record.id)}: {\n${fields.join(",\n")}\n    }`);
+            if (record.name) translateLines.push(`    ${JSON.stringify(record.id)}: ${JSON.stringify(record.name)}`);
+            if (record.intro) introLines.push(`    ${JSON.stringify(record.id)}: ${JSON.stringify(record.intro)}`);
+            if (record.pinyin) pinyinLines.push(`    ${JSON.stringify(record.id)}: ${JSON.stringify(record.pinyin)}`);
+            if (record.characterSort) {
+                //草稿里只选了分包但没在登记表里的（例如扫描到的包）也要收进来
+                if (!sortMembers[record.characterSort]) sortMembers[record.characterSort] = [];
+                sortMembers[record.characterSort].push(record.id);
+            }
         });
-        //草稿用到的包（可能是游戏自带/已扫描到的）也要保证存在，否则下面的 lib.characterPack[包][id] 会炸
-        (extra.packages || []).forEach(packageId => {
-            if (!packageId || packages[packageId]) return;
-            lines.push(`    lib.characterPack[${JSON.stringify(packageId)}] = lib.characterPack[${JSON.stringify(packageId)}] || {};`);
-            lines.push(`    lib.characterSort[${JSON.stringify(packageId)}] = lib.characterSort[${JSON.stringify(packageId)}] || {};`);
-        });
-        //武将本体（worker 生成，与「生成代码」一致）。包一层 try：某个武将写炸了不能连累包/分包注册
-        if ((extra.codes || []).length) {
-            lines.push("    try {");
-            (extra.codes || []).forEach((code, index) => {
-                lines.push("        //—— 武将 " + (index + 1) + " ——");
-                String(code).split(/\r?\n/).forEach(line => lines.push(line ? `        ${line}` : ""));
-            });
-            lines.push("    } catch (err) { console.error(\"魂氏编辑器：武将注册失败\", err); }");
-        }
-        lines.push('})(typeof lib !== "undefined" ? lib : (typeof window !== "undefined" ? window.lib : null));');
-        lines.push("//#noname-editor-workspace-end");
-        return lines.join(eol) + eol;
+        const sortLines = Object.entries(sortMembers).map(([sortId, ids]) => `    ${JSON.stringify(sortId)}: [${ids.map(id => JSON.stringify(id)).join(", ")}]`);
+        const sortTranslateLines = Object.entries(sortNames).map(([sortId, sortName]) => `    ${JSON.stringify(sortId)}: ${JSON.stringify(sortName)}`);
+        const eol = "\n";
+        const blocks = [];
+        if (isModule) blocks.push('import { lib, game, ui, get, ai, _status } from "../../../noname.js";');
+        blocks.push(`const characters = {\n${characterLines.join(",\n")}\n};`);
+        blocks.push(`const characterSort = {\n${sortLines.join(",\n")}\n};`);
+        blocks.push(`const translates = {\n${translateLines.join(",\n")}\n};`);
+        blocks.push(`const characterSortTranslate = {\n${sortTranslateLines.join(",\n")}\n};`);
+        if (introLines.length) blocks.push(`const characterIntro = {\n${introLines.join(",\n")}\n};`);
+        if (pinyinLines.length) blocks.push(`const pinyins = {\n${pinyinLines.join(",\n")}\n};`);
+        const returns = [
+            `        name: ${JSON.stringify(packageId)}`,
+            "        connect: true",
+            "        character: { ...characters }",
+            `        characterSort: { ${JSON.stringify(packageId)}: characterSort }`,
+            "        translate: { ...translates, ...characterSortTranslate }"
+        ];
+        if (introLines.length) returns.push("        characterIntro: { ...characterIntro }");
+        if (pinyinLines.length) returns.push("        pinyins: { ...pinyins }");
+        const callbackParams = isModule ? "() " : "(lib, game, ui, get, ai, _status) ";
+        blocks.push(`game.import("character", function ${callbackParams}{\n    return {\n${returns.join(",\n")}\n    };\n});`);
+        const header = `//本文件由《魂氏编辑器》生成：武将包「${packageName}」（整文件覆盖，勿手改）`;
+        return [header].concat(blocks).join(eol + eol) + eol;
     }
     /**
      * 把登记表同步进 live lib（幂等）。扩展入口里的落盘区块同理，这里只是让本会话立刻一致。
@@ -770,74 +788,78 @@ mainPage.innerHTML=`
         });
     }
 
+
     /**
-     * 把武将包 / 分包 / **武将**落盘到 `extension/<工作区>/extension.js` 的标记区块（整块替换，幂等）
+     * 落盘：`extension/<工作区>/character/<包id>.js`（每个武将包一个标准武将包文件），
+     * 并在扩展入口维护一小段 import 区块。老版本塞在入口里的
+     * `//#noname-editor-workspace-begin … end` 大段 lib 注入会被清掉。
      * @returns {Promise<boolean>}
      */
     async syncWorkspaceMetaToFile() {
         const workspace = this.serveFor.data.getConfig("x19D6_editor.settings.workspace") || "";
         if (!workspace) return false;
-        const path = `extension/${workspace}/extension.js`;
-        let content;
+        const entryPath = `extension/${workspace}/extension.js`;
+        let entry;
         try {
-            content = await this.serveFor.data.readTextFile(path);
+            entry = await this.serveFor.data.readTextFile(entryPath);
         } catch (err) {
-            console.warn("读取扩展入口失败", path, err);
+            console.warn("读取扩展入口失败", entryPath, err);
             return false;
         }
-        if (typeof content !== "string") return false;
-        this.applyWorkspaceMetaToLib();
-        const extra = await this.buildCharacterCodes();
-        const eol = content.includes("\r\n") ? "\r\n" : "\n";
-        const block = this.buildWorkspaceMetaBlock(this.workspaceMeta, eol, extra).replace(/\r?\n$/, "");
-        const markBegin = "//#noname-editor-workspace-begin";
-        const markEnd = "//#noname-editor-workspace-end";
-        let next;
-        const start = content.indexOf(markBegin);
-        const end = content.indexOf(markEnd);
-        if (start >= 0 && end > start) {
-            next = content.slice(0, start) + block + content.slice(end + markEnd.length);
-        } else {
-            const tail = content.endsWith(eol) ? "" : eol;
-            next = content + tail + eol + block + eol;
-        }
-        try {
-            await this.serveFor.data.writeTextFile(path, next);
-        } catch (err) {
-            console.warn("写入扩展入口失败", path, err);
-            return false;
-        }
-        return true;
-    }
-    /**
-     * 用 worker 的生成器把每份草稿变成 lib 注册代码（就是「生成代码」里看到的那段）
-     * @returns {Promise<{codes: string[], packages: string[]}>}
-     */
-    async buildCharacterCodes() {
+        if (typeof entry !== "string") return false;
+        const isModule = /^\s*(import|export)\s/m.test(entry);
         const records = this.serveFor.data.getConfig("x19D6_editor.characters") || {};
-        const codes = [];
-        const packages = new Set();
-        for (const [draftKey, record] of Object.entries(records)) {
-            if (!record || !record.id) continue;   //没武将 id 的草稿没法注册
-            if (record.packageId) packages.add(record.packageId);
+        const meta = this.workspaceMeta;
+        const packageIds = new Set(Object.keys(meta.packages || {}));
+        Object.values(records).forEach(record => {
+            if (record && record.id && record.packageId) packageIds.add(record.packageId);
+        });
+        if (!packageIds.size) packageIds.add(workspace);
+        this.applyWorkspaceMetaToLib(meta);
+        for (const packageId of packageIds) {
+            const path = `extension/${workspace}/character/${packageId}.js`;
             try {
-                const code = await this.serveFor.data.astRequest("genCharacterCode", [record, "object"]);
-                if (code) codes.push(String(code).trim());
-                if (record.characterSort) {
-                    const sortCode = await this.serveFor.data.astRequest("genCharacterSortCode", [{
-                        id: record.id,
-                        characterSort: record.characterSort,
-                        characterSortName: record.characterSortName,
-                        packageId: record.packageId
-                    }, true]);
-                    if (sortCode) codes.push(String(sortCode).trim());
-                }
+                await this.serveFor.data.writeTextFile(path, this.buildPackageFileContent(packageId, meta, records, isModule));
             } catch (err) {
-                console.warn("生成武将代码失败", draftKey, err);
+                console.warn("写入武将包文件失败", path, err);
+                return false;
             }
         }
-        return { codes, packages: Array.from(packages) };
+        return this.syncEntryImports(entryPath, entry, Array.from(packageIds), isModule);
     }
+    /**
+     * 维护扩展入口里的 import 区块（只有几行，替代老版本那一大段注入）。
+     * 入口不是 ESM（老式 game.import）时就不写 import——那种包要用 `lib.init.js("extension/<工作区>/character", "<包id>")` 引入。
+     * @param {string} entryPath
+     * @param {string} entry
+     * @param {string[]} packageIds
+     * @param {boolean} isModule
+     * @returns {Promise<boolean>}
+     */
+    async syncEntryImports(entryPath, entry, packageIds, isModule) {
+        const eol = entry.includes("\r\n") ? "\r\n" : "\n";
+        const legacyRx = /\/\/#noname-editor-workspace-begin[\s\S]*?\/\/#noname-editor-workspace-end[^\r\n]*\r?\n?/;
+        const regionRx = /\/\/#noname-editor-imports-begin[\s\S]*?\/\/#noname-editor-imports-end[^\r\n]*\r?\n?/;
+        let next = entry.replace(legacyRx, "");
+        if (isModule) {
+            const region = ["//#noname-editor-imports-begin 由《魂氏编辑器》生成：武将包引入（整块覆盖，勿手改）"]
+                .concat(packageIds.map(id => `import "./character/${id}.js";`))
+                .concat(["//#noname-editor-imports-end"])
+                .join(eol) + eol;
+            next = regionRx.test(next) ? next.replace(regionRx, region) : region + next;
+        } else if (regionRx.test(next)) {
+            next = next.replace(regionRx, "");
+        }
+        if (next === entry) return true;
+        try {
+            await this.serveFor.data.writeTextFile(entryPath, next);
+            return true;
+        } catch (err) {
+            console.warn("写入扩展入口失败", entryPath, err);
+            return false;
+        }
+    }
+
     /**
      * 草稿变动后把「武将」也落盘。防抖 1.5s：编辑时 400ms 一次的自动保存不该每次都重写扩展入口。
      */
@@ -934,7 +956,7 @@ mainPage.innerHTML=`
         this.applyWorkspaceMetaToLib(meta);
         const ok = await this.syncWorkspaceMetaToFile();
         alert(ok
-            ? `武将包「${packageName}」已创建，并落盘到 extension/${workspace}/extension.js（重启游戏后生效）。`
+            ? `武将包「${packageName}」已创建，并落盘到 extension/${workspace}/character/${packageId}.js（武将包里放武将后随草稿保存自动更新）。`
             : `武将包「${packageName}」已创建，但落盘失败（扩展入口读不到或写不进去，见控制台）。`);
         //过滤栏切到新建的包，省得再手动选一次
         const state = this.characterFilterState;
@@ -984,7 +1006,7 @@ mainPage.innerHTML=`
         this.applyWorkspaceMetaToLib(meta);
         const ok = await this.syncWorkspaceMetaToFile();
         alert(ok
-            ? `分包「${sortName}」已创建，并落盘到 extension/${workspace}/extension.js（重启游戏后生效）。`
+            ? `分包「${sortName}」已创建，并落盘到 extension/${workspace}/character/${packageId}.js（会写进该包的 characterSort）。`
             : `分包「${sortName}」已创建，但落盘失败（扩展入口读不到或写不进去，见控制台）。`);
         state.characterSort = sortId;
         this.characterFilterState = state;

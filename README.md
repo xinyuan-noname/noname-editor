@@ -106,10 +106,13 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
     草稿里存 `ext:<工作区相对路径>` 引用（引擎可直接播/加载），不再用刷新即失的 `blob:` URL。
     **同生共死**：删条目 / 重置立绘 → 删对应文件；改武将 id → 名下媒体文件改名跟随（写新删旧）；
     侧栏 🗑️ 删草稿 → 连带删除该武将名下的媒体文件。（技能语音在旧版技能编辑器内核里，另行处理）
-  - **武将 / 武将包 / 分包落盘**：草稿保存后（1.5s 防抖）、新建包/分包、删除草稿时，会把**所有武将草稿**
-    与包/分包登记一起重写成该扩展 `extension.js` 末尾的标记区块（`//#noname-editor-workspace-begin … end`，
-    整块覆盖、幂等）。武将那段就是「生成代码」看到的内容（worker 的 `genCharacterCode` / `genCharacterSortCode`）。
-    ⚠️ 区块只注册**武将本体**；它引用的技能定义（`lib.skill`）不在其中——技能要用技能编辑器导出/复制代码落到扩展里。
+  - **武将 / 武将包 / 分包落盘成标准武将包文件**：每个武将包写一个 `extension/<工作区>/character/<包id>.js`，
+    形态对齐游戏本体 `character/bingshi.js`（`game.import("character", …)` + `character` / `characterSort` /
+    `translate` / `characterIntro` / `pinyins`）。草稿保存后 1.5s 防抖重写，新建包/分包与删除草稿即时重写。
+    - ESM 入口会自动维护一小段引入区块 `//#noname-editor-imports-begin … end`（`import "./character/<包id>.js";`）；
+      老式 `game.import("extension", …)` 入口不写 import——那种扩展自己用 `lib.init.js("extension/<工作区>/character", "<包id>")` 引入。
+    - 老版本塞在入口里的 `//#noname-editor-workspace-begin … end` 大段 lib 注入会被自动清掉。
+    - ⚠️ 文件里只有**武将本体**（含 translate / intro / 拼音 / 分包）；技能定义（`lib.skill`）不在其中——技能要用技能编辑器导出/复制代码。
     （`//#noname-editor-workspace-begin … //#noname-editor-workspace-end`，整块覆盖、幂等），重启游戏后可见。
 
 
