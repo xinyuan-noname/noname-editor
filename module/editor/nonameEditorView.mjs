@@ -496,6 +496,9 @@ mainPage.innerHTML=`
         //必须在挂载前设置：组件的 connectedCallback 会按 draft-key 载入草稿
         if (key) characterEditor.setAttribute("draft-key", key);
         this.mainArea.appendChild(characterEditor);
+        //兜底：不依赖组件 connectedCallback 的载入时序，外壳自己把草稿回填一遍
+        //（踩过：只靠组件自载时，打开草稿是空的）
+        if (key && records[key]) characterEditor.applyData(records[key]);
         //带初始数据（侧栏过滤栏选了武将包/分包时，新武将直接落在该包该分包下）
         if (data && Object.keys(data).length) {
             characterEditor.applyData(data);
@@ -737,24 +740,41 @@ mainPage.innerHTML=`
             characterLines.push(`    ${JSON.stringify(record.id)}: {\n${fields.join(",\n")}\n    }`);
             if (record.name) translateLines.push(`    ${JSON.stringify(record.id)}: ${JSON.stringify(record.name)}`);
             if (record.intro) introLines.push(`    ${JSON.stringify(record.id)}: ${JSON.stringify(record.intro)}`);
-            if (record.pinyin) pinyinLines.push(`    ${JSON.stringify(record.id)}: ${JSON.stringify(record.pinyin)}`);
+            //拼音要归一成字符串：草稿里可能是 [""] 或按字拆的数组，直接写进去游戏里会拿到脏值
+            const pinyin = Array.isArray(record.pinyin)
+                ? record.pinyin.filter(Boolean).join("")
+                : String(record.pinyin || "").replace(/,/g, "");
+            if (pinyin) pinyinLines.push(`    ${JSON.stringify(record.id)}: ${JSON.stringify(pinyin)}`);
             if (record.characterSort) {
                 //草稿里只选了分包但没在登记表里的（例如扫描到的包）也要收进来
                 if (!sortMembers[record.characterSort]) sortMembers[record.characterSort] = [];
                 sortMembers[record.characterSort].push(record.id);
             }
         });
+        //自定义势力 / 宗族要补 translate：游戏 lib.translate 里没有的话，界面只会显示原 id
+        const groupNames = this.serveFor.data.getConfig("x19D6_editor.groups") || {};
+        Object.values(records || {}).forEach(record => {
+            if (!record || !record.id) return;
+            if ((record.packageId || "") !== packageId) return;
+            const groups = [record.group, ...(Array.isArray(record.doubleGroup) ? record.doubleGroup : [])].filter(Boolean);
+            groups.forEach(groupId => {
+                if (lib.translate[groupId]) return;
+                translateLines.push(`    ${JSON.stringify(groupId)}: ${JSON.stringify(groupNames[groupId] || groupId)}`);
+            });
+            (Array.isArray(record.clans) ? record.clans : []).forEach(clan => {
+                if (!clan || lib.translate[clan]) return;
+                translateLines.push(`    ${JSON.stringify(clan)}: ${JSON.stringify(clan)}`);
+            });
+        });
         const sortLines = Object.entries(sortMembers).map(([sortId, ids]) => `    ${JSON.stringify(sortId)}: [${ids.map(id => JSON.stringify(id)).join(", ")}]`);
         const sortTranslateLines = Object.entries(sortNames).map(([sortId, sortName]) => `    ${JSON.stringify(sortId)}: ${JSON.stringify(sortName)}`);
         const eol = "\n";
-        const blocks = [];
-        if (isModule) blocks.push('import { lib, game, ui, get, ai, _status } from "../../../noname.js";');
-        blocks.push(`const characters = {\n${characterLines.join(",\n")}\n};`);
-        blocks.push(`const characterSort = {\n${sortLines.join(",\n")}\n};`);
-        blocks.push(`const translates = {\n${translateLines.join(",\n")}\n};`);
-        blocks.push(`const characterSortTranslate = {\n${sortTranslateLines.join(",\n")}\n};`);
-        if (introLines.length) blocks.push(`const characterIntro = {\n${introLines.join(",\n")}\n};`);
-        if (pinyinLines.length) blocks.push(`const pinyins = {\n${pinyinLines.join(",\n")}\n};`);
+        const charactersBlock = `const characters = {\n${characterLines.join(",\n")}\n};`;
+        const sortBlock = `const characterSort = {\n${sortLines.join(",\n")}\n};`;
+        const translatesBlock = `const translates = {\n${translateLines.join(",\n")}\n};`;
+        const sortTranslateBlock = `const characterSortTranslate = {\n${sortTranslateLines.join(",\n")}\n};`;
+        const introBlock = `const characterIntro = {\n${introLines.join(",\n")}\n};`;
+        const pinyinBlock = `const pinyins = {\n${pinyinLines.join(",\n")}\n};`;
         const returns = [
             `        name: ${JSON.stringify(packageId)}`,
             "        connect: true",
@@ -765,7 +785,16 @@ mainPage.innerHTML=`
         if (introLines.length) returns.push("        characterIntro: { ...characterIntro }");
         if (pinyinLines.length) returns.push("        pinyins: { ...pinyins }");
         const callbackParams = isModule ? "() " : "(lib, game, ui, get, ai, _status) ";
-        blocks.push(`game.import("character", function ${callbackParams}{\n    return {\n${returns.join(",\n")}\n    };\n});`);
+        const indent = text => text.split("\n").map(line => (line ? "    " + line : line)).join("\n");
+        const importStatement = 'import { lib, game, ui, get, ai, _status } from "../../../noname.js";';
+        const declarations = [charactersBlock, sortBlock, translatesBlock, sortTranslateBlock];
+        if (introLines.length) declarations.push(introBlock);
+        if (pinyinLines.length) declarations.push(pinyinBlock);
+        const importStatementBlock = `game.import("character", function ${callbackParams}{\n    return {\n${returns.join(",\n")}\n    };\n});`;
+        const blocks = [];
+        //经典（script）形态下同一扩展的多个包文件共享顶层作用域，const 会重名 → 包一层 IIFE
+        if (isModule) blocks.push(importStatement, ...declarations, importStatementBlock);
+        else blocks.push(";(function () {", ...declarations.map(text => indent(text)), indent(importStatementBlock), "})();");
         const header = `//本文件由《魂氏编辑器》生成：武将包「${packageName}」（整文件覆盖，勿手改）`;
         return [header].concat(blocks).join(eol + eol) + eol;
     }

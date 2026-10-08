@@ -112,6 +112,9 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
     - ESM 入口会自动维护一小段引入区块 `//#noname-editor-imports-begin … end`（`import "./character/<包id>.js";`）；
       老式 `game.import("extension", …)` 入口不写 import——那种扩展自己用 `lib.init.js("extension/<工作区>/character", "<包id>")` 引入。
     - 老版本塞在入口里的 `//#noname-editor-workspace-begin … end` 大段 lib 注入会被自动清掉。
+    - 文件里会**补 translate**：自定义势力（`x19D6_editor.groups` 里记的中文名，编辑器选/建势力时自动记）与宗族，
+      否则游戏里只会显示原 id（如 `bqzj_qi`）。拼音会归一成字符串（草稿里的 `[""]` / 按字数组都不再直接写进去）。
+    - 老式入口的包文件整体包一层 IIFE——同一扩展下多个包文件是经典脚本，顶层 `const` 会重名。
     - ⚠️ 文件里只有**武将本体**（含 translate / intro / 拼音 / 分包）；技能定义（`lib.skill`）不在其中——技能要用技能编辑器导出/复制代码。
     （`//#noname-editor-workspace-begin … //#noname-editor-workspace-end`，整块覆盖、幂等），重启游戏后可见。
 

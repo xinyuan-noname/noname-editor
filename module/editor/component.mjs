@@ -1086,6 +1086,17 @@ shadow.innerHTML=`
             })
             .choose(sexOptions[0]);
     }
+    /**
+     * 记下势力的中文名（`x19D6_editor.groups.<势力id>`）并补进 live lib.translate。
+     * 落盘时要靠它生成 `translate[势力id] = 中文名`——否则自定义势力在游戏里只显示原 id（用户反馈的「势力没落包」）。
+     * @param {string} groupId
+     * @param {string} groupName
+     */
+    recordGroupName(groupId, groupName) {
+        if (!groupId || !groupName) return;
+        this.configQuery("write", { member: `x19D6_editor.groups.${groupId}`, value: groupName });
+        if (!lib.translate[groupId]) lib.translate[groupId] = groupName;
+    }
     createGroupOption({ id, name, textShadow, imageData } = {}) {
         const li = document.createElement("li");
         li.dataset.groupOption = id;
@@ -1105,6 +1116,7 @@ shadow.innerHTML=`
             groupTextShadow || ""
         );
         this.changeData("group", groupId);
+        this.recordGroupName(groupId, groupName);
     }
     /**
      * @typedef {{groupId:string,groupName:string,groupTextShadow:string}} groupInfo
@@ -1127,6 +1139,7 @@ shadow.innerHTML=`
             "doubleGroup",
             groupIdList.length ? [mainGroupInfo.groupId, ...groupIdList].join(" ") : ""
         );
+        [mainGroupInfo, ...infoList].forEach(info => this.recordGroupName(info?.groupId, info?.groupName));
     }
     #listenGroup() {
         const groupDataArea = this.getDataAreaDom("group")
@@ -1196,6 +1209,7 @@ shadow.innerHTML=`
                 groupDiy.parentElement.insertBefore(newGroupOption, groupDiy);
                 singleManager.append(newGroupOption);
                 doubleManager.append(newGroupOption);
+                this.recordGroupName(result.id, result.name);
             }
         })
     }
