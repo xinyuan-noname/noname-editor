@@ -42,6 +42,8 @@ class HTMLNonameAiPanelElement extends HTMLNonameFocusUIElement {
     #drafts = [];
     /** 正在进行的请求：用于「停止」按钮 */
     #taskAbort = null;
+    /** 配置页当前在编辑哪一家（{ text: key, image: key }），「申请页」按钮要用它 */
+    #editingProfile = {};
     constructor() {
         super();
         const shadow = this.attachShadow({ mode: "open" });
@@ -110,8 +112,7 @@ shadow.innerHTML=`
         <textarea class="art-prompt" rows="3" spellcheck="false" placeholder="画面描述；留空则按武将资料自动拼一段"></textarea>
         <label class="row"><span>画风</span><select class="art-style"></select></label>
         <div class="art-params">
-            <label class="row"><span>尺寸</span><input class="art-size" list="ai-size-options" spellcheck="false" value="768x1024"></label>
-            <datalist id="ai-size-options" class="size-options"></datalist>
+            <label class="row"><span>尺寸</span><select class="art-size"></select></label>
             <label class="row"><span>张数</span><select class="art-count"><option value="1" selected>1 张</option><option value="2">2 张</option><option value="4">4 张</option></select></label>
         </div>
         <label class="row"><span>负面</span><input class="art-negative" spellcheck="false" placeholder="不要出现的元素（可选，部分服务支持）"></label>
@@ -142,59 +143,78 @@ shadow.innerHTML=`
         </div>
 
         <div class="sheet-pane" data-config-pane="text">
-            <p class="muted">先点一张服务商卡片（会自动填好地址与模型），再把申请来的 key 粘进去。</p>
-            <div class="profile-list" data-profile-kind="text"></div>
-            <label class="row column"><span>接口地址</span><input class="cfg-baseurl" spellcheck="false" placeholder="例如 https://api.deepseek.com/v1"></label>
-            <label class="row column"><span>API Key</span>
-                <span class="key-field">
-                    <input class="cfg-apikey" type="password" spellcheck="false" placeholder="粘贴服务商给的 key">
-                    <button class="key-toggle" type="button" title="显示 / 隐藏 key">👁</button>
-                </span>
-            </label>
-            <label class="row column"><span>模型</span>
-                <span class="model-field">
-                    <input class="cfg-model" list="ai-text-models" spellcheck="false" placeholder="例如 deepseek-chat">
-                    <button class="cfg-pull" type="button" title="从该地址拉取可用模型列表">拉取</button>
-                </span>
-            </label>
-            <datalist id="ai-text-models" class="model-options"></datalist>
-            <label class="row"><span>温度</span><input class="cfg-temperature" type="range" min="0" max="1.5" step="0.1" value="0.8"><b class="cfg-temperature-value">0.8</b></label>
-            <div class="profile-help"></div>
-            <div class="actions">
-                <button class="cfg-test" type="button">测试连接</button>
-                <button class="cfg-save" type="button">保存</button>
-                <button class="cfg-open-site" type="button">打开申请页</button>
+            <div class="provider-view" data-provider-view="list">
+                <p class="muted">填入提供商的 API 密钥即可使用它的模型。点一行进入配置。</p>
+                <ul class="provider-list"></ul>
+            </div>
+            <div class="provider-view" data-provider-view="edit" hidden>
+                <header class="provider-head">
+                    <button class="provider-back" type="button" title="返回列表">←</button>
+                    <span class="provider-title"></span>
+                    <button class="provider-site" type="button" title="在系统浏览器里打开申请页">申请页</button>
+                </header>
+                <label class="row column"><span>接口地址</span><input class="cfg-baseurl" spellcheck="false" placeholder="例如 https://api.deepseek.com/v1"></label>
+                <label class="row column"><span>API Key</span>
+                    <span class="key-field">
+                        <input class="cfg-apikey" type="password" spellcheck="false" placeholder="粘贴服务商给的 key">
+                        <button class="key-toggle" type="button" title="显示 / 隐藏 key">👁</button>
+                    </span>
+                </label>
+                <label class="row column"><span>模型</span>
+                    <span class="model-field">
+                        <select class="cfg-model"></select>
+                        <input class="cfg-model-manual" spellcheck="false" placeholder="手填模型名" hidden>
+                        <button class="model-manual" type="button" title="列表里没有想要的模型？手填">✎</button>
+                        <button class="cfg-pull" type="button" title="从该地址拉取可用模型列表">拉取</button>
+                    </span>
+                </label>
+                <label class="row"><span>温度</span><input class="cfg-temperature" type="range" min="0" max="1.5" step="0.1" value="0.8"><b class="cfg-temperature-value">0.8</b></label>
+                <details class="profile-help"><summary>怎么申请 key</summary><div class="help-body muted"></div></details>
+                <div class="actions">
+                    <button class="cfg-test" type="button">测试连接</button>
+                    <button class="cfg-save" type="button">保存</button>
+                    <button class="cfg-clear ghost" type="button" title="清空这一栏的地址与密钥">清空</button>
+                </div>
             </div>
             <p class="result-line"></p>
         </div>
 
         <div class="sheet-pane" data-config-pane="image" hidden>
-            <p class="muted">生图接口可以和对话接口用同一个 key（硅基流动、火山方舟、智谱、OpenAI 都是）。</p>
-            <div class="profile-list" data-profile-kind="image"></div>
-            <label class="row column"><span>接口地址</span><input class="img-baseurl" spellcheck="false" placeholder="例如 https://api.siliconflow.cn/v1"></label>
-            <label class="row column"><span>API Key</span>
-                <span class="key-field">
-                    <input class="img-apikey" type="password" spellcheck="false" placeholder="粘贴服务商给的 key">
-                    <button class="key-toggle" type="button" title="显示 / 隐藏 key">👁</button>
-                </span>
-            </label>
-            <label class="row column"><span>模型</span>
-                <span class="model-field">
-                    <input class="img-model" list="ai-image-models" spellcheck="false" placeholder="例如 Kwai-Kolors/Kolors">
-                    <button class="img-pull" type="button" title="从该地址拉取可用模型列表">拉取</button>
-                </span>
-            </label>
-            <datalist id="ai-image-models" class="model-options"></datalist>
-            <label class="row"><span>尺寸</span><input class="img-size" list="ai-size-options-image" spellcheck="false" value="768x1024"></label>
-            <datalist id="ai-size-options-image" class="size-options"></datalist>
-            <label class="row column"><span>附加参数</span>
-                <input class="img-extra" spellcheck="false" placeholder='可留空；如 {"watermark": false}'>
-            </label>
-            <div class="profile-help"></div>
-            <div class="actions">
-                <button class="img-test" type="button">测试连接</button>
-                <button class="img-save" type="button">保存</button>
-                <button class="img-open-site" type="button">打开申请页</button>
+            <div class="provider-view" data-provider-view="list">
+                <p class="muted">生图接口可以和对话接口用同一个 key（硅基流动、火山方舟、智谱、OpenAI 都是）。</p>
+                <ul class="provider-list"></ul>
+            </div>
+            <div class="provider-view" data-provider-view="edit" hidden>
+                <header class="provider-head">
+                    <button class="provider-back" type="button" title="返回列表">←</button>
+                    <span class="provider-title"></span>
+                    <button class="provider-site" type="button" title="在系统浏览器里打开申请页">申请页</button>
+                </header>
+                <label class="row column"><span>接口地址</span><input class="cfg-baseurl" spellcheck="false" placeholder="例如 https://api.siliconflow.cn/v1"></label>
+                <label class="row column"><span>API Key</span>
+                    <span class="key-field">
+                        <input class="cfg-apikey" type="password" spellcheck="false" placeholder="粘贴服务商给的 key">
+                        <button class="key-toggle" type="button" title="显示 / 隐藏 key">👁</button>
+                    </span>
+                </label>
+                <label class="row column"><span>模型</span>
+                    <span class="model-field">
+                        <select class="cfg-model"></select>
+                        <input class="cfg-model-manual" spellcheck="false" placeholder="手填模型名" hidden>
+                        <button class="model-manual" type="button" title="列表里没有想要的模型？手填">✎</button>
+                        <button class="cfg-pull" type="button" title="从该地址拉取可用模型列表">拉取</button>
+                    </span>
+                </label>
+                <label class="row"><span>尺寸</span><select class="cfg-size"></select></label>
+                <label class="row column"><span>附加参数</span>
+                    <input class="cfg-extra" spellcheck="false" placeholder='可留空；如 {"watermark": false}'>
+                </label>
+                <details class="profile-help"><summary>怎么申请 key</summary><div class="help-body muted"></div></details>
+                <div class="actions">
+                    <button class="cfg-test" type="button">测试连接</button>
+                    <button class="cfg-save" type="button">保存</button>
+                    <button class="cfg-clear ghost" type="button" title="清空这一栏的地址与密钥">清空</button>
+                </div>
             </div>
             <p class="result-line"></p>
         </div>
@@ -214,7 +234,7 @@ shadow.innerHTML=`
             </li>
             <li>
                 <b>第二步：把 key 填进编辑器</b>
-                <p>点下面「去配置」→ 在「对话接口」里点服务商卡片（地址会自动填好）→ 粘贴 key → 点「测试连接」。</p>
+                <p>点下面「去配置」→ 在「对话接口」里点一行服务商（如 DeepSeek，地址与模型会自动填好）→ 粘贴 key → 点「测试连接」。</p>
                 <p class="muted">测试成功会显示「连接正常」并列出模型名；失败会告诉你具体是哪一步错了（key 错 / 地址错 / 余额不足 / 网络不通）。</p>
             </li>
             <li>
@@ -256,8 +276,6 @@ shadow.innerHTML=`
 
     connectedCallback() {
         this.loadCss("aiPanel", { root: this.shadowRoot });
-        this.#renderProfiles("text");
-        this.#renderProfiles("image");
         this.#renderArtOptions();
         this.#restoreConfigs();
         this.#bindEvents();
@@ -292,7 +310,11 @@ shadow.innerHTML=`
     openSheet(name) {
         this.#qa(".block").forEach(node => (node.hidden = true));
         this.#qa(".sheet").forEach(node => (node.hidden = node.dataset.sheet !== name));
-        if (name === "config") this.#refreshStatus();
+        if (name === "config") {
+            //每次打开都从「服务商列表」开始（DSH 那样：先看有哪几家，点进去才填表）
+            this.#refreshStatus();
+            ["text", "image"].forEach(kind => this.#showProviderView(kind, "list"));
+        }
         if (typeof this.scrollTo === "function") this.scrollTo({ top: 0 });
     }
     closeSheet() {
@@ -319,158 +341,269 @@ shadow.innerHTML=`
         }
     }
 
-    // ──────────────────────────── 服务商预设 ────────────────────────────
+    // ──────────────────────────── 服务商列表 / 配置页 ────────────────────────────
 
-    #renderProfiles(kind) {
-        const list = kind === "image" ? IMAGE_PROFILES : TEXT_PROFILES;
-        const root = this.#q(`.profile-list[data-profile-kind="${kind}"]`);
-        if (!root) return;
-        root.replaceChildren();
-        list.forEach(profile => {
-            const button = document.createElement("button");
-            button.type = "button";
-            button.className = "profile";
-            button.dataset.profileKey = profile.key;
+    /** 某个页签（"text"|"image"）的 DOM 范围。两个页签的字段类名一致，只是 scope 不同 */
+    #pane(kind) {
+        return this.#q(`[data-config-pane="${kind}"]`);
+    }
+    #paneQ(kind, selector) {
+        return this.#pane(kind)?.querySelector(selector) || null;
+    }
+    #configOf(kind) {
+        return kind === "image" ? getImageConfig(this) : getTextConfig(this);
+    }
+    #profilesOf(kind) {
+        return kind === "image" ? IMAGE_PROFILES : TEXT_PROFILES;
+    }
+    #profileOf(kind, key) {
+        return (kind === "image" ? findImageProfile(key) : findTextProfile(key)) || null;
+    }
+    /** 当前地址对应哪一家（手改过地址 → 自定义） */
+    #providerOf(kind, baseUrl) {
+        const normalized = normalizeBaseUrl(baseUrl);
+        if (!normalized) return null;
+        return this.#profilesOf(kind).find(profile => normalizeBaseUrl(profile.baseUrl) === normalized)
+            || { key: "custom", name: "自定义", keyUrl: "", siteUrl: "", models: [], sizes: [] };
+    }
+    /** 服务商列表：一行一家，只有 状态点 + 名字 + 备注 + 按钮（DSH 那种密度） */
+    #renderProviders(kind) {
+        const list = this.#paneQ(kind, ".provider-list");
+        if (!list) return;
+        const config = this.#configOf(kind);
+        const activeKey = (this.#providerOf(kind, config.baseUrl) || {}).key || "";
+        const ready = Boolean(config.baseUrl && config.model);
+        list.replaceChildren();
+        this.#profilesOf(kind).forEach(profile => {
+            const inUse = profile.key === activeKey;
+            const item = document.createElement("li");
+            item.className = "provider";
+            item.dataset.profileKey = profile.key;
+            if (inUse) item.classList.add("in-use");
+            const dot = document.createElement("span");
+            dot.className = "provider-dot";
+            if (inUse && ready) dot.classList.add("ok");
             const name = document.createElement("span");
-            name.className = "profile-name";
+            name.className = "provider-name";
             name.textContent = profile.name;
-            if (profile.badge) {
-                const badge = document.createElement("span");
-                badge.className = "badge";
-                badge.textContent = profile.badge;
-                name.appendChild(badge);
+            const note = document.createElement("span");
+            note.className = "provider-note";
+            if (inUse) {
+                note.classList.add("in-use");
+                note.textContent = ready ? "使用中" : "缺模型";
+            } else {
+                note.textContent = profile.badge || "";
             }
-            const fit = document.createElement("span");
-            fit.className = "profile-fit";
-            fit.textContent = profile.fit || "";
-            const price = document.createElement("span");
-            price.className = "profile-price";
-            price.textContent = profile.price || "";
-            button.append(name, fit, price);
-            button.addEventListener("pointerup", () => this.#useProfile(kind, profile));
-            root.appendChild(button);
+            const edit = document.createElement("button");
+            edit.type = "button";
+            edit.className = "provider-edit";
+            edit.textContent = inUse ? "编辑" : "配置";
+            edit.addEventListener("pointerup", () => this.#openProviderEditor(kind, profile.key));
+            item.append(dot, name, note, edit);
+            list.appendChild(item);
         });
+    }
+    /** 在「列表 / 配置」两个视图之间切换 */
+    #showProviderView(kind, view) {
+        this.#qa(`[data-config-pane="${kind}"] .provider-view`).forEach(node => {
+            node.hidden = node.dataset.providerView !== view;
+        });
+        if (view === "list") {
+            this.#editingProfile = { ...(this.#editingProfile || {}), [kind]: "" };
+            this.#renderProviders(kind);
+        }
     }
     /**
-     * 点了某张服务商卡片：自动填地址、模型候选与操作步骤（key 得用户自己粘）
-     * @param {"text"|"image"} kind
-     * @param {object} profile
+     * 进某家的配置页。编辑「正在用的那家」时回填已保存的值，否则用预设默认值。
+     * key 不跨服务商带过去——各家的 key 不通用，带过去只会换来一个 401。
      */
-    #useProfile(kind, profile) {
-        const isImage = kind === "image";
-        const baseInput = this.#q(isImage ? ".img-baseurl" : ".cfg-baseurl");
-        const modelInput = this.#q(isImage ? ".img-model" : ".cfg-model");
-        if (baseInput) baseInput.value = profile.baseUrl || "";
-        if (modelInput) modelInput.value = profile.defaultModel || (profile.models || [])[0] || "";
-        this.#fillDatalist(this.#q(isImage ? "#ai-image-models" : "#ai-text-models"), profile.models || []);
-        this.#fillSizeOptions(profile.sizes);
-        if (isImage) {
-            const sizeInput = this.#q(".img-size");
+    #openProviderEditor(kind, profileKey) {
+        const profile = this.#profileOf(kind, profileKey);
+        if (!profile) return;
+        const config = this.#configOf(kind);
+        const activeKey = (this.#providerOf(kind, config.baseUrl) || {}).key || "";
+        const inUse = profile.key === activeKey;
+        const set = (selector, value) => {
+            const node = this.#paneQ(kind, selector);
+            if (node) node.value = value;
+        };
+        this.#editingProfile = { ...(this.#editingProfile || {}), [kind]: profile.key };
+        set(".cfg-baseurl", inUse ? (config.baseUrl || profile.baseUrl || "") : (profile.baseUrl || ""));
+        set(".cfg-apikey", inUse ? (config.apiKey || "") : "");
+        this.#setModelOptions(kind, profile.models || []);
+        this.#writeModel(kind, inUse ? config.model : (profile.defaultModel || (profile.models || [])[0] || ""));
+        if (kind === "image") {
             const sizes = profile.sizes || [];
-            if (sizeInput && sizes.length) sizeInput.value = sizes.includes("768x1024") ? "768x1024" : sizes[0];
+            this.#fillSizeOptions(sizes);
+            const sizeNode = this.#paneQ(kind, ".cfg-size");
+            if (sizeNode) {
+                const wanted = inUse ? (config.size || "") : "";
+                const has = Array.from(sizeNode.options).some(option => option.value === wanted);
+                sizeNode.value = has ? wanted : (sizes.includes("768x1024") ? "768x1024" : (sizes[0] || "1024x1024"));
+            }
+            set(".cfg-extra", inUse ? (config.extra || "") : "");
+        } else {
+            const temperature = inUse ? (Number(config.temperature) || 0.8) : 0.8;
+            set(".cfg-temperature", String(temperature));
+            const label = this.#paneQ(kind, ".cfg-temperature-value");
+            if (label) label.textContent = String(temperature);
         }
-        this.#qa(`.profile-list[data-profile-kind="${kind}"] .profile`).forEach(node => {
-            node.classList.toggle("chosen", node.dataset.profileKey === profile.key);
-        });
+        //没有候选模型（自定义服务、或预设名过期）→ 直接进手填模式，别让用户对着空下拉发呆
+        this.#toggleManualModel(kind, !(this.#paneQ(kind, ".cfg-model") || {}).options?.length);
+        const title = this.#paneQ(kind, ".provider-title");
+        if (title) title.textContent = profile.name;
+        const site = this.#paneQ(kind, ".provider-site");
+        if (site) site.hidden = !(profile.keyUrl || profile.siteUrl);
         this.#renderProfileHelp(kind, profile);
-        //换了服务商先提醒一句：key 通常也得换（各家的 key 不通用）
-        const keyInput = this.#q(isImage ? ".img-apikey" : ".cfg-apikey");
-        const hasKey = Boolean(keyInput && keyInput.value.trim());
-        this.#setResult(kind, hasKey
-            ? `已填入「${profile.name}」的地址与模型。注意：API Key 各服务商不通用，请确认框里这份也是它的，然后点「测试连接」。`
-            : `已填入「${profile.name}」的地址与模型。现在把它的 API Key 粘进上面的框，再点「测试连接」。`,
-            "warn");
+        this.#setResult(kind, inUse
+            ? "这是正在使用的一家。改完点「保存」，或先点「测试连接」验证。"
+            : `已按「${profile.name}」填好地址与模型，把它的 API Key 粘进来，再点「测试连接」。`, "warn");
+        this.#showProviderView(kind, "edit");
     }
+    /** 申请步骤：折叠在配置页底部（默认收起，保持界面干净） */
     #renderProfileHelp(kind, profile) {
-        const root = this.#q(`[data-config-pane="${kind}"] .profile-help`);
-        if (!root) return;
-        root.replaceChildren();
+        const details = this.#paneQ(kind, "details.profile-help");
+        if (!details) return;
+        const summary = details.querySelector("summary");
+        const body = details.querySelector(".help-body");
+        if (!(summary && body)) return;
+        body.replaceChildren();
+        details.open = false;
         if (!profile.key || profile.key === "custom") {
+            summary.textContent = "自定义服务的填法";
             const tip = document.createElement("span");
             tip.className = "tip";
-            tip.textContent = "选「自定义」时地址与模型都要自己填；不确定模型名就点「拉取」，能连上就会列出可用模型。";
-            root.appendChild(tip);
+            tip.textContent = "地址与模型都要自己填；不确定模型名就点「拉取」，能连上就会列出可用模型。";
+            body.appendChild(tip);
             return;
         }
-        const title = document.createElement("b");
-        title.textContent = `怎么拿到「${profile.name}」的 key：`;
-        root.appendChild(title);
+        summary.textContent = `怎么申请「${profile.name}」的 key`;
         const list = document.createElement("ol");
         (profile.steps || []).forEach(step => {
             const item = document.createElement("li");
             item.textContent = step;
             list.appendChild(item);
         });
-        root.appendChild(list);
+        body.appendChild(list);
         if (profile.tip) {
             const tip = document.createElement("span");
             tip.className = "tip";
             tip.textContent = profile.tip;
-            root.appendChild(tip);
+            body.appendChild(tip);
         }
     }
-    #fillDatalist(datalist, models) {
-        if (!datalist) return;
-        datalist.replaceChildren();
-        (models || []).forEach(model => {
+    /**
+     * 写「模型」下拉的候选。
+     * ⚠️ **故意不用 `<input list>` + `<datalist>`**：Chromium 会把候选按输入框里的当前文本过滤，
+     * 且动态加进去的选项常常不刷新 —— 「点拉取 → 拉到 N 个模型 → 却看不到列表」就是这么来的
+     * （2026-10 用户反馈）。原生 `<select>` 永远把选项摆出来，没有这层缓存/过滤。
+     * @param {"text"|"image"} kind
+     * @param {string[]} models
+     */
+    #setModelOptions(kind, models) {
+        const select = this.#paneQ(kind, ".cfg-model");
+        if (!select) return;
+        const current = select.value || "";
+        const merged = Array.from(new Set((models || []).filter(Boolean)));
+        if (current && !merged.includes(current)) merged.unshift(current);
+        select.replaceChildren();
+        merged.forEach(model => {
             const option = document.createElement("option");
             option.value = model;
-            datalist.appendChild(option);
+            option.textContent = model;
+            select.appendChild(option);
         });
+        if (current && merged.includes(current)) select.value = current;
     }
+    /** 读当前模型（手填模式优先） */
+    #readModel(kind) {
+        const manual = this.#paneQ(kind, ".cfg-model-manual");
+        if (manual && !manual.hidden) return manual.value.trim();
+        const select = this.#paneQ(kind, ".cfg-model");
+        return select ? select.value.trim() : "";
+    }
+    /** 写当前模型（不在候选里就补一个选项，历史配置/手填过的名字不会丢） */
+    #writeModel(kind, value) {
+        const select = this.#paneQ(kind, ".cfg-model");
+        const manual = this.#paneQ(kind, ".cfg-model-manual");
+        const text = String(value || "");
+        if (!select) return;
+        if (text && !Array.from(select.options).some(option => option.value === text)) {
+            const option = document.createElement("option");
+            option.value = text;
+            option.textContent = text;
+            select.appendChild(option);
+        }
+        if (text) select.value = text;
+        if (manual) manual.value = text;
+    }
+    /** 在下拉 / 手填之间切换（✎ 按钮） */
+    #toggleManualModel(kind, force) {
+        const select = this.#paneQ(kind, ".cfg-model");
+        const manual = this.#paneQ(kind, ".cfg-model-manual");
+        if (!(select && manual)) return;
+        const on = force === undefined ? manual.hidden : Boolean(force);
+        if (on) manual.value = select.options.length ? (select.value || manual.value) : manual.value;
+        else if (manual.value.trim()) this.#writeModel(kind, manual.value.trim());
+        manual.hidden = !on;
+        select.hidden = on;
+        if (on) manual.focus();
+    }
+    /** 尺寸候选。预设自带的尺寸排在最前（各家支持的尺寸不一样，方舟填错会直接 400） */
     #fillSizeOptions(extra) {
-        const unique = Array.from(new Set(["1024x1024", "768x1024", "1024x768", "1024x1536", "1536x1024", "512x512", ...(extra || [])]));
-        this.#qa(".size-options").forEach(datalist => {
-            datalist.replaceChildren();
-            unique.forEach(size => {
+        const common = ["1024x1024", "768x1024", "1024x768", "1024x1536", "1536x1024", "512x512"];
+        const sizes = Array.from(new Set([...(extra || []), ...common]));
+        const preferred = (extra || []).includes("768x1024") ? "768x1024" : ((extra || [])[0] || "768x1024");
+        this.#qa("select.cfg-size, select.art-size").forEach(select => {
+            const current = select.value || "";
+            select.replaceChildren();
+            sizes.forEach(size => {
                 const option = document.createElement("option");
                 option.value = size;
-                datalist.appendChild(option);
+                option.textContent = size;
+                select.appendChild(option);
             });
+            select.value = sizes.includes(current) ? current : preferred;
         });
     }
 
     // ──────────────────────────── 配置读写 ────────────────────────────
 
+    /**
+     * 打开配置页时回填：两个页签各自的列表 + 表单值。
+     * 表单默认停在「列表」视图（DSH 那样：先看有哪些服务商，点进去才填表）。
+     */
     #restoreConfigs() {
-        const text = getTextConfig(this);
-        const image = getImageConfig(this);
-        this.#q(".cfg-baseurl").value = text.baseUrl || "";
-        this.#q(".cfg-apikey").value = text.apiKey || "";
-        this.#q(".cfg-model").value = text.model || "";
-        const temperature = this.#q(".cfg-temperature");
-        temperature.value = String(Number.isFinite(Number(text.temperature)) ? text.temperature : 0.8);
-        this.#q(".cfg-temperature-value").textContent = temperature.value;
-        this.#q(".img-baseurl").value = image.baseUrl || "";
-        this.#q(".img-apikey").value = image.apiKey || "";
-        this.#q(".img-model").value = image.model || "";
-        this.#q(".img-size").value = image.size || "768x1024";
-        this.#q(".img-extra").value = image.extra || "";
-        const textProfile = findTextProfile(text.provider);
-        if (textProfile) {
-            this.#fillDatalist(this.#q("#ai-text-models"), textProfile.models);
-            this.#renderProfileHelp("text", textProfile);
-            this.#qa(`.profile-list[data-profile-kind="text"] .profile`).forEach(node => {
-                node.classList.toggle("chosen", node.dataset.profileKey === textProfile.key);
-            });
-        }
-        const imageProfile = findImageProfile(image.provider);
-        if (imageProfile) {
-            this.#fillDatalist(this.#q("#ai-image-models"), imageProfile.models);
-            this.#renderProfileHelp("image", imageProfile);
-            this.#qa(`.profile-list[data-profile-kind="image"] .profile`).forEach(node => {
-                node.classList.toggle("chosen", node.dataset.profileKey === imageProfile.key);
-            });
-        }
-        this.#fillSizeOptions(imageProfile ? imageProfile.sizes : null);
-    }
-    /** 拿地址反查服务商（用户手改过地址时返回「自定义」，申请页自然为空） */
-    #providerOf(kind, baseUrl) {
-        const list = kind === "image" ? IMAGE_PROFILES : TEXT_PROFILES;
-        const normalized = normalizeBaseUrl(baseUrl);
-        if (!normalized) return null;
-        return list.find(profile => normalizeBaseUrl(profile.baseUrl) === normalized)
-            || { key: "custom", name: "自定义", keyUrl: "", siteUrl: "" };
+        ["text", "image"].forEach(kind => {
+            const config = this.#configOf(kind);
+            const profile = this.#profileOf(kind, config.provider) || this.#providerOf(kind, config.baseUrl);
+            const set = (selector, value) => {
+                const node = this.#paneQ(kind, selector);
+                if (node) node.value = value;
+            };
+            set(".cfg-baseurl", config.baseUrl || "");
+            set(".cfg-apikey", config.apiKey || "");
+            this.#setModelOptions(kind, (profile && profile.models) || []);
+            this.#writeModel(kind, config.model || "");
+            this.#toggleManualModel(kind, !config.model && !(profile && profile.models || []).length);
+            if (kind === "image") {
+                this.#fillSizeOptions(profile ? profile.sizes : null);
+                set(".cfg-size", config.size || "768x1024");
+                set(".cfg-extra", config.extra || "");
+            } else {
+                const temperature = Number.isFinite(Number(config.temperature)) ? Number(config.temperature) : 0.8;
+                set(".cfg-temperature", String(temperature));
+                const label = this.#paneQ(kind, ".cfg-temperature-value");
+                if (label) label.textContent = String(temperature);
+            }
+            if (profile) this.#renderProfileHelp(kind, profile);
+            this.#renderProviders(kind);
+            this.#showProviderView(kind, "list");
+        });
+        //原画区的尺寸下拉也要有值（它和生图配置共用同一批候选）
+        const artSize = this.#q(".art-size");
+        if (artSize && !artSize.options.length) this.#fillSizeOptions(getImageConfig(this).size ? [getImageConfig(this).size] : null);
+        if (artSize && !artSize.value) artSize.value = "768x1024";
     }
     /**
      * 保存配置
@@ -478,37 +611,54 @@ shadow.innerHTML=`
      * @param {boolean} [silent] 测试连接后顺手保存时不要盖掉测试结果
      */
     #saveConfig(kind, silent = false) {
+        const baseUrl = (this.#paneQ(kind, ".cfg-baseurl") || {}).value?.trim() || "";
+        const provider = this.#providerOf(kind, baseUrl);
+        const patch = {
+            provider: provider ? provider.key : "custom",
+            baseUrl,
+            apiKey: (this.#paneQ(kind, ".cfg-apikey") || {}).value?.trim() || "",
+            model: this.#readModel(kind)
+        };
         if (kind === "image") {
-            const baseUrl = this.#q(".img-baseurl").value.trim();
-            const provider = this.#providerOf("image", baseUrl);
-            saveImageConfig(this, {
-                provider: provider ? provider.key : "custom",
-                baseUrl,
-                apiKey: this.#q(".img-apikey").value.trim(),
-                model: this.#q(".img-model").value.trim(),
-                size: this.#q(".img-size").value.trim() || "1024x1024",
-                extra: this.#q(".img-extra").value.trim()
-            });
+            patch.size = (this.#paneQ(kind, ".cfg-size") || {}).value?.trim() || "1024x1024";
+            patch.extra = (this.#paneQ(kind, ".cfg-extra") || {}).value?.trim() || "";
+            saveImageConfig(this, patch);
             if (!silent) this.#setResult("image", "生图接口已保存 ✓", "ok");
         } else {
-            const baseUrl = this.#q(".cfg-baseurl").value.trim();
-            const provider = this.#providerOf("text", baseUrl);
-            saveTextConfig(this, {
-                provider: provider ? provider.key : "custom",
-                baseUrl,
-                apiKey: this.#q(".cfg-apikey").value.trim(),
-                model: this.#q(".cfg-model").value.trim(),
-                temperature: Number(this.#q(".cfg-temperature").value) || 0.8
-            });
+            patch.temperature = Number((this.#paneQ(kind, ".cfg-temperature") || {}).value) || 0.8;
+            saveTextConfig(this, patch);
             if (!silent) this.#setResult("text", "对话接口已保存 ✓", "ok");
         }
         this.#refreshStatus();
+        this.#renderProviders(kind);
     }
     #setResult(kind, message, level = "") {
         const node = this.#q(`[data-config-pane="${kind}"] .result-line`);
         if (!node) return;
         node.textContent = message;
         node.className = `result-line ${level}`.trim();
+    }
+    /** 清空当前这一栏（地址 / 密钥 / 模型），列表上那家随即变回「未配置」 */
+    #clearConfig(kind) {
+        const set = (selector, value) => {
+            const node = this.#paneQ(kind, selector);
+            if (node) node.value = value;
+        };
+        set(".cfg-baseurl", "");
+        set(".cfg-apikey", "");
+        this.#setModelOptions(kind, []);
+        this.#writeModel(kind, "");
+        this.#toggleManualModel(kind, true);
+        if (kind === "image") {
+            set(".cfg-size", "768x1024");
+            set(".cfg-extra", "");
+            saveImageConfig(this, { provider: "", baseUrl: "", apiKey: "", model: "", size: "1024x1024", extra: "" });
+        } else {
+            saveTextConfig(this, { provider: "", baseUrl: "", apiKey: "", model: "", temperature: 0.8 });
+        }
+        this.#refreshStatus();
+        this.#renderProviders(kind);
+        this.#setResult(kind, "已清空这一栏 ✓", "ok");
     }
     /** 把 {message, hint, detail} 拼成新手看得懂的几行 */
     #errorText(error) {
@@ -540,20 +690,32 @@ shadow.innerHTML=`
             if (!input) return;
             input.type = input.type === "password" ? "text" : "password";
         }));
-        //温度数值显示
-        const temperature = this.#q(".cfg-temperature");
-        temperature.addEventListener("input", () => {
-            this.#q(".cfg-temperature-value").textContent = temperature.value;
+        //两个页签的字段类名一致 → 按页签委托一次绑完，不用给 text/image 各写一遍
+        this.#qa(".sheet-pane").forEach(pane => {
+            const kind = pane.dataset.configPane;
+            const on = (selector, handler) => pane.querySelectorAll(selector).forEach(node => node.addEventListener("pointerup", handler));
+            on(".provider-back", () => this.#showProviderView(kind, "list"));
+            on(".provider-site", () => this.#openProfileSite(kind));
+            on(".model-manual", () => this.#toggleManualModel(kind));
+            on(".cfg-pull", () => this.#pullModels(kind));
+            on(".cfg-test", () => this.#testConnection(kind));
+            on(".cfg-clear", () => this.#clearConfig(kind));
+            on(".cfg-save", () => {
+                this.#saveConfig(kind);
+                this.#showProviderView(kind, "list");
+                this.#setResult(kind, "已保存 ✓ 列表里带绿点的那家就是当前使用的。", "ok");
+            });
+            const temperature = pane.querySelector(".cfg-temperature");
+            if (temperature) temperature.addEventListener("input", () => {
+                const label = pane.querySelector(".cfg-temperature-value");
+                if (label) label.textContent = temperature.value;
+            });
+            //填了 key 就顺手把引导标记成看过，免得下次又摊开
+            const apiKey = pane.querySelector(".cfg-apikey");
+            if (apiKey) apiKey.addEventListener("change", () => {
+                if (apiKey.value.trim()) markGuided(this);
+            });
         });
-        //保存 / 测试 / 拉取 / 申请页
-        this.#q(".cfg-save").addEventListener("pointerup", () => this.#saveConfig("text"));
-        this.#q(".img-save").addEventListener("pointerup", () => this.#saveConfig("image"));
-        this.#q(".cfg-test").addEventListener("pointerup", () => this.#testConnection("text"));
-        this.#q(".img-test").addEventListener("pointerup", () => this.#testConnection("image"));
-        this.#q(".cfg-pull").addEventListener("pointerup", () => this.#pullModels("text"));
-        this.#q(".img-pull").addEventListener("pointerup", () => this.#pullModels("image"));
-        this.#q(".cfg-open-site").addEventListener("pointerup", () => this.#openProfileSite("text"));
-        this.#q(".img-open-site").addEventListener("pointerup", () => this.#openProfileSite("image"));
         //生成设计稿
         this.#qa(".example").forEach(node => node.addEventListener("pointerup", () => {
             this.#q(".request").value = node.dataset.example || "";
@@ -574,10 +736,6 @@ shadow.innerHTML=`
         });
         //鼠标落到原画区时刷新一次「画谁」（主区可能刚打开了新的武将草稿）
         this.#q('[data-block="art"]').addEventListener("pointerdown", () => this.#renderArtOptions(), true);
-        //填了 key 就顺手把引导标记成看过，免得下次又摊开
-        this.#q(".cfg-apikey").addEventListener("change", () => {
-            if (this.#q(".cfg-apikey").value.trim()) markGuided(this);
-        });
     }
     #setProgress(scope, text) {
         const node = this.#q(scope === "art" ? ".art-progress" : ".progress");
@@ -592,20 +750,21 @@ shadow.innerHTML=`
         this.#setProgress(scope, busy ? text : "");
     }
     async #testConnection(kind) {
-        const isImage = kind === "image";
-        const baseUrl = this.#q(isImage ? ".img-baseurl" : ".cfg-baseurl").value.trim();
-        const apiKey = this.#q(isImage ? ".img-apikey" : ".cfg-apikey").value.trim();
-        const model = this.#q(isImage ? ".img-model" : ".cfg-model").value.trim();
+        const baseUrl = (this.#paneQ(kind, ".cfg-baseurl") || {}).value?.trim() || "";
+        const apiKey = (this.#paneQ(kind, ".cfg-apikey") || {}).value?.trim() || "";
+        const model = this.#readModel(kind);
         if (!baseUrl) {
-            this.#setResult(kind, "先填「接口地址」——点上面任意服务商卡片可以自动填。", "warn");
+            this.#setResult(kind, "先填「接口地址」——在列表里点一家服务商会自动填。", "warn");
             return;
         }
         this.#setResult(kind, "正在测试连接…", "warn");
         const result = await testConnection({ baseUrl, apiKey, model });
         if (result.ok) {
-            this.#fillDatalist(this.#q(isImage ? "#ai-image-models" : "#ai-text-models"), result.models);
+            const current = this.#readModel(kind);
+            this.#setModelOptions(kind, result.models);
+            this.#writeModel(kind, current || result.models[0] || "");
             this.#setResult(kind, result.models.length
-                ? `连接正常 ✓ 模型列表已填进「模型」下拉（${result.models.length} 个），点右侧箭头可挑。`
+                ? `连接正常 ✓ 已拉到 ${result.models.length} 个模型，在「模型」下拉里挑一个（没有要的就点 ✎ 手填）。`
                 : "连接正常 ✓（该服务不提供模型列表，手填的模型名可用）", "ok");
             //测试通过就顺手保存，省一次点击（silent：别盖掉上面这条成功提示）
             this.#saveConfig(kind, true);
@@ -613,26 +772,36 @@ shadow.innerHTML=`
         }
         this.#setResult(kind, `测试失败：\n${this.#errorText(result.error)}`, "err");
     }
+    /**
+     * 拉取模型列表。
+     * ⚠️ 结果填进**原生 `<select>`**（以前是 `<input list>` + `<datalist>`）：Chromium 会把
+     * datalist 候选按输入框当前文本过滤、动态加的选项还常不刷新，于是「拉到 N 个模型」
+     * 却一个都看不到（2026-10 用户反馈）。select 没有这层过滤/缓存，选项一定摆得出来。
+     */
     async #pullModels(kind) {
-        const isImage = kind === "image";
-        const baseUrl = this.#q(isImage ? ".img-baseurl" : ".cfg-baseurl").value.trim();
-        const apiKey = this.#q(isImage ? ".img-apikey" : ".cfg-apikey").value.trim();
+        const baseUrl = (this.#paneQ(kind, ".cfg-baseurl") || {}).value?.trim() || "";
+        const apiKey = (this.#paneQ(kind, ".cfg-apikey") || {}).value?.trim() || "";
+        if (!baseUrl) {
+            this.#setResult(kind, "先填「接口地址」，再点「拉取」。", "warn");
+            return;
+        }
         this.#setResult(kind, "正在拉取模型列表…", "warn");
         const result = await listModels({ baseUrl, apiKey });
         if (!result.ok) {
             this.#setResult(kind, `拉取失败：\n${this.#errorText(result.error)}`, "err");
             return;
         }
-        this.#fillDatalist(this.#q(isImage ? "#ai-image-models" : "#ai-text-models"), result.models);
-        this.#setResult(kind, `拉到 ${result.models.length} 个模型：点「模型」输入框右侧箭头即可挑。`, "ok");
+        const current = this.#readModel(kind);
+        this.#setModelOptions(kind, result.models);
+        this.#writeModel(kind, current || result.models[0] || "");
+        this.#setResult(kind, `拉到 ${result.models.length} 个模型 ✓ 在「模型」下拉里挑一个（点 ✎ 可以手填别的）。`, "ok");
     }
     #openProfileSite(kind) {
-        const isImage = kind === "image";
-        const baseUrl = this.#q(isImage ? ".img-baseurl" : ".cfg-baseurl").value.trim();
-        const profile = this.#providerOf(kind, baseUrl);
+        const baseUrl = (this.#paneQ(kind, ".cfg-baseurl") || {}).value?.trim() || "";
+        const profile = this.#providerOf(kind, baseUrl) || this.#profileOf(kind, (this.#editingProfile || {})[kind]);
         const url = (profile && (profile.keyUrl || profile.siteUrl)) || "";
         if (!url) {
-            this.#setResult(kind, "先在上面点一张服务商卡片（自定义地址没有申请页）。", "warn");
+            this.#setResult(kind, "自定义地址没有申请页：去服务商官网找「API 密钥」页即可。", "warn");
             return;
         }
         if (this.#openExternal(url)) this.#setResult(kind, `已在系统浏览器打开：${url}`, "ok");

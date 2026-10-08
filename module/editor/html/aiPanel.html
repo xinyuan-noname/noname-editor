@@ -61,8 +61,7 @@
         <textarea class="art-prompt" rows="3" spellcheck="false" placeholder="画面描述；留空则按武将资料自动拼一段"></textarea>
         <label class="row"><span>画风</span><select class="art-style"></select></label>
         <div class="art-params">
-            <label class="row"><span>尺寸</span><input class="art-size" list="ai-size-options" spellcheck="false" value="768x1024"></label>
-            <datalist id="ai-size-options" class="size-options"></datalist>
+            <label class="row"><span>尺寸</span><select class="art-size"></select></label>
             <label class="row"><span>张数</span><select class="art-count"><option value="1" selected>1 张</option><option value="2">2 张</option><option value="4">4 张</option></select></label>
         </div>
         <label class="row"><span>负面</span><input class="art-negative" spellcheck="false" placeholder="不要出现的元素（可选，部分服务支持）"></label>
@@ -93,59 +92,78 @@
         </div>
 
         <div class="sheet-pane" data-config-pane="text">
-            <p class="muted">先点一张服务商卡片（会自动填好地址与模型），再把申请来的 key 粘进去。</p>
-            <div class="profile-list" data-profile-kind="text"></div>
-            <label class="row column"><span>接口地址</span><input class="cfg-baseurl" spellcheck="false" placeholder="例如 https://api.deepseek.com/v1"></label>
-            <label class="row column"><span>API Key</span>
-                <span class="key-field">
-                    <input class="cfg-apikey" type="password" spellcheck="false" placeholder="粘贴服务商给的 key">
-                    <button class="key-toggle" type="button" title="显示 / 隐藏 key">👁</button>
-                </span>
-            </label>
-            <label class="row column"><span>模型</span>
-                <span class="model-field">
-                    <input class="cfg-model" list="ai-text-models" spellcheck="false" placeholder="例如 deepseek-chat">
-                    <button class="cfg-pull" type="button" title="从该地址拉取可用模型列表">拉取</button>
-                </span>
-            </label>
-            <datalist id="ai-text-models" class="model-options"></datalist>
-            <label class="row"><span>温度</span><input class="cfg-temperature" type="range" min="0" max="1.5" step="0.1" value="0.8"><b class="cfg-temperature-value">0.8</b></label>
-            <div class="profile-help"></div>
-            <div class="actions">
-                <button class="cfg-test" type="button">测试连接</button>
-                <button class="cfg-save" type="button">保存</button>
-                <button class="cfg-open-site" type="button">打开申请页</button>
+            <div class="provider-view" data-provider-view="list">
+                <p class="muted">填入提供商的 API 密钥即可使用它的模型。点一行进入配置。</p>
+                <ul class="provider-list"></ul>
+            </div>
+            <div class="provider-view" data-provider-view="edit" hidden>
+                <header class="provider-head">
+                    <button class="provider-back" type="button" title="返回列表">←</button>
+                    <span class="provider-title"></span>
+                    <button class="provider-site" type="button" title="在系统浏览器里打开申请页">申请页</button>
+                </header>
+                <label class="row column"><span>接口地址</span><input class="cfg-baseurl" spellcheck="false" placeholder="例如 https://api.deepseek.com/v1"></label>
+                <label class="row column"><span>API Key</span>
+                    <span class="key-field">
+                        <input class="cfg-apikey" type="password" spellcheck="false" placeholder="粘贴服务商给的 key">
+                        <button class="key-toggle" type="button" title="显示 / 隐藏 key">👁</button>
+                    </span>
+                </label>
+                <label class="row column"><span>模型</span>
+                    <span class="model-field">
+                        <select class="cfg-model"></select>
+                        <input class="cfg-model-manual" spellcheck="false" placeholder="手填模型名" hidden>
+                        <button class="model-manual" type="button" title="列表里没有想要的模型？手填">✎</button>
+                        <button class="cfg-pull" type="button" title="从该地址拉取可用模型列表">拉取</button>
+                    </span>
+                </label>
+                <label class="row"><span>温度</span><input class="cfg-temperature" type="range" min="0" max="1.5" step="0.1" value="0.8"><b class="cfg-temperature-value">0.8</b></label>
+                <details class="profile-help"><summary>怎么申请 key</summary><div class="help-body muted"></div></details>
+                <div class="actions">
+                    <button class="cfg-test" type="button">测试连接</button>
+                    <button class="cfg-save" type="button">保存</button>
+                    <button class="cfg-clear ghost" type="button" title="清空这一栏的地址与密钥">清空</button>
+                </div>
             </div>
             <p class="result-line"></p>
         </div>
 
         <div class="sheet-pane" data-config-pane="image" hidden>
-            <p class="muted">生图接口可以和对话接口用同一个 key（硅基流动、火山方舟、智谱、OpenAI 都是）。</p>
-            <div class="profile-list" data-profile-kind="image"></div>
-            <label class="row column"><span>接口地址</span><input class="img-baseurl" spellcheck="false" placeholder="例如 https://api.siliconflow.cn/v1"></label>
-            <label class="row column"><span>API Key</span>
-                <span class="key-field">
-                    <input class="img-apikey" type="password" spellcheck="false" placeholder="粘贴服务商给的 key">
-                    <button class="key-toggle" type="button" title="显示 / 隐藏 key">👁</button>
-                </span>
-            </label>
-            <label class="row column"><span>模型</span>
-                <span class="model-field">
-                    <input class="img-model" list="ai-image-models" spellcheck="false" placeholder="例如 Kwai-Kolors/Kolors">
-                    <button class="img-pull" type="button" title="从该地址拉取可用模型列表">拉取</button>
-                </span>
-            </label>
-            <datalist id="ai-image-models" class="model-options"></datalist>
-            <label class="row"><span>尺寸</span><input class="img-size" list="ai-size-options-image" spellcheck="false" value="768x1024"></label>
-            <datalist id="ai-size-options-image" class="size-options"></datalist>
-            <label class="row column"><span>附加参数</span>
-                <input class="img-extra" spellcheck="false" placeholder='可留空；如 {"watermark": false}'>
-            </label>
-            <div class="profile-help"></div>
-            <div class="actions">
-                <button class="img-test" type="button">测试连接</button>
-                <button class="img-save" type="button">保存</button>
-                <button class="img-open-site" type="button">打开申请页</button>
+            <div class="provider-view" data-provider-view="list">
+                <p class="muted">生图接口可以和对话接口用同一个 key（硅基流动、火山方舟、智谱、OpenAI 都是）。</p>
+                <ul class="provider-list"></ul>
+            </div>
+            <div class="provider-view" data-provider-view="edit" hidden>
+                <header class="provider-head">
+                    <button class="provider-back" type="button" title="返回列表">←</button>
+                    <span class="provider-title"></span>
+                    <button class="provider-site" type="button" title="在系统浏览器里打开申请页">申请页</button>
+                </header>
+                <label class="row column"><span>接口地址</span><input class="cfg-baseurl" spellcheck="false" placeholder="例如 https://api.siliconflow.cn/v1"></label>
+                <label class="row column"><span>API Key</span>
+                    <span class="key-field">
+                        <input class="cfg-apikey" type="password" spellcheck="false" placeholder="粘贴服务商给的 key">
+                        <button class="key-toggle" type="button" title="显示 / 隐藏 key">👁</button>
+                    </span>
+                </label>
+                <label class="row column"><span>模型</span>
+                    <span class="model-field">
+                        <select class="cfg-model"></select>
+                        <input class="cfg-model-manual" spellcheck="false" placeholder="手填模型名" hidden>
+                        <button class="model-manual" type="button" title="列表里没有想要的模型？手填">✎</button>
+                        <button class="cfg-pull" type="button" title="从该地址拉取可用模型列表">拉取</button>
+                    </span>
+                </label>
+                <label class="row"><span>尺寸</span><select class="cfg-size"></select></label>
+                <label class="row column"><span>附加参数</span>
+                    <input class="cfg-extra" spellcheck="false" placeholder='可留空；如 {"watermark": false}'>
+                </label>
+                <details class="profile-help"><summary>怎么申请 key</summary><div class="help-body muted"></div></details>
+                <div class="actions">
+                    <button class="cfg-test" type="button">测试连接</button>
+                    <button class="cfg-save" type="button">保存</button>
+                    <button class="cfg-clear ghost" type="button" title="清空这一栏的地址与密钥">清空</button>
+                </div>
             </div>
             <p class="result-line"></p>
         </div>
@@ -165,7 +183,7 @@
             </li>
             <li>
                 <b>第二步：把 key 填进编辑器</b>
-                <p>点下面「去配置」→ 在「对话接口」里点服务商卡片（地址会自动填好）→ 粘贴 key → 点「测试连接」。</p>
+                <p>点下面「去配置」→ 在「对话接口」里点一行服务商（如 DeepSeek，地址与模型会自动填好）→ 粘贴 key → 点「测试连接」。</p>
                 <p class="muted">测试成功会显示「连接正常」并列出模型名；失败会告诉你具体是哪一步错了（key 错 / 地址错 / 余额不足 / 网络不通）。</p>
             </li>
             <li>
