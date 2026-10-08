@@ -8,8 +8,13 @@
         </span>
     </header>
 
+    <div class="ai-tabs">
+        <button type="button" class="chosen" data-ai-tab="draft">生成设计稿</button>
+        <button type="button" data-ai-tab="art">生成原画</button>
+        <button type="button" data-ai-tab="history">生成历史</button>
+    </div>
+
     <section class="block" data-block="draft">
-        <h3>① 生成武将设计稿</h3>
         <textarea class="request" rows="3" spellcheck="false" placeholder="用一句话描述你要的武将，例如：蜀势力女性武将，靠卖血换爆发，体力3，两个技能"></textarea>
         <div class="examples">
             <span class="example" data-example="蜀势力女性武将，靠卖血换爆发，体力3，两个技能">卖血爆发</span>
@@ -55,8 +60,7 @@
         </div>
     </section>
 
-    <section class="block" data-block="art">
-        <h3>② 生成原画</h3>
+    <section class="block" data-block="art" hidden>
         <label class="row"><span>画谁</span><select class="art-subject"></select></label>
         <textarea class="art-prompt" rows="3" spellcheck="false" placeholder="画面描述；留空则按武将资料自动拼一段"></textarea>
         <label class="row"><span>画风</span><select class="art-style"></select></label>
@@ -75,8 +79,7 @@
         </div>
     </section>
 
-    <section class="block" data-block="history">
-        <h3>生成历史</h3>
+    <section class="block" data-block="history" hidden>
         <ul class="history-list"></ul>
         <div class="actions"><button class="clear-history" type="button">清空历史</button></div>
     </section>
@@ -188,7 +191,7 @@
             </li>
             <li>
                 <b>第三步：写一句话，生成设计稿</b>
-                <p>回到「① 生成武将设计稿」，用一句话描述你想要的武将，点「生成设计稿」。<br>
+                <p>切到上方的「生成设计稿」标签页，用一句话描述你想要的武将，点「生成设计稿」。<br>
                     每个技能都会附一份可在游戏里直接运行的 shya 源码；点「一键应用」就会变成编辑器里的一份武将草稿。</p>
             </li>
         </ol>

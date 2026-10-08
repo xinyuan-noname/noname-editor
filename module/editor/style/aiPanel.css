@@ -66,6 +66,54 @@
     gap: 4px;
 }
 
+/* ── 主标签栏（设计稿 / 原画 / 历史：同一时刻只显示一页，不再一路往下滚）── */
+.ai-tabs {
+    display: flex;
+    gap: 4px;
+}
+
+.ai-tabs[hidden] {
+    display: none;
+}
+
+.ai-tabs > button {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 2px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #f7f7f7;
+    border-color: rgba(255, 255, 255, 0.28);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ai-tabs > button:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.ai-tabs > button.chosen {
+    background: #e4d5b7;
+    color: #000;
+    border-color: #e4d5b7;
+    font-weight: 800;
+}
+
+.ai-tabs .tab-badge {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 4px;
+    border-radius: 8px;
+    font-size: 0.75em;
+    background: rgba(122, 167, 255, 0.85);
+    color: #08203f;
+}
+
+.ai-tabs > button.chosen .tab-badge {
+    background: #176fd4;
+    color: #fff;
+}
+
 /* ── 通用块 ── */
 .block {
     display: flex;

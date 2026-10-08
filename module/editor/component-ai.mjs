@@ -44,6 +44,8 @@ class HTMLNonameAiPanelElement extends HTMLNonameFocusUIElement {
     #taskAbort = null;
     /** 配置页当前在编辑哪一家（{ text: key, image: key }），「申请页」按钮要用它 */
     #editingProfile = {};
+    /** 主标签栏当前页（draft / art / history），会记忆到 x19D6_editor.ai.ui.lastTab */
+    #activeTab = "draft";
     constructor() {
         super();
         const shadow = this.attachShadow({ mode: "open" });
@@ -59,8 +61,13 @@ shadow.innerHTML=`
         </span>
     </header>
 
+    <div class="ai-tabs">
+        <button type="button" class="chosen" data-ai-tab="draft">生成设计稿</button>
+        <button type="button" data-ai-tab="art">生成原画</button>
+        <button type="button" data-ai-tab="history">生成历史</button>
+    </div>
+
     <section class="block" data-block="draft">
-        <h3>① 生成武将设计稿</h3>
         <textarea class="request" rows="3" spellcheck="false" placeholder="用一句话描述你要的武将，例如：蜀势力女性武将，靠卖血换爆发，体力3，两个技能"></textarea>
         <div class="examples">
             <span class="example" data-example="蜀势力女性武将，靠卖血换爆发，体力3，两个技能">卖血爆发</span>
@@ -106,8 +113,7 @@ shadow.innerHTML=`
         </div>
     </section>
 
-    <section class="block" data-block="art">
-        <h3>② 生成原画</h3>
+    <section class="block" data-block="art" hidden>
         <label class="row"><span>画谁</span><select class="art-subject"></select></label>
         <textarea class="art-prompt" rows="3" spellcheck="false" placeholder="画面描述；留空则按武将资料自动拼一段"></textarea>
         <label class="row"><span>画风</span><select class="art-style"></select></label>
@@ -126,8 +132,7 @@ shadow.innerHTML=`
         </div>
     </section>
 
-    <section class="block" data-block="history">
-        <h3>生成历史</h3>
+    <section class="block" data-block="history" hidden>
         <ul class="history-list"></ul>
         <div class="actions"><button class="clear-history" type="button">清空历史</button></div>
     </section>
@@ -239,7 +244,7 @@ shadow.innerHTML=`
             </li>
             <li>
                 <b>第三步：写一句话，生成设计稿</b>
-                <p>回到「① 生成武将设计稿」，用一句话描述你想要的武将，点「生成设计稿」。<br>
+                <p>切到上方的「生成设计稿」标签页，用一句话描述你想要的武将，点「生成设计稿」。<br>
                     每个技能都会附一份可在游戏里直接运行的 shya 源码；点「一键应用」就会变成编辑器里的一份武将草稿。</p>
             </li>
         </ol>
@@ -282,6 +287,8 @@ shadow.innerHTML=`
         this.#refreshStatus();
         this.renderHistory();
         this.renderCandidates();
+        //主标签页记住上次那一页（AI 区最常用的是「生成设计稿」，没有记录就从它开始）
+        this.#showTab(this.configQuery("get", { member: "x19D6_editor.ai.ui.lastTab" }) || "draft");
         //首次进来：没配过接口也没看过引导，直接把引导摊开（不弹窗、不打断）
         const text = getTextConfig(this);
         if (!isGuided(this) && !text.baseUrl) this.openSheet("guide");
@@ -309,6 +316,7 @@ shadow.innerHTML=`
      */
     openSheet(name) {
         this.#qa(".block").forEach(node => (node.hidden = true));
+        this.#qa(".ai-tabs").forEach(node => (node.hidden = true));
         this.#qa(".sheet").forEach(node => (node.hidden = node.dataset.sheet !== name));
         if (name === "config") {
             //每次打开都从「服务商列表」开始（DSH 那样：先看有哪几家，点进去才填表）
@@ -319,8 +327,38 @@ shadow.innerHTML=`
     }
     closeSheet() {
         this.#qa(".sheet").forEach(node => (node.hidden = true));
-        this.#qa(".block").forEach(node => (node.hidden = false));
+        this.#qa(".ai-tabs").forEach(node => (node.hidden = false));
+        this.#showTab(this.#activeTab);
         this.#refreshStatus();
+    }
+    /**
+     * 切主标签页（设计稿 / 原画 / 历史）。同一时刻只显示一页，不再一路往下滚。
+     * @param {"draft"|"art"|"history"} name
+     */
+    #showTab(name) {
+        const tabs = this.#qa("[data-ai-tab]");
+        if (!tabs.length) return;
+        const valid = tabs.some(tab => tab.dataset.aiTab === name) ? name : "draft";
+        this.#activeTab = valid;
+        tabs.forEach(tab => tab.classList.toggle("chosen", tab.dataset.aiTab === valid));
+        this.#qa(".block").forEach(node => (node.hidden = node.dataset.block !== valid));
+        this.configQuery("write", { member: "x19D6_editor.ai.ui.lastTab", value: valid });
+    }
+    /** 标签上的小徽标（设计稿数量 / 候选图数量），count 为 0 就摘掉 */
+    #setTabBadge(name, count) {
+        const tab = this.#qa("[data-ai-tab]").find(node => node.dataset.aiTab === name);
+        if (!tab) return;
+        let badge = tab.querySelector(".tab-badge");
+        if (!count) {
+            badge?.remove();
+            return;
+        }
+        if (!badge) {
+            badge = document.createElement("span");
+            badge.className = "tab-badge";
+            tab.appendChild(badge);
+        }
+        badge.textContent = String(count);
     }
 
     // ──────────────────────────── 状态条 ────────────────────────────
@@ -669,6 +707,8 @@ shadow.innerHTML=`
     // ──────────────────────────── 事件绑定 ────────────────────────────
 
     #bindEvents() {
+        //主标签栏
+        this.#qa("[data-ai-tab]").forEach(tab => tab.addEventListener("pointerup", () => this.#showTab(tab.dataset.aiTab)));
         //配置 / 引导浮层
         this.#q(".to-config").addEventListener("pointerup", () => this.openSheet("config"));
         this.#q(".to-guide").addEventListener("pointerup", () => this.openSheet("guide"));
@@ -881,10 +921,12 @@ shadow.innerHTML=`
     }
     /** ① 生成设计稿：对话模型 → JSON → 归一化 → 结果卡片 */
     async generateDraft() {
+        //结果与进度都写在「设计稿」这一页上，从别的页点生成也先切回来
+        this.#showTab("draft");
         const config = getTextConfig(this);
         if (!config.baseUrl || !config.model) {
             this.openSheet("config");
-            this.#setResult("text", "还没配好对话接口：先点一张服务商卡片、粘上 API Key，再点「测试连接」。", "warn");
+            this.#setResult("text", "还没配好对话接口：在列表里点一家服务商、粘上 API Key，再点「测试连接」。", "warn");
             return;
         }
         const request = this.#q(".request").value.trim();
@@ -949,6 +991,7 @@ shadow.innerHTML=`
         const root = this.#q('.results[data-by="draft"]');
         if (!root) return;
         root.replaceChildren();
+        this.#setTabBadge("draft", this.#drafts.length);
         if (!this.#drafts.length) {
             const hint = document.createElement("p");
             hint.className = "empty-hint";
@@ -1364,6 +1407,7 @@ shadow.innerHTML=`
     }
     /** 用对话模型把武将资料扩写成美术提示词 */
     async expandArtPrompt() {
+        this.#showTab("art");
         const config = getTextConfig(this);
         if (!config.baseUrl || !config.model) {
             this.openSheet("config");
@@ -1425,6 +1469,7 @@ shadow.innerHTML=`
     }
     /** ③ 生成原画 → 存成候选图（**不动**正式立绘，点「用作立绘」才生效） */
     async generateArt() {
+        this.#showTab("art");
         const config = getImageConfig(this);
         if (!config.baseUrl || !config.model) {
             this.openSheet("config");
@@ -1503,6 +1548,8 @@ shadow.innerHTML=`
         root.replaceChildren();
         const map = getCandidateMap(this);
         const keys = Object.keys(map);
+        //标签上挂个候选图总数，不用切过去也知道有没有出图
+        this.#setTabBadge("art", keys.reduce((total, key) => total + getCandidates(this, key).length, 0));
         if (!keys.length) {
             const hint = document.createElement("p");
             hint.className = "empty-hint";
