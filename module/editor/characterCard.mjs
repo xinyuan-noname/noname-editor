@@ -185,6 +185,9 @@ const PIP_ASSETS = {
     shield: "image/card/shield.png",
 };
 
+/** 技能名底条（引擎里给临时牌名用的米色金角条，正好当技能名徽章底） */
+const BADGE_ASSET = "image/card/cardtempname_bg.png";
+
 /**
  * 本模块所在扩展在 app 根下的相对路径（形如 `extension/魂氏编辑器`）——取扩展内素材（主公图标）要用
  * @returns {string} 取不到时返回 ""
@@ -199,6 +202,7 @@ function extensionRoot() {
  * 状态规则对齐 `style/character-editor.css`：血量比 >0.5 用 glass1、≤0.5 用 glass2、≤0.25 用 glass3，
  * 空位是 glass4 + `grayscale(100%)` + `opacity:.5`（canvas 里用 `ctx.filter` 复刻）；
  * 一张素材都拿不到时整行走自绘兜底（见 `drawDrawnHpPips`）。
+ * 布局：**上排 = 主公印 + 体力珠，下排 = 护甲盾**（用户反馈挤在同一行太挤），两排各自右对齐。
  */
 function drawHpPips(ctx, data, W) {
     const { hp, maxHp, hujia = 0, isZhugong, pips = {} } = data;
@@ -213,7 +217,10 @@ function drawHpPips(ctx, data, W) {
     const rowHeight = Math.max(beadSize, shieldSize);
     const beadTop = top + (rowHeight - beadSize) / 2;
     const centerY = top + rowHeight / 2;
-    let right = W - 18;
+    //用户反馈「体力条和护甲挤在同一行」→ 拆两行：上排体力（含主公印），下排护甲，各自右对齐
+    const armorTop = top + rowHeight + 6;
+    const rightEdge = W - 18;
+    let pipRight = rightEdge;
     const armor = Math.max(0, Math.min(8, Number(hujia) || 0));
     const max = Math.max(0, Number(maxHp) || 0);
     const now = Math.max(0, Number(hp) || 0);
@@ -248,9 +255,9 @@ function drawHpPips(ctx, data, W) {
 
     if (isZhugong) {
         if (pips.zhugong) {
-            drawAsset(pips.zhugong, right - beadSize, top, beadSize, rowHeight);
+            drawAsset(pips.zhugong, pipRight - beadSize, top, beadSize, rowHeight);
         } else {
-            const x = right - beadSize;
+            const x = pipRight - beadSize;
             roundRectPath(ctx, x, top, beadSize, rowHeight, 4);
             const seal = ctx.createLinearGradient(x, top, x + beadSize, top + rowHeight);
             seal.addColorStop(0, "#f6dfa0");
@@ -264,27 +271,28 @@ function drawHpPips(ctx, data, W) {
             ctx.font = `bold 14px ${FONT_TEXT}`;
             ctx.fillText("主", x + beadSize / 2, centerY + 0.5);
         }
-        right -= beadSize + gap;
+        pipRight -= beadSize + gap;
     }
 
-    // 护甲盾：画在体力珠左边（它是「额外的血」）
+    // 护甲盾：单独一行（在体力珠下面），同样右对齐
+    let armorRight = rightEdge;
     for (let index = 0; index < armor; index++) {
-        const x = right - shieldSize;
-        if (pips.shield) drawAsset(pips.shield, x, top, shieldSize, shieldSize);
+        const x = armorRight - shieldSize;
+        if (pips.shield) drawAsset(pips.shield, x, armorTop, shieldSize, shieldSize);
         else {
-            roundRectPath(ctx, x, beadTop, beadSize, beadSize, 4);
+            roundRectPath(ctx, x, armorTop + 2, beadSize, beadSize, 4);
             ctx.fillStyle = "#2f7f9e";
             ctx.fill();
             ctx.strokeStyle = "rgba(190,240,255,.85)";
             ctx.lineWidth = 1.4;
             ctx.stroke();
         }
-        right -= shieldSize + gap;
+        armorRight -= shieldSize + gap;
     }
 
     if (max > 9) {
         //体力上限 >9：一颗「X」珠 + 数字（引擎同款写法）
-        const x = right - beadSize;
+        const x = pipRight - beadSize;
         if (filledBead) drawAsset(filledBead, x, beadTop, beadSize, beadSize);
         else drawnPip(x, now > 9);
         ctx.lineWidth = 3;
@@ -297,19 +305,18 @@ function drawHpPips(ctx, data, W) {
         ctx.font = `bold 20px ${FONT_TEXT}`;
         ctx.textAlign = "right";
         ctx.fillText(String(Math.min(now, 99)), x - gap - 1, centerY + 1);
-        ctx.restore();
-        return;
-    }
-    for (let index = 0; index < max; index++) {
-        const x = right - (max - index) * beadSize - (max - 1 - index) * gap;
-        const filled = index < now;
-        if (filled) {
-            if (filledBead) drawAsset(filledBead, x, beadTop, beadSize, beadSize);
-            else drawnPip(x, true);
-        } else if (pips.empty) {
-            drawAsset(pips.empty, x, beadTop, beadSize, beadSize, true);
-        } else {
-            drawnPip(x, false);
+    } else {
+        for (let index = 0; index < max; index++) {
+            const x = pipRight - (max - index) * beadSize - (max - 1 - index) * gap;
+            const filled = index < now;
+            if (filled) {
+                if (filledBead) drawAsset(filledBead, x, beadTop, beadSize, beadSize);
+                else drawnPip(x, true);
+            } else if (pips.empty) {
+                drawAsset(pips.empty, x, beadTop, beadSize, beadSize, true);
+            } else {
+                drawnPip(x, false);
+            }
         }
     }
     ctx.restore();
@@ -388,7 +395,57 @@ function drawDrawnHpPips(ctx, data, W) {
     ctx.restore();
 }
 
-/** 底部技能区（技能名 + 描述折行；超出面板就截断） */
+/**
+ * 技能名徽章：**底条用引擎的 `image/card/cardtempname_bg.png`**（九宫格拉伸，保住两端金角），
+ * 拿不到图就退化成自绘的米色渐变条；技能名用深色字打在上面。
+ * @param {HTMLImageElement|null} badge
+ */
+function drawSkillBadge(ctx, x, y, width, height, name, badge) {
+    if (badge) {
+        const sourceWidth = badge.naturalWidth || badge.width;
+        const sourceHeight = badge.naturalHeight || badge.height;
+        const capSource = Math.max(1, Math.min(Math.round(sourceWidth * 0.12), Math.round(sourceWidth / 3)));
+        const capWidth = Math.min(capSource * (width / sourceWidth), width / 2);
+        const middleWidth = Math.max(0, width - capWidth * 2);
+        ctx.drawImage(badge, 0, 0, capSource, sourceHeight, x, y, capWidth, height);
+        ctx.drawImage(badge, capSource, 0, Math.max(1, sourceWidth - capSource * 2), sourceHeight, x + capWidth, y, middleWidth, height);
+        ctx.drawImage(badge, sourceWidth - capSource, 0, capSource, sourceHeight, x + width - capWidth, y, capWidth, height);
+    } else {
+        roundRectPath(ctx, x, y, width, height, 5);
+        const gradient = ctx.createLinearGradient(x, y, x, y + height);
+        gradient.addColorStop(0, "#efe9d8");
+        gradient.addColorStop(1, "#cdc4ab");
+        ctx.fillStyle = gradient;
+        ctx.fill();
+        ctx.strokeStyle = "rgba(20,30,50,.85)";
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+    }
+    //技能名：太长先缩字号，再长就省略号（别撑出底条）
+    const maxTextWidth = width - 12;
+    let fontSize = 15;
+    ctx.font = `bold ${fontSize}px ${FONT_TEXT}`;
+    while (fontSize > 10 && ctx.measureText(name).width > maxTextWidth) {
+        fontSize -= 1;
+        ctx.font = `bold ${fontSize}px ${FONT_TEXT}`;
+    }
+    let text = name;
+    if (ctx.measureText(text).width > maxTextWidth) {
+        while (text.length > 1 && ctx.measureText(`${text}…`).width > maxTextWidth) text = text.slice(0, -1);
+        text = `${text}…`;
+    }
+    ctx.fillStyle = "#1d2735";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x + width / 2, y + height / 2 + 1);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+}
+
+/**
+ * 底部技能区：**技能名在左侧徽章里、描述在右侧且首行与徽章对齐**（对齐官方武将牌版式；
+ * 用户反馈「技能名位置不对」就是原来把技能名单独占了一行）。超出面板就截断。
+ */
 function drawSkillPanel(ctx, data, W, H) {
     const left = 13;
     const right = W - 13;
@@ -401,9 +458,10 @@ function drawSkillPanel(ctx, data, W, H) {
     ctx.stroke();
 
     const paddingX = 14;
-    const maxWidth = right - left - paddingX * 2;
     const idText = String(data.id || "").trim();
     const idBottom = idText ? bottom - 20 : bottom;
+    const badgeHeight = 26;
+    const badgeGap = 10;
 
     ctx.save();
     ctx.beginPath();
@@ -412,34 +470,37 @@ function drawSkillPanel(ctx, data, W, H) {
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
 
-    let y = PANEL_TOP + 16;
     const skills = Array.isArray(data.skills) ? data.skills : [];
     const drawList = skills.length ? skills : [{ name: "无技能", description: "" }];
+    //徽章统一宽度：所有技能名的底条一样宽，描述的左边缘才会对齐
+    ctx.font = `bold 15px ${FONT_TEXT}`;
+    const badgeWidth = Math.min(104, Math.max(64, ...drawList.map(skill => ctx.measureText(String(skill.name || "")).width + 24)));
+    const textLeft = left + paddingX + badgeWidth + badgeGap;
+    const textWidth = right - paddingX - textLeft;
+
+    let y = PANEL_TOP + 14;
     let truncated = false;
     for (const skill of drawList) {
-        if (y > idBottom - 8) {
+        if (y > idBottom - badgeHeight) {
             truncated = true;
             break;
         }
-        ctx.fillStyle = "#f0d089";
-        ctx.font = `bold 16px ${FONT_TEXT}`;
-        ctx.fillText(String(skill.name || ""), left + paddingX, y);
-        y += 21;
-
+        drawSkillBadge(ctx, left + paddingX, y, badgeWidth, badgeHeight, String(skill.name || ""), data.badge);
         const description = cleanSkillDescription(skill.description);
+        let textY = y + 4;
         if (description) {
             ctx.fillStyle = "rgba(238,238,238,.92)";
             ctx.font = `13px ${FONT_TEXT}`;
-            for (const line of wrapText(ctx, description, maxWidth)) {
-                if (y > idBottom - 6) {
+            for (const line of wrapText(ctx, description, textWidth)) {
+                if (textY > idBottom - 15) {
                     truncated = true;
                     break;
                 }
-                ctx.fillText(line, left + paddingX, y);
-                y += 17;
+                ctx.fillText(line, textLeft, textY);
+                textY += 18;
             }
         }
-        y += 6;
+        y = Math.max(y + badgeHeight, textY + 2) + 8;
     }
     if (truncated) {
         //描述被面板裁掉时给个明确提示（右对齐，别越出面板）
@@ -505,30 +566,19 @@ function drawFrame(ctx, W, H) {
     ctx.restore();
 }
 
-/** 卡头：势力图标（引擎自带 PNG）+ 篆书势力名；没有图标就用篆书大字顶上 */
+/** 卡头：**只用势力图片**（用户明确「删除多余的势力字，仅保留图片」）；没有图才退回篆书势力大字 */
 function drawEmblem(ctx, data) {
     const { groupIcon, groupName, group } = data;
-    const name = String(groupName || group || "").trim();
     if (groupIcon) {
+        const size = 54;
         ctx.save();
         ctx.shadowColor = "rgba(0,0,0,.8)";
         ctx.shadowBlur = 8;
-        ctx.drawImage(groupIcon, 22, 14, 46, 46);
-        ctx.restore();
-        if (!name) return;
-        ctx.save();
-        ctx.font = `24px ${FONT_GROUP_CHAR}`;
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        ctx.lineJoin = "round";
-        ctx.lineWidth = 3.5;
-        ctx.strokeStyle = "rgba(0,0,0,.8)";
-        ctx.strokeText(name, 76, 38);
-        ctx.fillStyle = "#ffe9b0";
-        ctx.fillText(name, 76, 38);
+        ctx.drawImage(groupIcon, 20, 12, size, size);
         ctx.restore();
         return;
     }
+    const name = String(groupName || group || "").trim();
     if (!name) return;
     ctx.save();
     ctx.font = `46px ${FONT_GROUP_CHAR}`;
@@ -577,7 +627,7 @@ function drawNameColumn(ctx, data) {
  *   hp?:number, maxHp?:number, hujia?:number, isZhugong?:boolean,
  *   skills?:{name:string,description:string}[],
  *   art?:HTMLImageElement|null, groupIcon?:HTMLImageElement|null,
- *   pips?:Record<string,HTMLImageElement>
+ *   pips?:Record<string,HTMLImageElement>, badge?:HTMLImageElement|null
  * }} data
  * @param {{scale?:number}} [config]
  * @returns {HTMLCanvasElement}
@@ -754,47 +804,49 @@ async function collectCardData(host, objectURLs) {
         name: host.textQuery("skillTranslation", { text: skillId, attr: "name" }) || skillId,
         description: host.textQuery("skillTranslation", { text: skillId, attr: "info" }) || "",
     }));
-    const [art, groupIcon, pips] = await Promise.all([
+    const [art, groupIcon, assets] = await Promise.all([
         loadArtImage(host, objectURLs),
         loadGroupIcon(host, group, objectURLs),
-        loadPipAssets(host, objectURLs),
+        loadCardAssets(host, objectURLs),
     ]);
     return {
         id, name, title, group, groupName,
         hp, maxHp,
         hujia: Number(host.getData("hujia")) || 0,
         isZhugong: Boolean(host.getData("isZhugong")),
-        skills, art, groupIcon, pips,
+        skills, art, groupIcon,
+        pips: assets.pips,
+        badge: assets.badge,
     };
 }
 
 /**
- * 体力/护甲/主公的素材图（`PIP_ASSETS` + 扩展里的主公图标）。
- * 缺哪张就少哪张：绘制端逐格回退到自绘，不会因为少一张图就整行消失。
- * @returns {Promise<Record<string, HTMLImageElement>>} 键同 PIP_ASSETS（+ zhugong）
+ * 卡面素材图：体力/护甲/主公（`PIP_ASSETS` + 扩展里的主公图标）+ 技能名底条（`BADGE_ASSET`）。
+ * 缺哪张就少哪张：绘制端逐格/逐条回退到自绘，不会因为少一张图就整块消失。
+ * @returns {Promise<{pips:Record<string, HTMLImageElement>, badge:HTMLImageElement|null}>}
  */
-async function loadPipAssets(host, objectURLs) {
-    const result = {};
-    await Promise.all(Object.entries(PIP_ASSETS).map(async ([key, path]) => {
+async function loadCardAssets(host, objectURLs) {
+    const pips = {};
+    const load = async (path) => {
         const url = await readAssetObjectURL(host, path, objectURLs);
-        if (!url) return;
+        if (!url) return null;
         try {
-            result[key] = await loadCardImage(url);
+            return await loadCardImage(url);
         } catch (err) {
             console.warn("武将卡：素材图解码失败", path, err);
+            return null;
         }
+    };
+    await Promise.all(Object.entries(PIP_ASSETS).map(async ([key, path]) => {
+        const image = await load(path);
+        if (image) pips[key] = image;
     }));
     const root = extensionRoot();
-    if (!root) return result;
-    const zhugongPath = `${root}/module/editor/image/icon/zhugong.png`;
-    const zhugongUrl = await readAssetObjectURL(host, zhugongPath, objectURLs);
-    if (!zhugongUrl) return result;
-    try {
-        result.zhugong = await loadCardImage(zhugongUrl);
-    } catch (err) {
-        console.warn("武将卡：主公图标解码失败", err);
+    if (root) {
+        const zhugong = await load(`${root}/module/editor/image/icon/zhugong.png`);
+        if (zhugong) pips.zhugong = zhugong;
     }
-    return result;
+    return { pips, badge: await load(BADGE_ASSET) };
 }
 
 /**
