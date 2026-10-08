@@ -22,9 +22,19 @@
 //   #skill:Ident?      技能 id。省略 → 整条定义不产出（可用于只写片段）
 //   #translation:Str?  技能名   → 产物字段 translation（注入时归位到 lib.translate）
 //   #description:Str?  技能描述 → 产物字段 description（归位到 <id>_info）
-//   #forced / #locked / #frequent / #limited: Bool?   锁定类标记，写了才产出该成员
-//   #usable:Num?       每回合可用次数
 //   #ai:ObjectLit?     整块 ai 字段
+//
+// 技能标签（每个技能宏都有，共 39 个槽；旧版「技能标签」页 + 「特殊设置」页）：
+//   标签**不按技能种类过滤**（旧版九个页面的按钮永远全在），任何标签都能写在任何宏上；
+//   槽名就是产物字段名，省略的标签整条消失。数据与映射见 module/editor/shya/tags.mjs。
+//     #forced / #frequent / #direct / #forceDie / … : Bool?   → `<槽>: true`
+//     #locked / #lose / #discard / #delay: Bool?               → `<槽>: false`（旧版 locked-false 等）
+//     #usable / #round: Num?                                    → `usable: n` / `round: n`
+//     #groupSkill: Str?                                         → `groupSkill: "wei"`
+//     #animationColor: Str?                                     → `animationColor: "fire"`
+//     #init: stmt                                               → init 方法（旧版 mainVice-remove1 阴阳鱼减半个）
+//   完整槽表见每个宏参数表里的「技能标签」段（顺序与 tags.mjs 的 TAG_SLOTS 一致）。
+//
 //
 // 最小用法（编辑器会自动注入 `import "./host/skill-type.shya"`，手写也可以）：
 //
@@ -42,10 +52,13 @@
 //     （parser.cpp:1792 的 looksLikeObjectLit）。多条语句另起一行写，
 //     直到下一个 `#插槽:` 或调用结束的 `}` 为止。
 //  2. 语句体插槽（#filter/#check/#cost/#content/#filterCard/#filterTarget/#viewAsFilter）
-//     在宏体里一律用 `@ts{ #槽 }` 包一层。**不要**写成裸 `#槽`：
-//     裸引用走表达式通道（macro.cpp:1248），多条语句会被错误地拼成成员链
-//     （实测 `#s:` 里两条语句产出 `player.draw(1).recover(1)`），
-//     含 `return`/`if` 的真语句则直接报 MAC013。
+//     在宏体里**裸写**（`#filter`），不要用 `@ts{ #槽 }` 包 —— 那是把用户的 shya 语句
+//     当原始 JS 塞进函数体（还会多一层裸块 `{ … } ;`），类型检查/格式化全绕过。
+//     裸槽要求编译器把语句插槽**按语句展开**：`src/macro.cpp` 的 instStmts
+//     （ExprStmt(SlotRef) 分支）与 instBody()（if 分支、while/for-of 体、for-of @range 的体），
+//     2026-10 修复；`@ts{}` 只留给**表达式位置**的值拼接（见下面的 @__skillTriggerValue 等）。
+//     ⚠️ 扩展内置 wasm 必须与这份宏库同批：`module/editor/shya/bin/shya.wasm`
+//     （构建 `build-wasm.bat`，产物在 `build/wasm/`）——旧 wasm 会把多条语句拼成成员链。
 //  3. 过滤器类槽（filter / filterCard / filterTarget / check）的末尾由宏补
 //     `return true`，与旧版编辑器一致：写了 `return` 就提前返回，没写就是永远成立。
 //  4. 省略某个可选插槽时，那个成员**整条消失**（靠 `<插槽>…</插槽>` 作用域），
@@ -94,47 +107,123 @@ macro @skill_trigger(
   #skill: Ident?,
   #translation: Str?,
   #description: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #forced: Bool?,
+  #frequent: Bool?,
+  #direct: Bool?,
+  #forceDie: Bool?,
+  #locked: Bool?,
+  #persevereSkill: Bool?,
+  #charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #limited: Bool?,
+  #juexingji: Bool?,
+  #dutySkill: Bool?,
+  #skillAnimation: Bool?,
+  #zhuSkill: Bool?,
+  #zhuanhuanji: Bool?,
+  #hiddenSkill: Bool?,
+  #clanSkill: Bool?,
+  #sunbenSkill: Bool?,
+  #chargeSkill: Bool?,
+  #zhenfa: Bool?,
+  #mainSkill: Bool?,
+  #viceSkill: Bool?,
+  #preHidden: expr?,
+  #deadTarget: Bool?,
+  #includeOut: Bool?,
+  #multitarget: Bool?,
+  #complexTarget: Bool?,
+  #lose: Bool?,
+  #discard: Bool?,
+  #delay: Bool?,
+  #complexCard: Bool?,
+  #mark: Bool?,
+  #multiline: Bool?,
+  #firstDo: Bool?,
+  #lastDo: Bool?,
+  #usable: Num?,
+  #round: Num?,
+  #groupSkill: Str?,
+  #animationColor: Str?,
+  #init: stmt,
   #trigger: expr?,
   #filter: stmt,
   #check: stmt,
   #cost: stmt,
   #content: stmt,
-  #forced: Bool?,
-  #locked: Bool?,
-  #frequent: Bool?,
-  #limited: Bool?,
-  #usable: Num?,
   #ai: ObjectLit?
 ) {
   #skill = {
     <translation>translation: #translation,</translation>
     <description>description: #description,</description>
-    <trigger>trigger: @__skillTriggerValue(#trigger),</trigger>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
     <forced>forced: #forced,</forced>
-    <locked>locked: #locked,</locked>
     <frequent>frequent: #frequent,</frequent>
+    <direct>direct: #direct,</direct>
+    <forceDie>forceDie: #forceDie,</forceDie>
+    <locked>locked: #locked,</locked>
+    <persevereSkill>persevereSkill: #persevereSkill,</persevereSkill>
+    <charlotte>charlotte: #charlotte,</charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
     <limited>limited: #limited,</limited>
+    <juexingji>juexingji: #juexingji,</juexingji>
+    <dutySkill>dutySkill: #dutySkill,</dutySkill>
+    <skillAnimation>skillAnimation: #skillAnimation,</skillAnimation>
+    <zhuSkill>zhuSkill: #zhuSkill,</zhuSkill>
+    <zhuanhuanji>zhuanhuanji: #zhuanhuanji,</zhuanhuanji>
+    <hiddenSkill>hiddenSkill: #hiddenSkill,</hiddenSkill>
+    <clanSkill>clanSkill: #clanSkill,</clanSkill>
+    <sunbenSkill>sunbenSkill: #sunbenSkill,</sunbenSkill>
+    <chargeSkill>chargeSkill: #chargeSkill,</chargeSkill>
+    <zhenfa>zhenfa: #zhenfa,</zhenfa>
+    <mainSkill>mainSkill: #mainSkill,</mainSkill>
+    <viceSkill>viceSkill: #viceSkill,</viceSkill>
+    <preHidden>preHidden: #preHidden,</preHidden>
+    <deadTarget>deadTarget: #deadTarget,</deadTarget>
+    <includeOut>includeOut: #includeOut,</includeOut>
+    <multitarget>multitarget: #multitarget,</multitarget>
+    <complexTarget>complexTarget: #complexTarget,</complexTarget>
+    <lose>lose: #lose,</lose>
+    <discard>discard: #discard,</discard>
+    <delay>delay: #delay,</delay>
+    <complexCard>complexCard: #complexCard,</complexCard>
+    <mark>mark: #mark,</mark>
+    <multiline>multiline: #multiline,</multiline>
+    <firstDo>firstDo: #firstDo,</firstDo>
+    <lastDo>lastDo: #lastDo,</lastDo>
     <usable>usable: #usable,</usable>
+    <round>round: #round,</round>
+    <groupSkill>groupSkill: #groupSkill,</groupSkill>
+    <animationColor>animationColor: #animationColor,</animationColor>
+    <init>
+      init(player: Player, skill) {
+        #init
+      },
+    </init>
+    <trigger>trigger: @__skillTriggerValue(#trigger),</trigger>
     <filter>
       filter(event: GameEvent, player: Player) {
-        @ts{ #filter }
+        #filter
         return true
       },
     </filter>
     <check>
       check(event: GameEvent, player: Player) {
-        @ts{ #check }
+        #check
         return true
       },
     </check>
     <cost>
       async cost(event: GameEvent, trigger: GameEvent, player: Player) {
-        @ts{ #cost }
+        #cost
       },
     </cost>
     <content>
       async content(event: GameEvent, trigger: GameEvent, player: Player) {
-        @ts{ #content }
+        #content
       },
     </content>
     <ai>ai: @__skillAiValue(#ai),</ai>
@@ -149,6 +238,48 @@ macro @skill_phaseUse(
   #skill: Ident?,
   #translation: Str?,
   #description: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #forced: Bool?,
+  #frequent: Bool?,
+  #direct: Bool?,
+  #forceDie: Bool?,
+  #locked: Bool?,
+  #persevereSkill: Bool?,
+  #charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #limited: Bool?,
+  #juexingji: Bool?,
+  #dutySkill: Bool?,
+  #skillAnimation: Bool?,
+  #zhuSkill: Bool?,
+  #zhuanhuanji: Bool?,
+  #hiddenSkill: Bool?,
+  #clanSkill: Bool?,
+  #sunbenSkill: Bool?,
+  #chargeSkill: Bool?,
+  #zhenfa: Bool?,
+  #mainSkill: Bool?,
+  #viceSkill: Bool?,
+  #preHidden: expr?,
+  #deadTarget: Bool?,
+  #includeOut: Bool?,
+  #multitarget: Bool?,
+  #complexTarget: Bool?,
+  #lose: Bool?,
+  #discard: Bool?,
+  #delay: Bool?,
+  #complexCard: Bool?,
+  #mark: Bool?,
+  #multiline: Bool?,
+  #firstDo: Bool?,
+  #lastDo: Bool?,
+  #usable: Num?,
+  #round: Num?,
+  #groupSkill: Str?,
+  #animationColor: Str?,
+  #init: stmt,
   #filter: stmt,
   #filterCard: stmt,
   #filterCardValue: expr?,
@@ -157,7 +288,6 @@ macro @skill_phaseUse(
   #selectTarget: Num?,
   #position: Str?,
   #prompt: Str?,
-  #usable: Num?,
   #check: stmt,
   #content: stmt,
   #ai: ObjectLit?
@@ -166,16 +296,59 @@ macro @skill_phaseUse(
     enable: "phaseUse",
     <translation>translation: #translation,</translation>
     <description>description: #description,</description>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <forced>forced: #forced,</forced>
+    <frequent>frequent: #frequent,</frequent>
+    <direct>direct: #direct,</direct>
+    <forceDie>forceDie: #forceDie,</forceDie>
+    <locked>locked: #locked,</locked>
+    <persevereSkill>persevereSkill: #persevereSkill,</persevereSkill>
+    <charlotte>charlotte: #charlotte,</charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <limited>limited: #limited,</limited>
+    <juexingji>juexingji: #juexingji,</juexingji>
+    <dutySkill>dutySkill: #dutySkill,</dutySkill>
+    <skillAnimation>skillAnimation: #skillAnimation,</skillAnimation>
+    <zhuSkill>zhuSkill: #zhuSkill,</zhuSkill>
+    <zhuanhuanji>zhuanhuanji: #zhuanhuanji,</zhuanhuanji>
+    <hiddenSkill>hiddenSkill: #hiddenSkill,</hiddenSkill>
+    <clanSkill>clanSkill: #clanSkill,</clanSkill>
+    <sunbenSkill>sunbenSkill: #sunbenSkill,</sunbenSkill>
+    <chargeSkill>chargeSkill: #chargeSkill,</chargeSkill>
+    <zhenfa>zhenfa: #zhenfa,</zhenfa>
+    <mainSkill>mainSkill: #mainSkill,</mainSkill>
+    <viceSkill>viceSkill: #viceSkill,</viceSkill>
+    <preHidden>preHidden: #preHidden,</preHidden>
+    <deadTarget>deadTarget: #deadTarget,</deadTarget>
+    <includeOut>includeOut: #includeOut,</includeOut>
+    <multitarget>multitarget: #multitarget,</multitarget>
+    <complexTarget>complexTarget: #complexTarget,</complexTarget>
+    <lose>lose: #lose,</lose>
+    <discard>discard: #discard,</discard>
+    <delay>delay: #delay,</delay>
+    <complexCard>complexCard: #complexCard,</complexCard>
+    <mark>mark: #mark,</mark>
+    <multiline>multiline: #multiline,</multiline>
+    <firstDo>firstDo: #firstDo,</firstDo>
+    <lastDo>lastDo: #lastDo,</lastDo>
     <usable>usable: #usable,</usable>
+    <round>round: #round,</round>
+    <groupSkill>groupSkill: #groupSkill,</groupSkill>
+    <animationColor>animationColor: #animationColor,</animationColor>
+    <init>
+      init(player: Player, skill) {
+        #init
+      },
+    </init>
     <filter>
       filter(event: GameEvent, player: Player) {
-        @ts{ #filter }
+        #filter
         return true
       },
     </filter>
     <filterCard>
       filterCard(card: Card, player: Player) {
-        @ts{ #filterCard }
+        #filterCard
         return true
       },
     </filterCard>
@@ -183,7 +356,7 @@ macro @skill_phaseUse(
     <selectCard>selectCard: #selectCard,</selectCard>
     <filterTarget>
       filterTarget(card: Card, player: Player, target: Player) {
-        @ts{ #filterTarget }
+        #filterTarget
         return true
       },
     </filterTarget>
@@ -192,13 +365,13 @@ macro @skill_phaseUse(
     <prompt>prompt: #prompt,</prompt>
     <check>
       check(card: Card) {
-        @ts{ #check }
+        #check
         return true
       },
     </check>
     <content>
       async content(event: GameEvent, trigger: GameEvent, player: Player) {
-        @ts{ #content }
+        #content
       },
     </content>
     <ai>ai: @__skillAiValue(#ai),</ai>
@@ -211,6 +384,48 @@ macro @skill_chooseToUse(
   #skill: Ident?,
   #translation: Str?,
   #description: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #forced: Bool?,
+  #frequent: Bool?,
+  #direct: Bool?,
+  #forceDie: Bool?,
+  #locked: Bool?,
+  #persevereSkill: Bool?,
+  #charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #limited: Bool?,
+  #juexingji: Bool?,
+  #dutySkill: Bool?,
+  #skillAnimation: Bool?,
+  #zhuSkill: Bool?,
+  #zhuanhuanji: Bool?,
+  #hiddenSkill: Bool?,
+  #clanSkill: Bool?,
+  #sunbenSkill: Bool?,
+  #chargeSkill: Bool?,
+  #zhenfa: Bool?,
+  #mainSkill: Bool?,
+  #viceSkill: Bool?,
+  #preHidden: expr?,
+  #deadTarget: Bool?,
+  #includeOut: Bool?,
+  #multitarget: Bool?,
+  #complexTarget: Bool?,
+  #lose: Bool?,
+  #discard: Bool?,
+  #delay: Bool?,
+  #complexCard: Bool?,
+  #mark: Bool?,
+  #multiline: Bool?,
+  #firstDo: Bool?,
+  #lastDo: Bool?,
+  #usable: Num?,
+  #round: Num?,
+  #groupSkill: Str?,
+  #animationColor: Str?,
+  #init: stmt,
   #filter: stmt,
   #filterCard: stmt,
   #filterCardValue: expr?,
@@ -219,7 +434,6 @@ macro @skill_chooseToUse(
   #selectTarget: Num?,
   #position: Str?,
   #prompt: Str?,
-  #usable: Num?,
   #check: stmt,
   #content: stmt,
   #ai: ObjectLit?
@@ -228,16 +442,59 @@ macro @skill_chooseToUse(
     enable: "chooseToUse",
     <translation>translation: #translation,</translation>
     <description>description: #description,</description>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <forced>forced: #forced,</forced>
+    <frequent>frequent: #frequent,</frequent>
+    <direct>direct: #direct,</direct>
+    <forceDie>forceDie: #forceDie,</forceDie>
+    <locked>locked: #locked,</locked>
+    <persevereSkill>persevereSkill: #persevereSkill,</persevereSkill>
+    <charlotte>charlotte: #charlotte,</charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <limited>limited: #limited,</limited>
+    <juexingji>juexingji: #juexingji,</juexingji>
+    <dutySkill>dutySkill: #dutySkill,</dutySkill>
+    <skillAnimation>skillAnimation: #skillAnimation,</skillAnimation>
+    <zhuSkill>zhuSkill: #zhuSkill,</zhuSkill>
+    <zhuanhuanji>zhuanhuanji: #zhuanhuanji,</zhuanhuanji>
+    <hiddenSkill>hiddenSkill: #hiddenSkill,</hiddenSkill>
+    <clanSkill>clanSkill: #clanSkill,</clanSkill>
+    <sunbenSkill>sunbenSkill: #sunbenSkill,</sunbenSkill>
+    <chargeSkill>chargeSkill: #chargeSkill,</chargeSkill>
+    <zhenfa>zhenfa: #zhenfa,</zhenfa>
+    <mainSkill>mainSkill: #mainSkill,</mainSkill>
+    <viceSkill>viceSkill: #viceSkill,</viceSkill>
+    <preHidden>preHidden: #preHidden,</preHidden>
+    <deadTarget>deadTarget: #deadTarget,</deadTarget>
+    <includeOut>includeOut: #includeOut,</includeOut>
+    <multitarget>multitarget: #multitarget,</multitarget>
+    <complexTarget>complexTarget: #complexTarget,</complexTarget>
+    <lose>lose: #lose,</lose>
+    <discard>discard: #discard,</discard>
+    <delay>delay: #delay,</delay>
+    <complexCard>complexCard: #complexCard,</complexCard>
+    <mark>mark: #mark,</mark>
+    <multiline>multiline: #multiline,</multiline>
+    <firstDo>firstDo: #firstDo,</firstDo>
+    <lastDo>lastDo: #lastDo,</lastDo>
     <usable>usable: #usable,</usable>
+    <round>round: #round,</round>
+    <groupSkill>groupSkill: #groupSkill,</groupSkill>
+    <animationColor>animationColor: #animationColor,</animationColor>
+    <init>
+      init(player: Player, skill) {
+        #init
+      },
+    </init>
     <filter>
       filter(event: GameEvent, player: Player) {
-        @ts{ #filter }
+        #filter
         return true
       },
     </filter>
     <filterCard>
       filterCard(card: Card, player: Player) {
-        @ts{ #filterCard }
+        #filterCard
         return true
       },
     </filterCard>
@@ -245,7 +502,7 @@ macro @skill_chooseToUse(
     <selectCard>selectCard: #selectCard,</selectCard>
     <filterTarget>
       filterTarget(card: Card, player: Player, target: Player) {
-        @ts{ #filterTarget }
+        #filterTarget
         return true
       },
     </filterTarget>
@@ -254,13 +511,13 @@ macro @skill_chooseToUse(
     <prompt>prompt: #prompt,</prompt>
     <check>
       check(card: Card) {
-        @ts{ #check }
+        #check
         return true
       },
     </check>
     <content>
       async content(event: GameEvent, trigger: GameEvent, player: Player) {
-        @ts{ #content }
+        #content
       },
     </content>
     <ai>ai: @__skillAiValue(#ai),</ai>
@@ -273,6 +530,48 @@ macro @skill_chooseToRespond(
   #skill: Ident?,
   #translation: Str?,
   #description: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #forced: Bool?,
+  #frequent: Bool?,
+  #direct: Bool?,
+  #forceDie: Bool?,
+  #locked: Bool?,
+  #persevereSkill: Bool?,
+  #charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #limited: Bool?,
+  #juexingji: Bool?,
+  #dutySkill: Bool?,
+  #skillAnimation: Bool?,
+  #zhuSkill: Bool?,
+  #zhuanhuanji: Bool?,
+  #hiddenSkill: Bool?,
+  #clanSkill: Bool?,
+  #sunbenSkill: Bool?,
+  #chargeSkill: Bool?,
+  #zhenfa: Bool?,
+  #mainSkill: Bool?,
+  #viceSkill: Bool?,
+  #preHidden: expr?,
+  #deadTarget: Bool?,
+  #includeOut: Bool?,
+  #multitarget: Bool?,
+  #complexTarget: Bool?,
+  #lose: Bool?,
+  #discard: Bool?,
+  #delay: Bool?,
+  #complexCard: Bool?,
+  #mark: Bool?,
+  #multiline: Bool?,
+  #firstDo: Bool?,
+  #lastDo: Bool?,
+  #usable: Num?,
+  #round: Num?,
+  #groupSkill: Str?,
+  #animationColor: Str?,
+  #init: stmt,
   #filter: stmt,
   #filterCard: stmt,
   #filterCardValue: expr?,
@@ -281,7 +580,6 @@ macro @skill_chooseToRespond(
   #selectTarget: Num?,
   #position: Str?,
   #prompt: Str?,
-  #usable: Num?,
   #check: stmt,
   #content: stmt,
   #ai: ObjectLit?
@@ -290,16 +588,59 @@ macro @skill_chooseToRespond(
     enable: "chooseToRespond",
     <translation>translation: #translation,</translation>
     <description>description: #description,</description>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <forced>forced: #forced,</forced>
+    <frequent>frequent: #frequent,</frequent>
+    <direct>direct: #direct,</direct>
+    <forceDie>forceDie: #forceDie,</forceDie>
+    <locked>locked: #locked,</locked>
+    <persevereSkill>persevereSkill: #persevereSkill,</persevereSkill>
+    <charlotte>charlotte: #charlotte,</charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <limited>limited: #limited,</limited>
+    <juexingji>juexingji: #juexingji,</juexingji>
+    <dutySkill>dutySkill: #dutySkill,</dutySkill>
+    <skillAnimation>skillAnimation: #skillAnimation,</skillAnimation>
+    <zhuSkill>zhuSkill: #zhuSkill,</zhuSkill>
+    <zhuanhuanji>zhuanhuanji: #zhuanhuanji,</zhuanhuanji>
+    <hiddenSkill>hiddenSkill: #hiddenSkill,</hiddenSkill>
+    <clanSkill>clanSkill: #clanSkill,</clanSkill>
+    <sunbenSkill>sunbenSkill: #sunbenSkill,</sunbenSkill>
+    <chargeSkill>chargeSkill: #chargeSkill,</chargeSkill>
+    <zhenfa>zhenfa: #zhenfa,</zhenfa>
+    <mainSkill>mainSkill: #mainSkill,</mainSkill>
+    <viceSkill>viceSkill: #viceSkill,</viceSkill>
+    <preHidden>preHidden: #preHidden,</preHidden>
+    <deadTarget>deadTarget: #deadTarget,</deadTarget>
+    <includeOut>includeOut: #includeOut,</includeOut>
+    <multitarget>multitarget: #multitarget,</multitarget>
+    <complexTarget>complexTarget: #complexTarget,</complexTarget>
+    <lose>lose: #lose,</lose>
+    <discard>discard: #discard,</discard>
+    <delay>delay: #delay,</delay>
+    <complexCard>complexCard: #complexCard,</complexCard>
+    <mark>mark: #mark,</mark>
+    <multiline>multiline: #multiline,</multiline>
+    <firstDo>firstDo: #firstDo,</firstDo>
+    <lastDo>lastDo: #lastDo,</lastDo>
     <usable>usable: #usable,</usable>
+    <round>round: #round,</round>
+    <groupSkill>groupSkill: #groupSkill,</groupSkill>
+    <animationColor>animationColor: #animationColor,</animationColor>
+    <init>
+      init(player: Player, skill) {
+        #init
+      },
+    </init>
     <filter>
       filter(event: GameEvent, player: Player) {
-        @ts{ #filter }
+        #filter
         return true
       },
     </filter>
     <filterCard>
       filterCard(card: Card, player: Player) {
-        @ts{ #filterCard }
+        #filterCard
         return true
       },
     </filterCard>
@@ -307,7 +648,7 @@ macro @skill_chooseToRespond(
     <selectCard>selectCard: #selectCard,</selectCard>
     <filterTarget>
       filterTarget(card: Card, player: Player, target: Player) {
-        @ts{ #filterTarget }
+        #filterTarget
         return true
       },
     </filterTarget>
@@ -316,13 +657,13 @@ macro @skill_chooseToRespond(
     <prompt>prompt: #prompt,</prompt>
     <check>
       check(card: Card) {
-        @ts{ #check }
+        #check
         return true
       },
     </check>
     <content>
       async content(event: GameEvent, trigger: GameEvent, player: Player) {
-        @ts{ #content }
+        #content
       },
     </content>
     <ai>ai: @__skillAiValue(#ai),</ai>
@@ -335,6 +676,48 @@ macro @skill_useRespond(
   #skill: Ident?,
   #translation: Str?,
   #description: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #forced: Bool?,
+  #frequent: Bool?,
+  #direct: Bool?,
+  #forceDie: Bool?,
+  #locked: Bool?,
+  #persevereSkill: Bool?,
+  #charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #limited: Bool?,
+  #juexingji: Bool?,
+  #dutySkill: Bool?,
+  #skillAnimation: Bool?,
+  #zhuSkill: Bool?,
+  #zhuanhuanji: Bool?,
+  #hiddenSkill: Bool?,
+  #clanSkill: Bool?,
+  #sunbenSkill: Bool?,
+  #chargeSkill: Bool?,
+  #zhenfa: Bool?,
+  #mainSkill: Bool?,
+  #viceSkill: Bool?,
+  #preHidden: expr?,
+  #deadTarget: Bool?,
+  #includeOut: Bool?,
+  #multitarget: Bool?,
+  #complexTarget: Bool?,
+  #lose: Bool?,
+  #discard: Bool?,
+  #delay: Bool?,
+  #complexCard: Bool?,
+  #mark: Bool?,
+  #multiline: Bool?,
+  #firstDo: Bool?,
+  #lastDo: Bool?,
+  #usable: Num?,
+  #round: Num?,
+  #groupSkill: Str?,
+  #animationColor: Str?,
+  #init: stmt,
   #filter: stmt,
   #filterCard: stmt,
   #filterCardValue: expr?,
@@ -343,7 +726,6 @@ macro @skill_useRespond(
   #selectTarget: Num?,
   #position: Str?,
   #prompt: Str?,
-  #usable: Num?,
   #check: stmt,
   #content: stmt,
   #ai: ObjectLit?
@@ -352,16 +734,59 @@ macro @skill_useRespond(
     enable: ["chooseToUse", "chooseToRespond"],
     <translation>translation: #translation,</translation>
     <description>description: #description,</description>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <forced>forced: #forced,</forced>
+    <frequent>frequent: #frequent,</frequent>
+    <direct>direct: #direct,</direct>
+    <forceDie>forceDie: #forceDie,</forceDie>
+    <locked>locked: #locked,</locked>
+    <persevereSkill>persevereSkill: #persevereSkill,</persevereSkill>
+    <charlotte>charlotte: #charlotte,</charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <limited>limited: #limited,</limited>
+    <juexingji>juexingji: #juexingji,</juexingji>
+    <dutySkill>dutySkill: #dutySkill,</dutySkill>
+    <skillAnimation>skillAnimation: #skillAnimation,</skillAnimation>
+    <zhuSkill>zhuSkill: #zhuSkill,</zhuSkill>
+    <zhuanhuanji>zhuanhuanji: #zhuanhuanji,</zhuanhuanji>
+    <hiddenSkill>hiddenSkill: #hiddenSkill,</hiddenSkill>
+    <clanSkill>clanSkill: #clanSkill,</clanSkill>
+    <sunbenSkill>sunbenSkill: #sunbenSkill,</sunbenSkill>
+    <chargeSkill>chargeSkill: #chargeSkill,</chargeSkill>
+    <zhenfa>zhenfa: #zhenfa,</zhenfa>
+    <mainSkill>mainSkill: #mainSkill,</mainSkill>
+    <viceSkill>viceSkill: #viceSkill,</viceSkill>
+    <preHidden>preHidden: #preHidden,</preHidden>
+    <deadTarget>deadTarget: #deadTarget,</deadTarget>
+    <includeOut>includeOut: #includeOut,</includeOut>
+    <multitarget>multitarget: #multitarget,</multitarget>
+    <complexTarget>complexTarget: #complexTarget,</complexTarget>
+    <lose>lose: #lose,</lose>
+    <discard>discard: #discard,</discard>
+    <delay>delay: #delay,</delay>
+    <complexCard>complexCard: #complexCard,</complexCard>
+    <mark>mark: #mark,</mark>
+    <multiline>multiline: #multiline,</multiline>
+    <firstDo>firstDo: #firstDo,</firstDo>
+    <lastDo>lastDo: #lastDo,</lastDo>
     <usable>usable: #usable,</usable>
+    <round>round: #round,</round>
+    <groupSkill>groupSkill: #groupSkill,</groupSkill>
+    <animationColor>animationColor: #animationColor,</animationColor>
+    <init>
+      init(player: Player, skill) {
+        #init
+      },
+    </init>
     <filter>
       filter(event: GameEvent, player: Player) {
-        @ts{ #filter }
+        #filter
         return true
       },
     </filter>
     <filterCard>
       filterCard(card: Card, player: Player) {
-        @ts{ #filterCard }
+        #filterCard
         return true
       },
     </filterCard>
@@ -369,7 +794,7 @@ macro @skill_useRespond(
     <selectCard>selectCard: #selectCard,</selectCard>
     <filterTarget>
       filterTarget(card: Card, player: Player, target: Player) {
-        @ts{ #filterTarget }
+        #filterTarget
         return true
       },
     </filterTarget>
@@ -378,13 +803,13 @@ macro @skill_useRespond(
     <prompt>prompt: #prompt,</prompt>
     <check>
       check(card: Card) {
-        @ts{ #check }
+        #check
         return true
       },
     </check>
     <content>
       async content(event: GameEvent, trigger: GameEvent, player: Player) {
-        @ts{ #content }
+        #content
       },
     </content>
     <ai>ai: @__skillAiValue(#ai),</ai>
@@ -401,6 +826,48 @@ macro @skill_viewAs(
   #skill: Ident?,
   #translation: Str?,
   #description: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #forced: Bool?,
+  #frequent: Bool?,
+  #direct: Bool?,
+  #forceDie: Bool?,
+  #locked: Bool?,
+  #persevereSkill: Bool?,
+  #charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #limited: Bool?,
+  #juexingji: Bool?,
+  #dutySkill: Bool?,
+  #skillAnimation: Bool?,
+  #zhuSkill: Bool?,
+  #zhuanhuanji: Bool?,
+  #hiddenSkill: Bool?,
+  #clanSkill: Bool?,
+  #sunbenSkill: Bool?,
+  #chargeSkill: Bool?,
+  #zhenfa: Bool?,
+  #mainSkill: Bool?,
+  #viceSkill: Bool?,
+  #preHidden: expr?,
+  #deadTarget: Bool?,
+  #includeOut: Bool?,
+  #multitarget: Bool?,
+  #complexTarget: Bool?,
+  #lose: Bool?,
+  #discard: Bool?,
+  #delay: Bool?,
+  #complexCard: Bool?,
+  #mark: Bool?,
+  #multiline: Bool?,
+  #firstDo: Bool?,
+  #lastDo: Bool?,
+  #usable: Num?,
+  #round: Num?,
+  #groupSkill: Str?,
+  #animationColor: Str?,
+  #init: stmt,
   #enable: expr?,
   #viewAs: ObjectLit?,
   #filterCard: stmt,
@@ -409,7 +876,6 @@ macro @skill_viewAs(
   #selectCard: expr?,
   #position: Str?,
   #prompt: Str?,
-  #usable: Num?,
   #check: stmt,
   #content: stmt,
   #ai: ObjectLit?
@@ -418,18 +884,61 @@ macro @skill_viewAs(
     enable: @__skillEnableValue(#enable),
     <translation>translation: #translation,</translation>
     <description>description: #description,</description>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <forced>forced: #forced,</forced>
+    <frequent>frequent: #frequent,</frequent>
+    <direct>direct: #direct,</direct>
+    <forceDie>forceDie: #forceDie,</forceDie>
+    <locked>locked: #locked,</locked>
+    <persevereSkill>persevereSkill: #persevereSkill,</persevereSkill>
+    <charlotte>charlotte: #charlotte,</charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <limited>limited: #limited,</limited>
+    <juexingji>juexingji: #juexingji,</juexingji>
+    <dutySkill>dutySkill: #dutySkill,</dutySkill>
+    <skillAnimation>skillAnimation: #skillAnimation,</skillAnimation>
+    <zhuSkill>zhuSkill: #zhuSkill,</zhuSkill>
+    <zhuanhuanji>zhuanhuanji: #zhuanhuanji,</zhuanhuanji>
+    <hiddenSkill>hiddenSkill: #hiddenSkill,</hiddenSkill>
+    <clanSkill>clanSkill: #clanSkill,</clanSkill>
+    <sunbenSkill>sunbenSkill: #sunbenSkill,</sunbenSkill>
+    <chargeSkill>chargeSkill: #chargeSkill,</chargeSkill>
+    <zhenfa>zhenfa: #zhenfa,</zhenfa>
+    <mainSkill>mainSkill: #mainSkill,</mainSkill>
+    <viceSkill>viceSkill: #viceSkill,</viceSkill>
+    <preHidden>preHidden: #preHidden,</preHidden>
+    <deadTarget>deadTarget: #deadTarget,</deadTarget>
+    <includeOut>includeOut: #includeOut,</includeOut>
+    <multitarget>multitarget: #multitarget,</multitarget>
+    <complexTarget>complexTarget: #complexTarget,</complexTarget>
+    <lose>lose: #lose,</lose>
+    <discard>discard: #discard,</discard>
+    <delay>delay: #delay,</delay>
+    <complexCard>complexCard: #complexCard,</complexCard>
+    <mark>mark: #mark,</mark>
+    <multiline>multiline: #multiline,</multiline>
+    <firstDo>firstDo: #firstDo,</firstDo>
+    <lastDo>lastDo: #lastDo,</lastDo>
     <usable>usable: #usable,</usable>
+    <round>round: #round,</round>
+    <groupSkill>groupSkill: #groupSkill,</groupSkill>
+    <animationColor>animationColor: #animationColor,</animationColor>
+    <init>
+      init(player: Player, skill) {
+        #init
+      },
+    </init>
     <viewAs>viewAs: #viewAs,</viewAs>
     <filterCard>
       filterCard(card: Card, player: Player) {
-        @ts{ #filterCard }
+        #filterCard
         return true
       },
     </filterCard>
     <filterCardValue>filterCard: #filterCardValue,</filterCardValue>
     <viewAsFilter>
       viewAsFilter(player: Player) {
-        @ts{ #viewAsFilter }
+        #viewAsFilter
         return true
       },
     </viewAsFilter>
@@ -438,13 +947,13 @@ macro @skill_viewAs(
     <prompt>prompt: #prompt,</prompt>
     <check>
       check(card: Card) {
-        @ts{ #check }
+        #check
         return true
       },
     </check>
     <content>
       async content(event: GameEvent, trigger: GameEvent, player: Player) {
-        @ts{ #content }
+        #content
       },
     </content>
     <ai>ai: @__skillAiValue(#ai),</ai>
@@ -463,15 +972,99 @@ macro @skill_mod(
   #skill: Ident?,
   #translation: Str?,
   #description: Str?,
-  #mod: ObjectLit,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #forced: Bool?,
+  #frequent: Bool?,
+  #direct: Bool?,
+  #forceDie: Bool?,
   #locked: Bool?,
+  #persevereSkill: Bool?,
+  #charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #limited: Bool?,
+  #juexingji: Bool?,
+  #dutySkill: Bool?,
+  #skillAnimation: Bool?,
+  #zhuSkill: Bool?,
+  #zhuanhuanji: Bool?,
+  #hiddenSkill: Bool?,
+  #clanSkill: Bool?,
+  #sunbenSkill: Bool?,
+  #chargeSkill: Bool?,
+  #zhenfa: Bool?,
+  #mainSkill: Bool?,
+  #viceSkill: Bool?,
+  #preHidden: expr?,
+  #deadTarget: Bool?,
+  #includeOut: Bool?,
+  #multitarget: Bool?,
+  #complexTarget: Bool?,
+  #lose: Bool?,
+  #discard: Bool?,
+  #delay: Bool?,
+  #complexCard: Bool?,
+  #mark: Bool?,
+  #multiline: Bool?,
+  #firstDo: Bool?,
+  #lastDo: Bool?,
+  #usable: Num?,
+  #round: Num?,
+  #groupSkill: Str?,
+  #animationColor: Str?,
+  #init: stmt,
+  #mod: ObjectLit,
   #ai: ObjectLit?
 ) {
   #skill = {
     <translation>translation: #translation,</translation>
     <description>description: #description,</description>
-    mod: #mod,
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <forced>forced: #forced,</forced>
+    <frequent>frequent: #frequent,</frequent>
+    <direct>direct: #direct,</direct>
+    <forceDie>forceDie: #forceDie,</forceDie>
     <locked>locked: #locked,</locked>
+    <persevereSkill>persevereSkill: #persevereSkill,</persevereSkill>
+    <charlotte>charlotte: #charlotte,</charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <limited>limited: #limited,</limited>
+    <juexingji>juexingji: #juexingji,</juexingji>
+    <dutySkill>dutySkill: #dutySkill,</dutySkill>
+    <skillAnimation>skillAnimation: #skillAnimation,</skillAnimation>
+    <zhuSkill>zhuSkill: #zhuSkill,</zhuSkill>
+    <zhuanhuanji>zhuanhuanji: #zhuanhuanji,</zhuanhuanji>
+    <hiddenSkill>hiddenSkill: #hiddenSkill,</hiddenSkill>
+    <clanSkill>clanSkill: #clanSkill,</clanSkill>
+    <sunbenSkill>sunbenSkill: #sunbenSkill,</sunbenSkill>
+    <chargeSkill>chargeSkill: #chargeSkill,</chargeSkill>
+    <zhenfa>zhenfa: #zhenfa,</zhenfa>
+    <mainSkill>mainSkill: #mainSkill,</mainSkill>
+    <viceSkill>viceSkill: #viceSkill,</viceSkill>
+    <preHidden>preHidden: #preHidden,</preHidden>
+    <deadTarget>deadTarget: #deadTarget,</deadTarget>
+    <includeOut>includeOut: #includeOut,</includeOut>
+    <multitarget>multitarget: #multitarget,</multitarget>
+    <complexTarget>complexTarget: #complexTarget,</complexTarget>
+    <lose>lose: #lose,</lose>
+    <discard>discard: #discard,</discard>
+    <delay>delay: #delay,</delay>
+    <complexCard>complexCard: #complexCard,</complexCard>
+    <mark>mark: #mark,</mark>
+    <multiline>multiline: #multiline,</multiline>
+    <firstDo>firstDo: #firstDo,</firstDo>
+    <lastDo>lastDo: #lastDo,</lastDo>
+    <usable>usable: #usable,</usable>
+    <round>round: #round,</round>
+    <groupSkill>groupSkill: #groupSkill,</groupSkill>
+    <animationColor>animationColor: #animationColor,</animationColor>
+    <init>
+      init(player: Player, skill) {
+        #init
+      },
+    </init>
+    mod: #mod,
     <ai>ai: #ai,</ai>
   }
 }
@@ -482,18 +1075,98 @@ macro @skill_group(
   #skill: Ident?,
   #translation: Str?,
   #description: Str?,
-  #group: expr,
-  #preHidden: expr?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
   #forced: Bool?,
-  #locked: Bool?
+  #frequent: Bool?,
+  #direct: Bool?,
+  #forceDie: Bool?,
+  #locked: Bool?,
+  #persevereSkill: Bool?,
+  #charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #limited: Bool?,
+  #juexingji: Bool?,
+  #dutySkill: Bool?,
+  #skillAnimation: Bool?,
+  #zhuSkill: Bool?,
+  #zhuanhuanji: Bool?,
+  #hiddenSkill: Bool?,
+  #clanSkill: Bool?,
+  #sunbenSkill: Bool?,
+  #chargeSkill: Bool?,
+  #zhenfa: Bool?,
+  #mainSkill: Bool?,
+  #viceSkill: Bool?,
+  #preHidden: expr?,
+  #deadTarget: Bool?,
+  #includeOut: Bool?,
+  #multitarget: Bool?,
+  #complexTarget: Bool?,
+  #lose: Bool?,
+  #discard: Bool?,
+  #delay: Bool?,
+  #complexCard: Bool?,
+  #mark: Bool?,
+  #multiline: Bool?,
+  #firstDo: Bool?,
+  #lastDo: Bool?,
+  #usable: Num?,
+  #round: Num?,
+  #groupSkill: Str?,
+  #animationColor: Str?,
+  #init: stmt,
+  #group: expr,
 ) {
   #skill = {
     <translation>translation: #translation,</translation>
     <description>description: #description,</description>
-    group: #group,
-    <preHidden>preHidden: #preHidden,</preHidden>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
     <forced>forced: #forced,</forced>
+    <frequent>frequent: #frequent,</frequent>
+    <direct>direct: #direct,</direct>
+    <forceDie>forceDie: #forceDie,</forceDie>
     <locked>locked: #locked,</locked>
+    <persevereSkill>persevereSkill: #persevereSkill,</persevereSkill>
+    <charlotte>charlotte: #charlotte,</charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <limited>limited: #limited,</limited>
+    <juexingji>juexingji: #juexingji,</juexingji>
+    <dutySkill>dutySkill: #dutySkill,</dutySkill>
+    <skillAnimation>skillAnimation: #skillAnimation,</skillAnimation>
+    <zhuSkill>zhuSkill: #zhuSkill,</zhuSkill>
+    <zhuanhuanji>zhuanhuanji: #zhuanhuanji,</zhuanhuanji>
+    <hiddenSkill>hiddenSkill: #hiddenSkill,</hiddenSkill>
+    <clanSkill>clanSkill: #clanSkill,</clanSkill>
+    <sunbenSkill>sunbenSkill: #sunbenSkill,</sunbenSkill>
+    <chargeSkill>chargeSkill: #chargeSkill,</chargeSkill>
+    <zhenfa>zhenfa: #zhenfa,</zhenfa>
+    <mainSkill>mainSkill: #mainSkill,</mainSkill>
+    <viceSkill>viceSkill: #viceSkill,</viceSkill>
+    <preHidden>preHidden: #preHidden,</preHidden>
+    <deadTarget>deadTarget: #deadTarget,</deadTarget>
+    <includeOut>includeOut: #includeOut,</includeOut>
+    <multitarget>multitarget: #multitarget,</multitarget>
+    <complexTarget>complexTarget: #complexTarget,</complexTarget>
+    <lose>lose: #lose,</lose>
+    <discard>discard: #discard,</discard>
+    <delay>delay: #delay,</delay>
+    <complexCard>complexCard: #complexCard,</complexCard>
+    <mark>mark: #mark,</mark>
+    <multiline>multiline: #multiline,</multiline>
+    <firstDo>firstDo: #firstDo,</firstDo>
+    <lastDo>lastDo: #lastDo,</lastDo>
+    <usable>usable: #usable,</usable>
+    <round>round: #round,</round>
+    <groupSkill>groupSkill: #groupSkill,</groupSkill>
+    <animationColor>animationColor: #animationColor,</animationColor>
+    <init>
+      init(player: Player, skill) {
+        #init
+      },
+    </init>
+    group: #group,
   }
 }
 
@@ -508,8 +1181,100 @@ macro @skill_group(
 //       async content(event: GameEvent, trigger: GameEvent, player: Player) { player draw(1) },
 //     }
 //   }
-macro @skill_raw(#skill: Ident?, #object: ObjectLit?) {
+macro @skill_raw(
+  #skill: Ident?,
+  #object: ObjectLit?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #forced: Bool?,
+  #frequent: Bool?,
+  #direct: Bool?,
+  #forceDie: Bool?,
+  #locked: Bool?,
+  #persevereSkill: Bool?,
+  #charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #limited: Bool?,
+  #juexingji: Bool?,
+  #dutySkill: Bool?,
+  #skillAnimation: Bool?,
+  #zhuSkill: Bool?,
+  #zhuanhuanji: Bool?,
+  #hiddenSkill: Bool?,
+  #clanSkill: Bool?,
+  #sunbenSkill: Bool?,
+  #chargeSkill: Bool?,
+  #zhenfa: Bool?,
+  #mainSkill: Bool?,
+  #viceSkill: Bool?,
+  #preHidden: expr?,
+  #deadTarget: Bool?,
+  #includeOut: Bool?,
+  #multitarget: Bool?,
+  #complexTarget: Bool?,
+  #lose: Bool?,
+  #discard: Bool?,
+  #delay: Bool?,
+  #complexCard: Bool?,
+  #mark: Bool?,
+  #multiline: Bool?,
+  #firstDo: Bool?,
+  #lastDo: Bool?,
+  #usable: Num?,
+  #round: Num?,
+  #groupSkill: Str?,
+  #animationColor: Str?,
+  #init: stmt
+) {
   <object>
   #skill = #object
+  // @skill_raw 的对象来自 #object 槽，标签并不进字面量，只能挂上去（省略时 Object.assign(x, {}) 是无害空操作）
+  Object assign(#skill, {
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <forced>forced: #forced,</forced>
+    <frequent>frequent: #frequent,</frequent>
+    <direct>direct: #direct,</direct>
+    <forceDie>forceDie: #forceDie,</forceDie>
+    <locked>locked: #locked,</locked>
+    <persevereSkill>persevereSkill: #persevereSkill,</persevereSkill>
+    <charlotte>charlotte: #charlotte,</charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <limited>limited: #limited,</limited>
+    <juexingji>juexingji: #juexingji,</juexingji>
+    <dutySkill>dutySkill: #dutySkill,</dutySkill>
+    <skillAnimation>skillAnimation: #skillAnimation,</skillAnimation>
+    <zhuSkill>zhuSkill: #zhuSkill,</zhuSkill>
+    <zhuanhuanji>zhuanhuanji: #zhuanhuanji,</zhuanhuanji>
+    <hiddenSkill>hiddenSkill: #hiddenSkill,</hiddenSkill>
+    <clanSkill>clanSkill: #clanSkill,</clanSkill>
+    <sunbenSkill>sunbenSkill: #sunbenSkill,</sunbenSkill>
+    <chargeSkill>chargeSkill: #chargeSkill,</chargeSkill>
+    <zhenfa>zhenfa: #zhenfa,</zhenfa>
+    <mainSkill>mainSkill: #mainSkill,</mainSkill>
+    <viceSkill>viceSkill: #viceSkill,</viceSkill>
+    <preHidden>preHidden: #preHidden,</preHidden>
+    <deadTarget>deadTarget: #deadTarget,</deadTarget>
+    <includeOut>includeOut: #includeOut,</includeOut>
+    <multitarget>multitarget: #multitarget,</multitarget>
+    <complexTarget>complexTarget: #complexTarget,</complexTarget>
+    <lose>lose: #lose,</lose>
+    <discard>discard: #discard,</discard>
+    <delay>delay: #delay,</delay>
+    <complexCard>complexCard: #complexCard,</complexCard>
+    <mark>mark: #mark,</mark>
+    <multiline>multiline: #multiline,</multiline>
+    <firstDo>firstDo: #firstDo,</firstDo>
+    <lastDo>lastDo: #lastDo,</lastDo>
+    <usable>usable: #usable,</usable>
+    <round>round: #round,</round>
+    <groupSkill>groupSkill: #groupSkill,</groupSkill>
+    <animationColor>animationColor: #animationColor,</animationColor>
+    <init>
+      init(player: Player, skill) {
+        #init
+      },
+    </init>
+  })
   </object>
 }

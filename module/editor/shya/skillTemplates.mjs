@@ -16,6 +16,7 @@ export const SKILL_KINDS = [
   #skill: my_trigger
   #translation: "技能名"
   #description: "触发时机：……；效果：……。"
+  // 标签（可选，一行一个，不按技能种类限制）：#forced: true / #frequent: true / #locked: true / #limited: true / #usable: 1 / #round: 1
   #trigger: "phaseJieshuBegin"
   #filter:
     return player hp < player maxHp

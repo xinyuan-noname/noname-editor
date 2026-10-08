@@ -19,10 +19,12 @@
         </div>
         <div class="tools-body">
             <div class="tool-panel" data-tool-panel="tag">
+                <div class="tag-pages"></div>
                 <div class="tag-groups"></div>
                 <div class="tag-footer">
                     <span class="tag-count">已选 0 项</span>
-                    <button class="tag-insert" type="button">插入到光标处</button>
+                    <label class="tag-n" title="「每回合限n次 / 每n轮限一次」里的 n（1~20）">n <input class="tag-n-input" type="number" min="1" max="20" step="1" value="1"></label>
+                    <button class="tag-insert" type="button">写入标签</button>
                     <button class="tag-clear" type="button">清空</button>
                 </div>
             </div>

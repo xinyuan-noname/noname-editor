@@ -102,3 +102,25 @@
 - ✗ **清场**：「出牌阶段，你可以令所有其他角色弃置所有手牌。」→ 无条件、无代价、无限制。
 - ✗ **畸形描述**：「摸牌，很强。」→ 没有时机、数量与限制，代码根本无法实现，玩家也看不懂。
 - ✗ **时机对不上**：「结束阶段结束时你回复 1 点体力」配 `phaseJieshuBegin`（开始/结束混了）。
+
+## 11. 常用标签（写在技能宏调用体里，一行一个）
+
+标签是**独立的槽行**，与触发时机/效果无关，缺省就不写；它们不按技能种类限制（与旧版编辑器一致）。
+写错字段比不写更糟——拿不准的标签一律不写（例如给普通技能写 `#mainSkill`）。
+
+- 发动方式：`#forced: true`（强制发动）、`#frequent: true`（自动发动）、`#direct: true`、`#forceDie: true`
+- 锁定 / 防封印：`#locked: true`、`#persevereSkill: true`、`#charlotte: true`
+- 限定类：`#limited: true`（描述里必须写明「限定技」）、`#juexingji: true`（觉醒技）、`#dutySkill: true`（使命技）
+- 次数：`#usable: 1`（每回合限一次就用它，别只在描述里写）、`#round: 1`（每轮限一次）
+- 身份标记：`#zhuSkill: true`（主公技）、`#zhuanhuanji: true`（转换技）、`#hiddenSkill: true`（隐匿技）、`#clanSkill: true`（宗族技）、`#sunbenSkill: true`、`#chargeSkill: true`
+- 势力技：`#groupSkill: "wei"`（值是势力 id：wei / shu / wu / qun / jin / shen）
+- 国战：`#mainSkill: true`、`#viceSkill: true`、`#preHidden: true`、`#zhenfa: true`
+- 选目标 / 选牌：`#multitarget: true`、`#deadTarget: true`、`#includeOut: true`、`#lose: false`、`#discard: false`
+- 触发顺序与标记：`#firstDo: true`（最先触发）、`#lastDo: true`（最后触发）、`#mark: true`（标记持续显示）
+- 动画：`#skillAnimation: true` 配 `#animationColor: "fire"`（fire 火 / wood 木 / water 水 / thunder 雷 / orange 橙 / metal 金）
+
+三条纪律：
+
+1. **锁定技**（`#locked: true`）的描述不要写「你可以」；反之非锁定技不要写「锁定技」。
+2. 描述里的次数限制必须与 `#usable` / `#round` 一致（描述说「每轮限一次」就写 `#round: 1`）。
+3. 一个技能最多两三个标签就够；标签是给引擎看的，不是给玩家看的（玩家只看 description）。
