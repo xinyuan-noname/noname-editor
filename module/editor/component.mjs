@@ -1118,8 +1118,31 @@ shadow.innerHTML=`
         clans.push(name);
         this.configQuery("write", { member: "x19D6_editor.clans", value: clans });
     }
+
     /**
-     * 把之前自建并保存的势力补回选项列表。
+     * 把自建势力的图标落盘到 `extension/<工作区>/image/group/<势力id>.png`，并记下路径。
+     * 图标是自建势力对话框里画布画出来的 data URL，不落盘刷新就丢（用户反馈：势力图片缺少）。
+     * @param {string} groupId
+     * @param {string} imageData
+     * @returns {Promise<string>} 相对 resources/app 的路径（`<工作区>/image/group/<id>.png`）；失败返回 ""
+     */
+    async saveGroupIcon(groupId, imageData) {
+        if (!groupId || !imageData || !this.workspace) return "";
+        const relative = `${this.workspace}/image/group/${groupId}.png`;
+        try {
+            const blob = await (await fetch(imageData)).blob();
+            const buffer = await blob.arrayBuffer();
+            await this.fileQuery("writeFile", { path: `extension/${relative}`, data: buffer });
+        } catch (err) {
+            console.warn("势力图标落盘失败", relative, err);
+            return "";
+        }
+        this.configQuery("write", { member: `x19D6_editor.groupImages.${groupId}`, value: relative });
+        return relative;
+    }
+    /**
+     * 把自建势力补回选项列表：来源是登记表（`x19D6_editor.groups`）**以及现有草稿用到的势力**
+     * （草稿里用过但没登记的势力，若不在列表里，打开草稿时那个势力根本没法选）。
      * ⚠️ 必须在创建选择管理器**之前**调用（管理器是按当时的节点建的，事后插节点它不认）。
      * @returns {number} 补了几个
      */
@@ -1128,17 +1151,30 @@ shadow.innerHTML=`
         if (!groupDataArea) return 0;
         const groupDiy = groupDataArea.querySelector("[data-diy]");
         if (!groupDiy) return 0;
-        const saved = this.configQuery("get", { member: "x19D6_editor.groups" }) || {};
+        const saved = Object.assign({}, this.configQuery("get", { member: "x19D6_editor.groups" }) || {});
+        const icons = this.configQuery("get", { member: "x19D6_editor.groupImages" }) || {};
+        const records = this.configQuery("get", { member: "x19D6_editor.characters" }) || {};
+        Object.values(records).forEach(record => {
+            if (!record || !record.group) return;
+            if (this.workspace && record.extension && record.extension !== this.workspace) return;
+            if (!saved[record.group]) saved[record.group] = record.group;
+        });
         let added = 0;
         Object.entries(saved).forEach(([groupId, groupName]) => {
             if (groupDataArea.querySelector(`[data-group-option="${CSS.escape(groupId)}"]`)) return;
-            groupDiy.parentElement.insertBefore(this.createGroupOption({ id: groupId, name: groupName }), groupDiy);
+            const icon = icons[groupId];
+            groupDiy.parentElement.insertBefore(
+                this.createGroupOption({ id: groupId, name: groupName, imageData: icon ? `/${icon}` : "" }),
+                groupDiy
+            );
             added++;
         });
         return added;
     }
+
     /**
-     * 把之前自建并保存的宗族补回选项列表（同样要在建管理器之前）
+     * 把自建宗族补回选项列表：来源是登记表（`x19D6_editor.clans`）**以及现有草稿用到的宗族**。
+     * ⚠️ 同样要在建管理器之前。
      * @returns {number} 补了几个
      */
     renderCustomClans() {
@@ -1147,7 +1183,13 @@ shadow.innerHTML=`
         const clanDiy = clansDataArea.querySelector("[data-diy]");
         if (!clanDiy) return 0;
         const saved = this.configQuery("get", { member: "x19D6_editor.clans" });
-        const clans = Array.isArray(saved) ? saved : [];
+        const clans = new Set(Array.isArray(saved) ? saved : []);
+        const records = this.configQuery("get", { member: "x19D6_editor.characters" }) || {};
+        Object.values(records).forEach(record => {
+            if (!record || !Array.isArray(record.clans)) return;
+            if (this.workspace && record.extension && record.extension !== this.workspace) return;
+            record.clans.forEach(clan => clan && clans.add(clan));
+        });
         let added = 0;
         clans.forEach(clanName => {
             if (clansDataArea.querySelector(`[data-clan-option="${CSS.escape(clanName)}"]`)) return;
@@ -1258,7 +1300,9 @@ shadow.innerHTML=`
             this.shadowRoot.append(dialog);
             const result = await dialog.wait();
             if (result) {
-                const newGroupOption = this.createGroupOption(result);
+                //图标先落盘，再拿落盘路径建选项（否则刷新后图标就没了）
+                const iconPath = await this.saveGroupIcon(result.id, result.imageData);
+                const newGroupOption = this.createGroupOption({ ...result, imageData: iconPath ? `/${iconPath}` : "" });
                 groupDiy.parentElement.insertBefore(newGroupOption, groupDiy);
                 singleManager.append(newGroupOption);
                 doubleManager.append(newGroupOption);
@@ -1953,8 +1997,11 @@ shadow.innerHTML=`
     flushDraft() {
         return this.saveDraft();
     }
+
     /**
-     * 把一份草稿数据回填到界面（每个字段都走 changeData，保证界面与数据一致）
+     * 把一份草稿数据回填到界面。
+     * ⚠️ `changeData` 只写 `dataset` 与 CSS 变量——contenteditable 输入框的**文字**、选项的 `chosen` 高亮、
+     * 体力/护甲的数字框都不会因此变化，所以这里额外同步一遍（踩过：打开草稿后界面看着是空的，其实数据在）。
      * @param {object} data
      */
     applyData(data) {
@@ -1964,7 +2011,75 @@ shadow.innerHTML=`
             if (!(attr in data)) continue;
             this.changeData(attr, data[attr], { mode: "replace" });
         }
+        //文字输入框（姓名 / 拼音 / id）
+        this.syncTextInputs();
+        //选项高亮（选择管理器的高亮是 class，changeData 不碰它）
+        this.markChosenOptions("sex", data.sex);
+        this.markChosenOptions("group", data.group);
+        this.markChosenOptions("clans", data.clans);
+        if (data.groupName) this.setGroup({ groupId: data.group, groupName: data.groupName });
+        //顶部「所属分包」那行用的是 CSS 变量，载入时同样要设
+        if (data.extension) this.style.setProperty("--data-extension", `"${data.extension}"`);
+        if (data.packageId) this.style.setProperty("--data-package-id", `"${lib.translate[data.packageId + "_character_config"] || data.packageId}"`);
+        if (data.characterSortName) this.style.setProperty("--data-character-sort", `"${data.characterSortName}"`);
+        //体力 / 体力上限 / 护甲的数字框
+        this.syncHpInputs();
         return this;
+    }
+    /**
+     * 回填姓名 / 拼音 / id 的 contenteditable 文字（与当前值相同就不写，免得把 MutationObserver 点着）
+     */
+    syncTextInputs() {
+        const nameArea = this.getDataAreaDom("name");
+        if (nameArea) {
+            const nameInput = nameArea.querySelector('ruby[data-by="name"]>div');
+            const pinyinInput = nameArea.querySelector('ruby[data-by="name"]>rt');
+            const name = String(this.getData("name") ?? "");
+            const pinyin = this.getData("pinyin");
+            const pinyinText = Array.isArray(pinyin) ? pinyin.filter(Boolean).join("") : String(pinyin ?? "");
+            if (nameInput && nameInput.textContent !== name) nameInput.textContent = name;
+            if (pinyinInput && pinyinText && pinyinInput.textContent !== pinyinText) pinyinInput.textContent = pinyinText;
+        }
+        const idArea = this.getDataAreaDom("id");
+        if (idArea) {
+            const idInput = idArea.querySelector('ruby[data-by="id"]>div');
+            const id = String(this.getData("id") ?? "");
+            if (idInput && idInput.textContent !== id) idInput.textContent = id;
+        }
+    }
+    /**
+     * 回填选项的选中态
+     * @param {"sex"|"group"|"clans"} area
+     * @param {string|string[]} values
+     * @returns {number} 标记了几个
+     */
+    markChosenOptions(area, values) {
+        const areaDom = this.getDataAreaDom(area);
+        if (!areaDom) return 0;
+        const list = (Array.isArray(values) ? values : [values]).filter(Boolean);
+        let marked = 0;
+        areaDom.querySelectorAll("[data-sex-option],[data-group-option],[data-clan-option]").forEach(node => {
+            const value = node.dataset.sexOption ?? node.dataset.groupOption ?? node.dataset.clanOption;
+            const chosen = list.includes(value);
+            node.classList.toggle("chosen", chosen);
+            if (chosen) marked++;
+        });
+        return marked;
+    }
+    /**
+     * 回填体力 / 体力上限 / 护甲的数字框
+     */
+    syncHpInputs() {
+        const hpArea = this.getDataAreaDom("hp");
+        if (!hpArea) return;
+        const [hpInput, maxHpInput] = hpArea.querySelectorAll(".hp-operation [contenteditable]");
+        const hujiaInput = hpArea.querySelector(".hujia-operation [contenteditable]");
+        [[hpInput, this.getData("hp")], [maxHpInput, this.getData("maxHp")], [hujiaInput, this.getData("hujia")]]
+            .forEach(([input, value]) => {
+                if (!input || !Number.isFinite(value)) return;
+                const text = String(value);
+                if (input.textContent !== text) input.textContent = text;
+            });
     }
     /**
      * 按 id 载入草稿
