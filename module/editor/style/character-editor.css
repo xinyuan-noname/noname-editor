@@ -1078,3 +1078,80 @@ div[contenteditable="true"] {
 .title-input:focus {
     background: rgba(0, 0, 0, 0.3);
 }
+/* ---------- 「一键转化为武将卡」预览浮层（DOM 在 characterCard.mjs 里建） ---------- */
+/* 挂在编辑器自己的 shadowRoot 里：fixed + 高 z-index，盖住 .menu(1024) 与 noname-dialog(1024) */
+.card-preview {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1200;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    box-sizing: border-box;
+    padding: 3vh 2vw;
+    background-color: rgba(0, 0, 0, .68);
+}
+
+.card-preview .card-title {
+    flex: none;
+    color: wheat;
+    font-size: 16px;
+    line-height: 1.6;
+    text-shadow: 0 0 4px #000;
+}
+
+.card-preview .card-stage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    max-height: 68vh;
+}
+
+.card-preview canvas {
+    width: auto;
+    height: auto;
+    max-width: 86vw;
+    max-height: 68vh;
+    border-radius: 10px;
+    box-shadow: 0 0 22px rgba(0, 0, 0, .9);
+}
+
+.card-preview .card-message {
+    flex: none;
+    min-height: 1.2em;
+    color: #9fe08a;
+    font-size: 13px;
+    text-align: center;
+}
+
+.card-preview .card-message.card-error {
+    color: #ff8080;
+}
+
+.card-preview .card-toolbar {
+    flex: none;
+    display: flex;
+    gap: 10px;
+}
+
+.card-preview .card-toolbar>* {
+    padding: 6px 18px;
+    border-radius: 18px;
+    border: 1px solid #176fd4;
+    background-color: #1b1b1b;
+    color: wheat;
+    font-size: 14px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.card-preview .card-toolbar>*:hover {
+    background-color: #176fd4;
+    color: #fff;
+}

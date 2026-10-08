@@ -2,6 +2,7 @@ import { preventEnter, toggleMultiClass } from "./encapsulated.mjs";
 import { HTMLNonameFocusUIElement } from "./component-base.mjs";
 import "./component-infoCard.mjs";
 import "./component-dialog.mjs";
+import { openCharacterCardPreview } from "./characterCard.mjs";
 class HTMLNonameCharacterEditorElement extends HTMLNonameFocusUIElement {
     /**
      * 草稿自动保存的防抖定时器
@@ -382,6 +383,7 @@ shadow.innerHTML=`
     <div class="menu-icon">🔧</div>
     <div class="gen-code">生成代码</div>
     <div class="return-setting">返回设置</div>
+    <div class="gen-card">🎴</div>
 </section>`
 //#: shadow , html/character-editor.html//
         this.storeFragment("code", "<section class='code-section'><div class='title'><span class='copy'>复制</span></div><pre><code></code></pre></section>");
@@ -608,6 +610,9 @@ shadow.innerHTML=`
         const menu = this.shadowRoot.querySelector(".menu");
         //
         const genCodeButton = menu.querySelector(".gen-code");
+        //一键转化为武将卡：把当前草稿画成一张武将牌（绘制与浮层都在 characterCard.mjs）
+        const genCardButton = menu.querySelector(".gen-card");
+        genCardButton.addEventListener("pointerup", () => openCharacterCardPreview(this));
         const returnSettingButton = menu.querySelector(".return-setting");
         genCodeButton.addEventListener("pointerup", async () => {
             if (!this.getData("id")) {
