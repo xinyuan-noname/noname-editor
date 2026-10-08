@@ -2320,11 +2320,42 @@ shadow.innerHTML=`
         if (!dir) return "";
         try {
             const [, files] = await this.fileQuery("readFolder", { path: `extension/${dir}` });
-            const hit = (Array.isArray(files) ? files : []).find(name => name.replace(/\.[^.]+$/, "") === base);
-            return hit ? `ext:${dir}/${hit}` : "";
+            const candidates = (Array.isArray(files) ? files : []).filter(name => name.replace(/\.[^.]+$/, "") === base);
+            //同名文件可能有多个（换过后缀），**0 字节/读不出来的要跳过**，否则又挑到坏图
+            for (const name of candidates) {
+                if (await this.isUsableAsset(`${dir}/${name}`)) return `ext:${dir}/${name}`;
+            }
+            return "";
         } catch (err) {
             console.warn("立绘目录扫描失败", dir, err);
             return "";
+        }
+    }
+    /**
+     * 素材文件是否「存在且非空」。
+     * ⚠️ 只判「文件在不在」不够：写入载荷用错类型会留下 **0 字节**文件，界面上就是
+     * 「有重置/裁剪按钮，但图片区域一片空白」（2026-10 踩过：裁剪结果用 Blob 写 → 0 字节）。
+     * @param {string} relative 工作区相对路径
+     * @returns {Promise<boolean>}
+     */
+    async isUsableAsset(relative) {
+        const path = `extension/${this.stripUrlQuery(relative)}`;
+        const fs = lib.node?.fs;
+        const base = typeof window !== "undefined" ? window.__dirname : "";
+        if (fs?.statSync && base) {
+            try {
+                const stat = fs.statSync(`${base}/${path}`);
+                return Boolean(stat.isFile?.() ?? true) && stat.size > 0;
+            } catch (err) {
+                return false;   //文件不存在 / 读不到
+            }
+        }
+        //网页端没有 fs：退化成读一遍（读得到且非空就算可用）
+        try {
+            const content = await this.fileQuery("readBinaryFile", { path });
+            return (content?.length ?? content?.byteLength ?? 0) > 0;
+        } catch (err) {
+            return false;
         }
     }
     /**
@@ -2369,6 +2400,23 @@ shadow.innerHTML=`
                 fromDisk = Boolean(reference);
             }
             if (!reference || this.avatarCleared) return false;
+            //引用的文件被删/被写成 0 字节时不能硬显示：那会留下「有重置/裁剪按钮，但图是空白」的假状态。
+            //先找同 id 的可用文件（换过后缀时能救回），实在没有就清掉这条坏引用，让占位提示回来。
+            const relative = this.referenceRelative(reference);
+            if (relative && !(await this.isUsableAsset(relative))) {
+                const healed = await this.findAvatarOnDisk((record && record.id) || this.getData("id"));
+                if (healed) {
+                    reference = healed;
+                    this.storedAvatarReference = healed;
+                    this.avatarReference = healed;
+                    return this.showAvatar(healed);
+                }
+                console.warn("立绘文件不可用（缺失或 0 字节），已忽略这条引用", relative);
+                this.storedAvatarReference = "";
+                this.avatarReference = "";
+                this.avatarCleared = true;   //下一次保存把这条坏引用从草稿里清掉
+                return false;
+            }
             this.storedAvatarReference = reference;
             if (fromDisk) this.avatarReference = reference;
             return this.showAvatar(reference);
@@ -2390,7 +2438,11 @@ shadow.innerHTML=`
         if (!relative) return "";
         try {
             const blob = await (await fetch(url)).blob();
-            await this.fileQuery("writeFile", { path: `extension/${relative}`, data: blob });
+            //⚠️ 空图绝不能落盘：以前这里直接用 Blob 写，引擎会写成 0 字节文件、把立绘直接毁掉
+            if (!blob.size) throw new Error("裁剪结果是空图");
+            //引擎只对 `[object File]` 走 FileReader（Blob 会被 `new Uint8Array(blob)` 写成空文件）→ 包成 File
+            const file = new File([blob], this.imageFileName(reference, blob.type), { type: blob.type || "image/png" });
+            await this.fileQuery("writeFile", { path: `extension/${relative}`, data: file });
             this.avatarReference = reference;
             this.storedAvatarReference = reference;
             this.avatarCleared = false;
@@ -2399,6 +2451,9 @@ shadow.innerHTML=`
             return reference;
         } catch (err) {
             console.warn("裁剪结果落盘失败", relative, err);
+            alert(`裁剪结果没能保存：${(err && err.message) || err}\n原立绘保持不变。`);
+            //界面刚才已经换成裁剪用的 blob 了 → 退回真实文件，别停在一张没落盘的图上
+            this.showAvatar(reference);
             return "";
         }
     }

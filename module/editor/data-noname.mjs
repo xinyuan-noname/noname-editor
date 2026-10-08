@@ -430,13 +430,32 @@ export class NonameData {
         }
     }
     /**
-     * 写文件到扩展目录（`game.writeFile` 内部会先 ensureDirectory，父目录自动建；data 可以是 File/ArrayBuffer/string）
+     * 归一成引擎认得的写入载荷。
+     * ⚠️ `game.writeFile()`（`init/node.js:168`）**只对 `[object File]` 走 FileReader**，其它对象直接落到
+     * `new Uint8Array(data)` —— 而 **Blob 没有 `length`**，于是写出 **0 字节**文件（把原图直接毁掉）。
+     * 2026-10 踩过：裁剪结果与 AI 候选图都用 Blob 写 → 立绘变 0 字节 → 界面「有重置/裁剪按钮但图空白」。
+     * @param {Blob|ArrayBuffer|string} data
+     * @param {string} [name] 文件名（包 File 时用；引擎也会拿它当落盘的文件名）
+     * @returns {File|ArrayBuffer|string}
+     */
+    toWritable(data, name = "asset.bin") {
+        if (typeof data === "string" || data instanceof ArrayBuffer) return data;
+        if (typeof Blob === "undefined" || !(data instanceof Blob)) return data;
+        if (Object.prototype.toString.call(data) === "[object File]") return data;
+        return new File([data], name || "asset.bin", { type: data.type || "application/octet-stream" });
+    }
+    /**
+     * 写文件到扩展目录（`game.writeFile` 内部会先 ensureDirectory，父目录自动建；data 可以是 File/Blob/ArrayBuffer/string）
      * @param {Blob|ArrayBuffer|string} data
      * @param {string} path 相对 resources/app 的完整文件路径
      */
     async writeFile(data, path) {
         const [dirPath, filePath] = path.split(/\/(?=[^/]*$)/);
-        return game.promises.writeFile(data, dirPath, filePath);
+        const payload = this.toWritable(data, filePath);
+        //空载荷一律拒绝：写下去只会用 0 字节覆盖掉原来那张好图（宁可报错让调用方处理）
+        const size = typeof payload === "string" ? payload.length : (payload?.size ?? payload?.byteLength ?? 0);
+        if (!size) throw new Error(`拒绝写入空内容：${path}`);
+        return game.promises.writeFile(payload, dirPath, filePath);
     }
     /**
      * 按路径读二进制（引擎 readFile 返回 Buffer）——改名/搬运媒体文件用
