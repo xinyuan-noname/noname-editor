@@ -2230,9 +2230,22 @@ shadow.innerHTML=`
      * @returns {boolean}
      */
     showAvatar(reference) {
+        const relative = this.referenceRelative(reference);
         const url = this.referenceUrl(reference);
         if (!url) return false;
         this.reloadAvatar(url);
+        //地址兜底：`lib.assetURL` 拼出来的地址不一定能加载（空串 / file:///… 两种都可能），
+        //加载失败就退回 `/extension/…`（选图时用的就是这个形式，游戏里 `/` 相对 app 根）
+        if (relative) {
+            const img = this.getDataAreaDom("avatar").querySelector(".avatar-view img");
+            img.onerror = () => {
+                img.onerror = null;
+                const fallback = `/extension/${relative}`;
+                console.warn("立绘加载失败，改用 app 根路径重试", url, fallback);
+                img.src = fallback;
+                this.changeData("avatar", fallback);
+            };
+        }
         return true;
     }
     /**
