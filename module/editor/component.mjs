@@ -1049,21 +1049,17 @@ shadow.innerHTML=`
                                 avatar.classList.remove("editing", "loading");
                             })
                         } else {
-                            const cropped = await this.multiMediaQuery("staticImgClip", {
-                                img,
-                                x: parseFloat(cutter.style.left) || 0,
-                                y: parseFloat(cutter.style.top) || 0,
-                                width: cutter.clientWidth,
-                                height: cutter.clientHeight,
-                                dataForm: "blobURL",
-                                type: imgType,
-                                useClientData: true
-                            });
-                            this.reloadAvatar(cropped);
-                            //裁剪结果必须落盘：原来只把 blob: URL 写进草稿（引擎不认 blob:、刷新即失效），
-                            //于是一裁剪，原画就再也回不来（实测 server log 里 trashBin 只剩 blob:xxx）
-                            await this.saveCroppedAvatar(cropped);
-                            avatar.classList.remove("cutting", "editing", "loading");
+                            try {
+                                await this.clipStaticAvatar(img, cutter, imgType);
+                            } catch (err) {
+                                //裁剪以前是「静默死在 async 监听里」：控制框和幕布留在界面上，看着就是显示异常
+                                console.warn("裁剪失败", err);
+                                alert(`裁剪失败：${(err && err.message) || err}`);
+                                this.showAvatar(this.avatarReference || this.storedAvatarReference);
+                            } finally {
+                                //⚠️ 成败都必须退出编辑态（否则控制框/幕布常驻）
+                                avatar.classList.remove("cutting", "editing", "loading");
+                            }
                         }
                     } else {
                         avatar.classList.remove("cutting", "editing");
@@ -1075,6 +1071,9 @@ shadow.innerHTML=`
         });
         img.addEventListener("load", (e) => {
             //模拟cover效果
+            //⚠️ 两个类不能同时留：`full-width`+`full-height` 会把图拉成 100%×100%（比例失真），
+            //裁剪时的两个轴缩放率就对不上、剪出来的区域与用户框的不一致（踩过：裁剪后显示异常）
+            img.classList.remove("full-width", "full-height");
             const scaleH = img.naturalHeight / avatar.clientHeight,
                 scaleW = img.naturalWidth / avatar.clientWidth;
             img.classList.add(scaleH < scaleW ? "full-height" : "full-width");
@@ -2426,6 +2425,50 @@ shadow.innerHTML=`
         }
     }
     /**
+     * 按裁剪框裁一张静态立绘并落盘。
+     * 几何一律用 `getBoundingClientRect()` 现算（那才是浏览器实际布局），缩放率**统一按高度**
+     * —— `clipStaticImg(useClientData:true)` 那种「两个轴各除一个 rate」的算法，
+     * 一旦 img 被拉伸（两个 cover 类同时在场）就会剪错区域；图片没解码出来时还会算出 Infinity/NaN，
+     * 最后 `createObjectURL(null)` 抛错、编辑态留在界面上（用户看到的「裁剪后显示异常」）。
+     * @param {HTMLImageElement} img
+     * @param {HTMLElement} cutter
+     * @param {string} [imgType] 源图 MIME（拿不到就按 png）
+     * @returns {Promise<string>} 落盘后的引用；失败抛错（调用方负责提示 + 退出编辑态）
+     */
+    async clipStaticAvatar(img, cutter, imgType) {
+        if (!img?.naturalWidth || !img?.naturalHeight) {
+            throw new Error("图片还没解码出来（naturalWidth 为 0），等它显示出来再裁剪");
+        }
+        const imgRect = img.getBoundingClientRect(),
+            cutterRect = cutter.getBoundingClientRect();
+        const scale = imgRect.height / img.naturalHeight;
+        if (!Number.isFinite(scale) || scale <= 0) throw new Error("算不出裁剪比例（图片没显示出来？）");
+        const x = (cutterRect.left - imgRect.left) / scale,
+            y = (cutterRect.top - imgRect.top) / scale,
+            width = cutterRect.width / scale,
+            height = cutterRect.height / scale;
+        if (!(width >= 1 && height >= 1)) throw new Error(`裁剪框太小（${Math.round(width)}×${Math.round(height)} 像素）`);
+        console.log("裁剪：", {
+            natural: `${img.naturalWidth}×${img.naturalHeight}`,
+            shown: `${Math.round(imgRect.width)}×${Math.round(imgRect.height)}`,
+            cutter: `${Math.round(cutterRect.width)}×${Math.round(cutterRect.height)}`,
+            source: `${Math.round(x)},${Math.round(y)} ${Math.round(width)}×${Math.round(height)}`
+        });
+        const cropped = await this.multiMediaQuery("staticImgClip", {
+            img,
+            x, y, width, height,
+            dataForm: "blobURL",
+            type: imgType || "image/png",
+            //上面给的就是**原图像素**坐标 → 不要再让它除一次 rate
+            useClientData: false
+        });
+        if (!cropped) throw new Error("裁剪没有产出图片");
+        this.reloadAvatar(cropped);
+        const saved = await this.saveCroppedAvatar(cropped);
+        if (!saved) throw new Error("裁剪结果没能落盘");
+        return saved;
+    }
+    /**
      * 裁剪结果落盘（同名覆盖），让草稿里始终是 `ext:` 引用。
      * 不落盘的话草稿只会记下 `blob:` URL：引擎不认、刷新即失效 → 「裁剪一次，原画就回不来了」。
      * @param {string} url 裁剪结果（`blob:` URL）
@@ -2446,14 +2489,13 @@ shadow.innerHTML=`
             this.avatarReference = reference;
             this.storedAvatarReference = reference;
             this.avatarCleared = false;
-            //落盘后界面改回文件地址（DOM/CSS 里的 blob 换掉，刷新后由文件顶上）
-            this.changeData("avatar", this.referenceUrl(reference));
+            //落盘后界面改回**文件地址**，且要走 showAvatar()：
+            //这样 <img> 的加载失败兜底（assetURL 拼不出来时退回 /extension/…）也能顺带修正 CSS 背景
+            this.showAvatar(reference);
             return reference;
         } catch (err) {
+            //提示与界面回退交给调用方（clipStaticAvatar 的 catch）统一做
             console.warn("裁剪结果落盘失败", relative, err);
-            alert(`裁剪结果没能保存：${(err && err.message) || err}\n原立绘保持不变。`);
-            //界面刚才已经换成裁剪用的 blob 了 → 退回真实文件，别停在一张没落盘的图上
-            this.showAvatar(reference);
             return "";
         }
     }

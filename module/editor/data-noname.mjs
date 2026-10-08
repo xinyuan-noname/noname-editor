@@ -833,8 +833,10 @@ export class NonameData {
             return (result) => {
                 tempCanvas.height = height;
                 tempCanvas.width = width;
+                //x/y/width/height 已经是**原图像素**坐标 → 源矩形就该用它自己。
+                //原来写 `img.naturalWidth, img.naturalHeight`，等于把整张图缩进目标框（只有「不裁剪、只缩放」才碰巧对）。
                 tempCtx.drawImage(result,
-                    x, y, img.naturalWidth, img.naturalHeight,
+                    x, y, width, height,
                     0, 0, width, height
                 )
             }
