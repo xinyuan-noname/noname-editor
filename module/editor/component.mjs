@@ -1562,6 +1562,9 @@ shadow.innerHTML=`
             funcMap.forClass("chosen");
             const hps = Array.from(this.getDataAreaDom("hp").querySelectorAll(".hp"));
             const i = hps.indexOf(now);
+            //choose(null)（体力上限 > 6 时收回血格的选中态）不带节点：indexOf 会给 -1，
+            //照旧算成「格数 + 1」会把体力值改错（6/6 点 + 之后 hp 变成 5）
+            if (i < 0) return;
             const hpValue = hps.length - i;
             this.changeData("hp", hpValue);
             hpInputManager.changeValue(hpValue);
@@ -1614,6 +1617,8 @@ shadow.innerHTML=`
             subtree: true,
             attributeFilter: ['class']
         });
+        //初始态：把格数与选中态按当前数据对齐（applyData 走的是同一套；这里兜住「数据先到、管理器后建」）
+        this.syncHpPips();
     }
     addSkill(arg) {
         const skillsDataArea = this.getDataAreaDom("skills");
@@ -2195,18 +2200,22 @@ shadow.innerHTML=`
         });
     }
     /**
-     * 回填体力 / 体力上限 / 护甲的数字框
+     * 回填体力 / 体力上限 / 护甲的数字框（并同步旁边的血格 / 甲格）。
+     * ⚠️ 必须走输入框自己的管理器（`changeValue`），不能只写 `textContent`：
+     * 管理器内部的 `value` 不跟着更新，用户下一次 blur / 回车时它会把「变化量」算错——
+     * 例：体力上限 > 6 的草稿 hp=5，只写 textContent 后失焦 → d = 5 - 4 → 体力值被改成 6。
      */
     syncHpInputs() {
         const hpArea = this.getDataAreaDom("hp");
         if (!hpArea) return;
         const [hpInput, maxHpInput] = hpArea.querySelectorAll(".hp-operation [contenteditable]");
         const hujiaInput = hpArea.querySelector(".hujia-operation [contenteditable]");
-        [[hpInput, this.getData("hp")], [maxHpInput, this.getData("maxHp")], [hujiaInput, this.getData("hujia")]]
-            .forEach(([input, value]) => {
+        [[hpInput, "hp", this.getData("hp")], [maxHpInput, "maxHp", this.getData("maxHp")], [hujiaInput, "hujia", this.getData("hujia")]]
+            .forEach(([input, label, value]) => {
                 if (!input || !Number.isFinite(value)) return;
-                const text = String(value);
-                if (input.textContent !== text) input.textContent = text;
+                const manager = this.getEditableElementManager(label);
+                if (manager) manager.changeValue(value);
+                else if (input.textContent !== String(value)) input.textContent = String(value);
             });
         this.syncHpPips();
     }
@@ -2640,8 +2649,46 @@ shadow.innerHTML=`
         return `image/${ext === "jpg" || ext === "jfif" ? "jpeg" : ext}`;
     }
     /**
-     * 同步体力/护甲旁边的血格、甲格（`.hp`/`.hujia` 的 `lost` 类）。
-     * 光改数字框不够——那些格子是独立的 class 状态（用户反馈「数值和旁边的图片不同步」）。
+     * 把血格的格数对齐到体力上限。
+     * 与 `#listenHp` 里点 +/- 用的 adjustHpDivsTo 同款：增删的格子必须同步进出选择管理器，
+     * 否则「第 n 格（从 DOM 末尾数）= 第 n 点」的换算会错位。
+     * @param {number} maxHp
+     */
+    adjustHpPipCount(maxHp) {
+        const hpContainer = this.getDataAreaDom("hp")?.querySelector(".hpContainer");
+        if (!hpContainer) return;
+        const target = Math.min(6, Math.max(1, Math.round(maxHp)));
+        const manager = this.getUniqueChoiceManager("hp");
+        const pips = Array.from(hpContainer.querySelectorAll(".hp"));
+        const diff = target - pips.length;
+        if (diff > 0) {
+            for (let i = 0; i < diff; i++) {
+                const pip = document.createElement("div");
+                pip.className = "hp lost";
+                hpContainer.prepend(pip);
+                manager?.append(pip);
+            }
+        } else if (diff < 0) {
+            pips.slice(0, -diff).forEach(node => {
+                node.remove();
+                manager?.remove(node);
+            });
+        }
+    }
+    /**
+     * 同步体力/护甲旁边的血格、甲格（用户反馈：「体力值设置和护甲设置显示出问题了」）。
+     *
+     * ⚠️ 血格的**实心**不是由 `lost` 表示的，而是由选择管理器的 `chosen` 表示的：
+     * CSS 里 `.hp.lost.chosen, .hp.lost.chosen~.hp.lost { filter: grayscale(0); opacity: 1 }`
+     * 会把选中格**及其后面的所有兄弟**一起点亮（模板里 4 格全带 `lost` 就是这个原因）。所以：
+     * ① 每一格都要保持 `lost`，**绝不能**按数值去 toggle 掉某些格子的 `lost`——
+     *    那样「没被 chosen 点亮」的格子也会是实心，血格会永远显示满 / 与数值脱节
+     *    （AI 那版写的是 `index >= hp`，正好是镜像）；
+     * ② 选中态必须跟着数值走：`chosen` 留在 `chooseFirst()` 的第 0 格时，
+     *    `.chosen~.hp` 会把整行都点亮 → 加载草稿后血格恒为满；
+     * ③ 格数要对齐体力上限（超过 6 时引擎整行换成「体力值 / 体力上限」模式，见 .hp-more-show 的 CSS）。
+     * 选择管理器的约定（见 `#listenHp`）是「第 n 格 **从 DOM 末尾数** = 第 n 点」：
+     * `value = 格数 - DOM 下标`、点亮的是该格及其后续兄弟，所以选中格的下标就是 `格数 - 数值`。
      */
     syncHpPips() {
         const hpArea = this.getDataAreaDom("hp");
@@ -2649,22 +2696,38 @@ shadow.innerHTML=`
         const hp = this.getData("hp");
         const maxHp = this.getData("maxHp");
         const hujia = this.getData("hujia");
+        //数字框为空 / 草稿里存成 null 时是 NaN，这种值不参与显示
+        const isNumber = value => typeof value === "number" && !Number.isNaN(value);
+        //体力上限 > 6：血格整行隐藏，换成「体力值 / 体力上限」模式（互斥由 .hp-more-show 的 CSS 负责）
+        const moreShow = hpArea.querySelector(".hp-more-show");
+        if (moreShow && isNumber(maxHp)) moreShow.classList.toggle("hidden", !(maxHp > 6));
         const hpContainer = hpArea.querySelector(".hpContainer");
-        if (hpContainer) {
-            Array.from(hpContainer.querySelectorAll(".hp")).forEach((pip, index) => {
-                pip.classList.toggle("lost", index >= hp);
-            });
-            //容器上的血量档位类（与点 +/- 时用的是同一套）
+        if (hpContainer && isNumber(hp) && isNumber(maxHp)) {
+            if (maxHp <= 6) this.adjustHpPipCount(maxHp);
+            const pips = Array.from(hpContainer.querySelectorAll(".hp"));
+            //① 全部保持 lost：实心交给 chosen + 兄弟选择器
+            pips.forEach(pip => pip.classList.add("lost"));
+            //容器上的血量档位类（与点 +/- 用的是同一套：数据层的 getHpStatus）
             hpContainer.classList.remove("healthy", "damaged", "dangerous");
-            const ratio = maxHp ? hp / maxHp : 0;
-            hpContainer.classList.add(ratio <= 0.25 ? "dangerous" : ratio <= 0.5 ? "damaged" : "healthy");
+            hpContainer.classList.add(this.playerQuery("hpStatus", { hp, maxHp }));
+            //② 选中态 = 第 (格数 - 体力) 格。体力上限 > 6 时血格不显示，此时别碰选中态：
+            //   回调是按 DOM 下标反算数值的，choose(null) 会把体力算成「格数 + 1」
+            if (maxHp <= 6 && maxHp >= 1) {
+                const manager = this.getUniqueChoiceManager("hp");
+                const target = pips[pips.length - hp];
+                if (manager && target && manager.chosen !== target) manager.choose(target);
+            }
         }
         const hujiaContainer = hpArea.querySelector(".hujiaContainer");
-        if (hujiaContainer) {
-            Array.from(hujiaContainer.querySelectorAll(".hujia")).forEach((pip, index) => {
-                if (pip.classList.contains("reset")) return;
-                pip.classList.toggle("lost", index >= hujia);
-            });
+        if (hujiaContainer && isNumber(hujia)) {
+            const nodes = Array.from(hujiaContainer.querySelectorAll(".hujia"));
+            const pips = nodes.filter(pip => !pip.classList.contains("reset"));
+            pips.forEach(pip => pip.classList.add("lost"));
+            //护甲 0 对应的格子是末尾那个 reset（约定：末格 = 0 甲）；
+            //这里不能传 null —— 回调按 indexOf 反算，null 会算成 6 甲
+            const target = nodes[nodes.length - 1 - hujia];
+            const manager = this.getUniqueChoiceManager("hujia");
+            if (target && manager && manager.chosen !== target) manager.choose(target);
         }
     }
     /**
