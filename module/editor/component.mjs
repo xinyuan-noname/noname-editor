@@ -806,6 +806,8 @@ shadow.innerHTML=`
         const img = avatarDataArea.querySelector(".avatar-view img");
         if (exported) this.removeLastestURLRecord("avatar");
         this.recordURL("avatar", url);
+        //清掉上一次恢复时挂的 onerror 兜底：否则新图加载失败会被旧路径顶掉
+        img.onerror = null;
         img.src = url;
         avatar.classList.add("done");
         this.changeData("avatar", url);
@@ -841,6 +843,8 @@ shadow.innerHTML=`
             //<img> 只认 URL：用 /extension/... 显示；草稿里存同样形式，getAllData 会归一成 ext:
             const url = `/extension/${reference.slice(4)}`;
             this.recordURL("avatar", url);
+            //清掉上一次恢复时挂的 onerror 兜底：否则新图加载失败会被旧路径顶掉
+            img.onerror = null;
             img.src = url;
             avatar.classList.add("done");
             this.changeData("avatar", url);
