@@ -72,6 +72,18 @@ export class HTMLNonameFocusUIElement extends HTMLElement {
                 const { path } = query;
                 return this.#server.createDir(path);
             }
+            case "writeFile": {
+                const { path, data } = query;
+                return this.#server.writeFile(data, path);
+            }
+            case "readBinaryFile": {
+                const { path } = query;
+                return this.#server.readBinaryFile(path);
+            }
+            case "removeFile": {
+                const { path } = query;
+                return this.#server.removeFile(path);
+            }
         }
     }
     /**

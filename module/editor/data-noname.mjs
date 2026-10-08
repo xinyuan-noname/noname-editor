@@ -429,6 +429,37 @@ export class NonameData {
             default: return false;
         }
     }
+    /**
+     * 写文件到扩展目录（`game.writeFile` 内部会先 ensureDirectory，父目录自动建；data 可以是 File/ArrayBuffer/string）
+     * @param {Blob|ArrayBuffer|string} data
+     * @param {string} path 相对 resources/app 的完整文件路径
+     */
+    async writeFile(data, path) {
+        const [dirPath, filePath] = path.split(/\/(?=[^/]*$)/);
+        return game.promises.writeFile(data, dirPath, filePath);
+    }
+    /**
+     * 按路径读二进制（引擎 readFile 返回 Buffer）——改名/搬运媒体文件用
+     * @param {string} path
+     * @returns {Promise<Buffer|ArrayBuffer>}
+     */
+    async readBinaryFile(path) {
+        return game.promises.readFile(path);
+    }
+    /**
+     * 删除文件（不存在时静默返回 false）
+     * @param {string} path 相对 resources/app 的完整文件路径
+     * @returns {Promise<boolean>}
+     */
+    async removeFile(path) {
+        try {
+            await game.promises.removeFile(path);
+            return true;
+        } catch (err) {
+            console.warn("删除文件失败", path, err);
+            return false;
+        }
+    }
     checkMemberExistence(member) {
         const [root, ...properties] = member.split(".");
         let currentObject = root === "lib" ? lib : root === "game" ? game : root === "ui" ? ui :

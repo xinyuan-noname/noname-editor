@@ -959,6 +959,24 @@ mainPage.innerHTML=`
         }
         return data;
     }
+    /**
+     * 草稿删除时的「同生共死」：把它名下落盘的媒体文件一并删掉
+     * @param {object} record
+     */
+    async removeDraftAssets(record) {
+        if (!record) return;
+        const references = [record.avatar, ...(Array.isArray(record.dieAudios) ? record.dieAudios : [])].filter(Boolean);
+        for (const reference of references) {
+            const text = String(reference);
+            const relative = text.startsWith("ext:") ? text.slice(4) : text.replace(/^\/?extension\//, "");
+            if (!relative || /^(blob|data|https?):/i.test(relative)) continue;
+            try {
+                await this.serveFor.data.removeFile(`extension/${relative}`);
+            } catch (err) {
+                console.warn("删除草稿媒体失败", relative, err);
+            }
+        }
+    }
     listenSideBarCharacter() {
         const { sideBarCharacter } = this;
         //必须限定在空态卡片里：侧栏顶部的武将包/分包「＋」也是 button，裸 querySelector("button") 会抓到它们
@@ -992,12 +1010,14 @@ mainPage.innerHTML=`
             this.createCharacterEditor(draftKey);
         });
         //点击卡片操作条上的「删除」：丢弃该草稿（写回配置持久化）
-        ul.addEventListener("removeCard", e => {
+        ul.addEventListener("removeCard", async e => {
             const node = e.detail && e.detail.from;
             const draftKey = node && node.getAttribute && node.getAttribute("draft-key");
             if (!draftKey) return;
             const records = this.serveFor.data.getConfig("x19D6_editor.characters");
             if (!records || !(draftKey in records)) return;
+            //同生共死：先删该武将名下的媒体文件，再删草稿
+            await this.removeDraftAssets(records[draftKey]);
             delete records[draftKey];
             this.serveFor.data.writeConfig("x19D6_editor.characters", records);
             this.loadSideBarCharacter();

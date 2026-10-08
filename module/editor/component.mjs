@@ -663,6 +663,127 @@ shadow.innerHTML=`
         packageIdBtn.addEventListener("pointerup", setPackageName);
         characterSortBtn.addEventListener("pointerup", setCharacterSort);
     }
+    /**
+     * 工作区里某个资源目录（`extensionFileConfig.<工作区>` 的键），没有配置时按约定兜底
+     * @param {string} key
+     * @returns {string} 形如 `奇迹之旅/audio/die`
+     */
+    assetDir(key) {
+        const workspace = this.workspace;
+        const defaults = {
+            "extension-character-image": "image/character",
+            "extension-card-image": "image/card",
+            "extension-skill-audio": "audio/skill",
+            "extension-die-audio": "audio/die"
+        };
+        const config = this.configQuery("get", { member: `x19D6_editor.extensionFileConfig.${workspace}` }) || {};
+        return config[key] || `${workspace}/${defaults[key] || key}`;
+    }
+    /**
+     * 把本地选中的媒体文件**落盘**进当前工作区扩展，返回草稿里要记的引用（`ext:<工作区相对路径>`）
+     * @param {File} file
+     * @param {string} key extensionFileConfig 的键
+     * @param {string} [suffix] 同名多份时区分（阵亡语音按引擎约定是 `<武将id>1.mp3`）
+     * @returns {Promise<string>} 失败返回 ""
+     */
+    async saveLocalAsset(file, key, suffix = "") {
+        const workspace = this.workspace;
+        if (!workspace) {
+            alert("请先在设置页选择工作区。");
+            return "";
+        }
+        const base = this.getData("id") || this.draftKey || "未命名";
+        const ext = (file && file.name && file.name.split(".").pop()) || "mp3";
+        const relative = `${this.assetDir(key)}/${base}${suffix}.${ext}`;
+        try {
+            await this.fileQuery("writeFile", { path: `extension/${relative}`, data: file });
+        } catch (err) {
+            console.warn("媒体落盘失败", relative, err);
+            alert(`媒体落盘失败：${relative}\n${(err && err.message) || err}`);
+            return "";
+        }
+        return `ext:${relative}`;
+    }
+    /**
+     * 把 `ext:` / `/extension/` / `extension/` 形式的引用还原成工作区相对路径
+     * @param {string} reference
+     * @returns {string}
+     */
+    assetRelative(reference) {
+        const text = String(reference || "");
+        if (!text || /^(blob|data|https?):/i.test(text)) return "";
+        return text.startsWith("ext:") ? text.slice(4) : text.replace(/^\/?extension\//, "");
+    }
+    /**
+     * 删除媒体文件（同生共死：条目删除 / 改名换姓 / 草稿删除都走它）
+     * @param {string} reference
+     * @returns {Promise<boolean>}
+     */
+    async removeAssetFile(reference) {
+        const relative = this.assetRelative(reference);
+        if (!relative) return false;
+        return this.fileQuery("removeFile", { path: `extension/${relative}` });
+    }
+    /**
+     * 武将 id 改名时，把名下已落盘的媒体文件改成新名字（写新 → 删旧 → 更新草稿引用）
+     * @param {string} oldId
+     * @param {string} newId
+     */
+    async renameAssets(oldId, newId) {
+        if (!oldId || !newId || oldId === newId) return;
+        const avatar = this.getData("avatar");
+        if (avatar) {
+            const relative = this.assetRelative(avatar);
+            if (relative.includes(oldId)) {
+                const renamed = await this.moveAssetFile(relative, oldId, newId);
+                if (renamed) {
+                    const url = `/extension/${renamed}`;
+                    const img = this.getDataAreaDom("avatar").querySelector(".avatar-view img");
+                    if (img) img.src = url;
+                    this.changeData("avatar", url);
+                }
+            }
+        }
+        const dieAudios = this.getData("dieAudios");
+        if (!dieAudios.length) return;
+        const references = [];
+        let changed = false;
+        for (const reference of dieAudios) {
+            const relative = this.assetRelative(reference);
+            if (!relative.includes(oldId)) {
+                references.push(reference);
+                continue;
+            }
+            const renamed = await this.moveAssetFile(relative, oldId, newId);
+            references.push(renamed ? `ext:${renamed}` : reference);
+            changed = changed || Boolean(renamed);
+        }
+        if (!changed) return;
+        this.changeData("dieAudios", references.join(" "));
+        const card = this.getDataAreaDom("dieAudios").querySelector("audio-info-card");
+        if (card) card.setAttribute("src", references[references.length - 1]);
+    }
+    /**
+     * 复制文件到新名字并删掉旧的
+     * @param {string} relative
+     * @param {string} oldId
+     * @param {string} newId
+     * @returns {Promise<string>} 新相对路径；失败返回 ""
+     */
+    async moveAssetFile(relative, oldId, newId) {
+        const parts = relative.split("/");
+        const renamedName = parts.pop().split(oldId).join(newId);
+        const renamed = [...parts, renamedName].join("/");
+        try {
+            const data = await this.fileQuery("readBinaryFile", { path: `extension/${relative}` });
+            await this.fileQuery("writeFile", { path: `extension/${renamed}`, data });
+            await this.fileQuery("removeFile", { path: `extension/${relative}` });
+            return renamed;
+        } catch (err) {
+            console.warn("媒体改名失败（旧文件保留）", relative, err);
+            return "";
+        }
+    }
     reloadAvatar(url, exported) {
         const avatarDataArea = this.getDataAreaDom("avatar");
         const avatar = avatarDataArea.querySelector('.avatar-view');
@@ -685,10 +806,14 @@ shadow.innerHTML=`
         const cutButton = avatarDataArea.querySelector(".cut");
         const loadFile = async (file) => {
             this.clearURLRecords("avatar");
-            this.createAndRecordObjectURL("avatar", file);
-            const url = this.getLastestURLRecord("avatar");
+            //落盘：extension/<工作区>/image/character/<武将id>.<ext>
+            const reference = await this.saveLocalAsset(file, "extension-character-image");
+            if (!reference) return;
             imgType = file.type;
             img.style.cssText = "";
+            //<img> 只认 URL：用 /extension/... 显示；草稿里存同样形式，getAllData 会归一成 ext:
+            const url = `/extension/${reference.slice(4)}`;
+            this.recordURL("avatar", url);
             img.src = url;
             avatar.classList.add("done");
             this.changeData("avatar", url);
@@ -721,7 +846,10 @@ shadow.innerHTML=`
             avatar.classList.remove("done");
             img.removeAttribute("src");
             img.style.cssText = "";
+            const previous = this.getData("avatar");
             this.changeData("avatar", "");
+            //同生共死：重置立绘 = 删掉已落盘的那张
+            if (previous) this.removeAssetFile(previous);
         });
         cutButton.addEventListener("pointerup", () => {
             avatar.classList.add("cutting", "editing");
@@ -877,14 +1005,25 @@ shadow.innerHTML=`
         const addButton = dieAudiosDataArea.querySelector(".add");
         addButton.addEventListener("pointerdown", async e => {
             if (dieAudioSection.childNodes.length) return;
-            this.clearURLRecords("dieAudios")
             const [file] = await this.fileQuery("submitFile", { format: "audio/*" });
-            this.createAndRecordObjectURL("dieAudios", file);
+            if (!file) return;
+            //旧引用（老版本存的 blob: URL）先清掉
+            this.clearURLRecords("dieAudios")
+            //落盘：extension/<工作区>/audio/die/<武将id>1.<ext>（与引擎的扩展音频约定一致）
+            const reference = await this.saveLocalAsset(file, "extension-die-audio", "1");
+            if (!reference) return;
             const audioCard = document.createElement("audio-info-card");
-            audioCard.setAttribute("src", this.getLastestURLRecord("dieAudios"));
+            audioCard.setAttribute("src", reference);
             audioCard.setAttribute("removable", true)
             dieAudioSection.append(audioCard);
-            this.changeData("dieAudios", this.getLastestURLRecord("dieAudios"));
+            this.changeData("dieAudios", reference);
+        });
+        //🗑️ 删条目 = 删文件（同生共死）
+        dieAudioSection.addEventListener("removeCard", async e => {
+            const node = e.detail && e.detail.from;
+            const reference = node && node.getAttribute && node.getAttribute("src");
+            if (reference) await this.removeAssetFile(reference);
+            this.changeData("dieAudios", "");
         });
         dieAudioSection.addEventListener("audioTextChange", e => {
             if (typeof e.detail?.newValue === "string") this.changeData("dieAudioText", e.detail.newValue);
@@ -921,14 +1060,20 @@ shadow.innerHTML=`
             const pinyin = this.textQuery("pinyin", { text: this.getData("name"), withTone: false }).join("");
             idInput.textContent = pinyin;
         });
-        new MutationObserver(() => {
-            this.changeData("id", idInput.textContent)
-            this.changeData("defaultIntro", this.playerQuery("intro", { id: idInput.textContent }));
-            if (this.checkQuery("characterId", { id: idInput.textContent })) {
+        //实例字段而不是闭包变量：载入草稿后要能重新对准（见 loadDraft）
+        this.lastAssetId = this.getData("id") || "";
+        new MutationObserver(async () => {
+            const nowId = idInput.textContent;
+            this.changeData("id", nowId)
+            this.changeData("defaultIntro", this.playerQuery("intro", { id: nowId }));
+            if (this.checkQuery("characterId", { id: nowId })) {
                 if (title.classList.contains("wrong")) title.classList.remove("wrong");
             } else {
                 if (!title.classList.contains("wrong")) title.classList.add("wrong");
             }
+            //媒体文件改名跟随（同生共死）
+            if (this.lastAssetId && nowId && this.lastAssetId !== nowId) await this.renameAssets(this.lastAssetId, nowId);
+            this.lastAssetId = nowId;
         }).observe(idInput, { characterData: true, subtree: true, childList: true });
     }
     #listenSex() {
@@ -1761,6 +1906,8 @@ shadow.innerHTML=`
         this.applyData(data);
         //草稿的扩展一律按当前工作区对待（保存时写回）
         this.syncWorkspace();
+        //媒体改名要按「当前草稿的武将 id」比，所以载入后重新对准
+        this.lastAssetId = this.getData("id") || "";
         this.renderPerfectPair();
         return true;
     }
