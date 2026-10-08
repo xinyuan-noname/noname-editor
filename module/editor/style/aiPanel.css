@@ -114,6 +114,81 @@
     color: #fff;
 }
 
+/* ── token 用量条 ── */
+.usage-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    background: rgba(122, 167, 255, 0.12);
+    font-size: 0.8em;
+}
+
+.usage-bar[hidden] {
+    display: none;
+}
+
+.usage-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.9;
+}
+
+.usage-reset {
+    flex: 0 0 auto;
+    padding: 0 6px;
+    font-size: 0.95em;
+}
+
+/* ── AI 技能书（Skill.md）── */
+.skill-book {
+    font-size: 0.9em;
+}
+
+.skill-book > summary {
+    cursor: pointer;
+    opacity: 0.9;
+}
+
+.skill-book[open] {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.skill-size {
+    font-size: 0.85em;
+}
+
+.skill-text {
+    width: 100%;
+    font-family: Consolas, monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.check-row > span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    opacity: 1;
+}
+
+.check-row input[type="checkbox"] {
+    width: 1.1em;
+    height: 1.1em;
+    cursor: pointer;
+}
+
+.skill-hint {
+    margin: 0;
+}
+
 /* ── 通用块 ── */
 .block {
     display: flex;

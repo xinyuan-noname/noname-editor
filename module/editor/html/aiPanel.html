@@ -14,6 +14,11 @@
         <button type="button" data-ai-tab="history">生成历史</button>
     </div>
 
+    <div class="usage-bar" hidden>
+        <span class="usage-text"></span>
+        <button class="usage-reset ghost" type="button" title="清零累计统计">清零</button>
+    </div>
+
     <section class="block" data-block="draft">
         <textarea class="request" rows="3" spellcheck="false" placeholder="用一句话描述你要的武将，例如：蜀势力女性武将，靠卖血换爆发，体力3，两个技能"></textarea>
         <div class="examples">
@@ -49,6 +54,16 @@
             </select></label>
             <label class="row"><span>id 前缀</span><input class="adv-prefix" value="ai_" spellcheck="false" title="生成的武将与技能 id 都会以它开头，避免和已有内容重名"></label>
             <label class="row"><span>不要出现</span><input class="adv-avoid" spellcheck="false" placeholder="如：卖血、觉醒、限定技"></label>
+        </details>
+        <details class="skill-book">
+            <summary>AI 技能书（Skill.md）<span class="skill-size muted"></span></summary>
+            <label class="row check-row"><span><input type="checkbox" class="skill-enabled" checked>每次生成时把它发给 AI</span></label>
+            <textarea class="skill-text" rows="8" spellcheck="false" placeholder="正在读取 ai/skill.md…"></textarea>
+            <div class="actions">
+                <button class="skill-save" type="button">保存</button>
+                <button class="skill-reset ghost" type="button" title="丢掉自己的改动，回到扩展里那份 ai/skill.md">恢复默认</button>
+            </div>
+            <p class="muted skill-hint"></p>
         </details>
         <div class="actions">
             <button class="gen-draft" type="button">生成设计稿</button>

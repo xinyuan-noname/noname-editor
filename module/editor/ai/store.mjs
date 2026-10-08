@@ -160,3 +160,52 @@ export function isGuided(host) {
 export function markGuided(host) {
     return write(host, "guided", true);
 }
+
+/**
+ * 「AI 技能书」（ai/skill.md）的开关与用户改动。
+ * text 为空 = 用扩展里那份 skill.md 原文；有值 = 用户在面板里改过的覆盖版本。
+ * @returns {{enabled:boolean, text:string}}
+ */
+export function getSkillState(host) {
+    const saved = read(host, "skill") || {};
+    return {
+        enabled: saved.enabled !== false,
+        text: typeof saved.text === "string" ? saved.text : ""
+    };
+}
+export function saveSkillState(host, patch = {}) {
+    const next = { ...getSkillState(host), ...patch };
+    return write(host, "skill", next);
+}
+
+/** token 用量累计（只统计对话调用；生图按张计费、不计 token） */
+export const EMPTY_USAGE = { calls: 0, prompt: 0, completion: 0, total: 0, cached: 0, last: null, at: 0 };
+
+/**
+ * 读累计用量
+ * @returns {{calls:number, prompt:number, completion:number, total:number, cached:number, last:object|null, at:number}}
+ */
+export function getUsage(host) {
+    const saved = read(host, "usage") || {};
+    return { ...EMPTY_USAGE, ...(saved && typeof saved === "object" ? saved : {}) };
+}
+/**
+ * 记一次调用的用量
+ * @param {{prompt:number, completion:number, total:number, cached:number}|null} usage
+ */
+export function addUsage(host, usage) {
+    if (!usage) return null;
+    const current = getUsage(host);
+    return write(host, "usage", {
+        calls: current.calls + 1,
+        prompt: current.prompt + (usage.prompt || 0),
+        completion: current.completion + (usage.completion || 0),
+        total: current.total + (usage.total || 0),
+        cached: current.cached + (usage.cached || 0),
+        last: usage,
+        at: Date.now()
+    });
+}
+export function resetUsage(host) {
+    return write(host, "usage", { ...EMPTY_USAGE });
+}

@@ -6,16 +6,18 @@ import {
     getTextConfig, saveTextConfig, getImageConfig, saveImageConfig,
     getHistory, pushHistory, clearHistory,
     getCandidates, getCandidateMap, addCandidate, removeCandidate as removeCandidateRecord,
-    setAppliedSkill, getAppliedSkill, isGuided, markGuided
+    setAppliedSkill, getAppliedSkill, isGuided, markGuided,
+    getSkillState, saveSkillState, getUsage, addUsage, resetUsage
 } from "./ai/store.mjs";
 import {
     chat, testConnection, listModels, generateImages,
-    extractJSON, base64ToBlob, guessImageMime, fetchImageBlob, mimeToExt, normalizeBaseUrl
+    extractJSON, base64ToBlob, guessImageMime, fetchImageBlob, mimeToExt, normalizeBaseUrl, estimateTokens
 } from "./ai/client.mjs";
 import {
     ART_STYLES, buildCharacterMessages, buildImageMessages, normalizeDraft, fallbackArtPrompt
 } from "./ai/prompts.mjs";
 import { ensureHostImport, injectSkillRegistration } from "./ai/skills.mjs";
+import { loadSkillDoc } from "./ai/skillDoc.mjs";
 
 /**
  * <ai-panel>（侧栏 AI 页）—— 用 AI 生成武将设计稿与原画。
@@ -46,6 +48,10 @@ class HTMLNonameAiPanelElement extends HTMLNonameFocusUIElement {
     #editingProfile = {};
     /** 主标签栏当前页（draft / art / history），会记忆到 x19D6_editor.ai.ui.lastTab */
     #activeTab = "draft";
+    /** 扩展里那份 skill.md 的原文（用户没改过时就用它；「恢复默认」也回到它） */
+    #skillDocDefault = "";
+    /** skill.md 的读取来源（file / fetch / fallback），显示在技能书提示里 */
+    #skillDocSource = "";
     constructor() {
         super();
         const shadow = this.attachShadow({ mode: "open" });
@@ -65,6 +71,11 @@ shadow.innerHTML=`
         <button type="button" class="chosen" data-ai-tab="draft">生成设计稿</button>
         <button type="button" data-ai-tab="art">生成原画</button>
         <button type="button" data-ai-tab="history">生成历史</button>
+    </div>
+
+    <div class="usage-bar" hidden>
+        <span class="usage-text"></span>
+        <button class="usage-reset ghost" type="button" title="清零累计统计">清零</button>
     </div>
 
     <section class="block" data-block="draft">
@@ -102,6 +113,16 @@ shadow.innerHTML=`
             </select></label>
             <label class="row"><span>id 前缀</span><input class="adv-prefix" value="ai_" spellcheck="false" title="生成的武将与技能 id 都会以它开头，避免和已有内容重名"></label>
             <label class="row"><span>不要出现</span><input class="adv-avoid" spellcheck="false" placeholder="如：卖血、觉醒、限定技"></label>
+        </details>
+        <details class="skill-book">
+            <summary>AI 技能书（Skill.md）<span class="skill-size muted"></span></summary>
+            <label class="row check-row"><span><input type="checkbox" class="skill-enabled" checked>每次生成时把它发给 AI</span></label>
+            <textarea class="skill-text" rows="8" spellcheck="false" placeholder="正在读取 ai/skill.md…"></textarea>
+            <div class="actions">
+                <button class="skill-save" type="button">保存</button>
+                <button class="skill-reset ghost" type="button" title="丢掉自己的改动，回到扩展里那份 ai/skill.md">恢复默认</button>
+            </div>
+            <p class="muted skill-hint"></p>
         </details>
         <div class="actions">
             <button class="gen-draft" type="button">生成设计稿</button>
@@ -289,6 +310,8 @@ shadow.innerHTML=`
         this.renderCandidates();
         //主标签页记住上次那一页（AI 区最常用的是「生成设计稿」，没有记录就从它开始）
         this.#showTab(this.configQuery("get", { member: "x19D6_editor.ai.ui.lastTab" }) || "draft");
+        this.#renderUsage();
+        void this.#initSkillBook();
         //首次进来：没配过接口也没看过引导，直接把引导摊开（不弹窗、不打断）
         const text = getTextConfig(this);
         if (!isGuided(this) && !text.baseUrl) this.openSheet("guide");
@@ -317,6 +340,7 @@ shadow.innerHTML=`
     openSheet(name) {
         this.#qa(".block").forEach(node => (node.hidden = true));
         this.#qa(".ai-tabs").forEach(node => (node.hidden = true));
+        this.#qa(".usage-bar").forEach(node => (node.hidden = true));
         this.#qa(".sheet").forEach(node => (node.hidden = node.dataset.sheet !== name));
         if (name === "config") {
             //每次打开都从「服务商列表」开始（DSH 那样：先看有哪几家，点进去才填表）
@@ -329,6 +353,7 @@ shadow.innerHTML=`
         this.#qa(".sheet").forEach(node => (node.hidden = true));
         this.#qa(".ai-tabs").forEach(node => (node.hidden = false));
         this.#showTab(this.#activeTab);
+        this.#renderUsage();
         this.#refreshStatus();
     }
     /**
@@ -377,6 +402,84 @@ shadow.innerHTML=`
             label.textContent = `对话：${textPart} ｜ 生图：${imagePart}`;
             label.title = `对话接口：${text.baseUrl || "（未填地址）"}\n生图接口：${image.baseUrl || "（未填地址）"}`;
         }
+    }
+
+    // ──────────────────────────── AI 技能书（skill.md）与 token 用量 ────────────────────────────
+
+    /**
+     * 读扩展里那份 skill.md 并回填界面。
+     * 用户改过的（config 里的 text）优先显示；开关只决定「发不发」，不影响这里显示什么。
+     */
+    async #initSkillBook() {
+        const area = this.#q(".skill-text");
+        if (!area) return;
+        let result = { text: "", source: "fallback" };
+        try {
+            result = await loadSkillDoc();
+        } catch (err) {
+            console.warn("读取 AI 技能书失败", err);
+        }
+        this.#skillDocDefault = result.text || "";
+        this.#skillDocSource = result.source;
+        const state = getSkillState(this);
+        area.value = state.text.trim() ? state.text : this.#skillDocDefault;
+        const enabled = this.#q(".skill-enabled");
+        if (enabled) enabled.checked = state.enabled;
+        this.#updateSkillHint();
+    }
+    /** 真正要发给模型的那段（关掉开关就是空串，退回只发机器契约） */
+    #skillBookText() {
+        const state = getSkillState(this);
+        if (!state.enabled) return "";
+        return (state.text.trim() ? state.text : this.#skillDocDefault).trim();
+    }
+    #updateSkillHint() {
+        const state = getSkillState(this);
+        const area = this.#q(".skill-text");
+        const text = (area ? area.value : "") || "";
+        const size = this.#q(".skill-size");
+        if (size) size.textContent = state.enabled ? `约 ${text.length} 字 / ${estimateTokens(text)} tokens` : "（已关闭，不发送）";
+        const hint = this.#q(".skill-hint");
+        if (!hint) return;
+        const sourceText = {
+            file: "扩展里的 module/editor/ai/skill.md",
+            fetch: "扩展里的 module/editor/ai/skill.md（网页端 fetch）",
+            fallback: "没读到文件，用的是内置兜底"
+        }[this.#skillDocSource] || "";
+        hint.textContent = [
+            `来源：${sourceText}`,
+            state.text.trim() ? "当前用的是你在面板里改过的版本（点「恢复默认」回到文件原文）" : "当前用的是文件原文",
+            "只作用于「生成设计稿」；「AI 扩写」与生图不发送它。上面那个 token 数是粗略估算，真实用量看用量条。"
+        ].filter(Boolean).join("\n");
+    }
+    /**
+     * token 用量条：本次 + 累计。
+     * ⚠️ 只统计**对话调用**（生成设计稿 / AI 扩写）；生图按张计费、服务商也不返回 token。
+     * 有些服务（本地小模型常见）不返回 usage —— 那种情况仍然计一次调用，但金额栏只能写「未返回用量」。
+     * @param {{prompt:number,completion:number,total:number,cached:number}|null} [lastUsage]
+     */
+    #renderUsage(lastUsage) {
+        const bar = this.#q(".usage-bar");
+        const text = this.#q(".usage-text");
+        if (!bar || !text) return;
+        const usage = getUsage(this);
+        if (!usage.calls) {
+            bar.hidden = true;
+            text.textContent = "";
+            return;
+        }
+        const parts = [];
+        const last = lastUsage || usage.last;
+        if (last && last.total) parts.push(`本次 ${this.#formatNumber(last.total)}（提示 ${this.#formatNumber(last.prompt)} + 输出 ${this.#formatNumber(last.completion)}）`);
+        else if (last) parts.push("本次：服务商未返回用量");
+        parts.push(`累计 ${this.#formatNumber(usage.total)} tokens / ${usage.calls} 次调用`);
+        if (usage.cached) parts.push(`其中缓存命中 ${this.#formatNumber(usage.cached)}`);
+        text.textContent = parts.join("｜");
+        text.title = "只统计对话调用（生成设计稿 / AI 扩写）；生图按张计费、不计 token。点「清零」重置累计。";
+        bar.hidden = false;
+    }
+    #formatNumber(value) {
+        return Number(value || 0).toLocaleString("zh-CN");
     }
 
     // ──────────────────────────── 服务商列表 / 配置页 ────────────────────────────
@@ -709,6 +812,29 @@ shadow.innerHTML=`
     #bindEvents() {
         //主标签栏
         this.#qa("[data-ai-tab]").forEach(tab => tab.addEventListener("pointerup", () => this.#showTab(tab.dataset.aiTab)));
+        //AI 技能书（开关 / 保存 / 恢复默认）与用量清零
+        const skillEnabled = this.#q(".skill-enabled");
+        if (skillEnabled) skillEnabled.addEventListener("change", () => {
+            saveSkillState(this, { enabled: skillEnabled.checked });
+            this.#updateSkillHint();
+        });
+        this.#q(".skill-save")?.addEventListener("pointerup", () => {
+            const area = this.#q(".skill-text");
+            saveSkillState(this, { text: area ? area.value : "" });
+            this.#updateSkillHint();
+            this.#setProgress("draft", "技能书已保存 ✓ 下次生成就会带上它。");
+        });
+        this.#q(".skill-reset")?.addEventListener("pointerup", () => {
+            const area = this.#q(".skill-text");
+            if (area) area.value = this.#skillDocDefault;
+            saveSkillState(this, { text: "" });
+            this.#updateSkillHint();
+            this.#setProgress("draft", "已恢复成扩展里那份 ai/skill.md 的原文。");
+        });
+        this.#q(".usage-reset")?.addEventListener("pointerup", () => {
+            resetUsage(this);
+            this.#renderUsage();
+        });
         //配置 / 引导浮层
         this.#q(".to-config").addEventListener("pointerup", () => this.openSheet("config"));
         this.#q(".to-guide").addEventListener("pointerup", () => this.openSheet("guide"));
@@ -944,7 +1070,8 @@ shadow.innerHTML=`
                 apiKey: config.apiKey,
                 model: config.model,
                 temperature: Number(config.temperature) || 0.8,
-                messages: buildCharacterMessages({ request, ...options }),
+                //技能书（ai/skill.md）在这里附进系统提示；用户关掉开关就是空串
+                messages: buildCharacterMessages({ request, ...options, skillText: this.#skillBookText() }),
                 signal: controller.signal
             });
             if (!result.ok) {
@@ -952,6 +1079,9 @@ shadow.innerHTML=`
                 this.#setProgress("draft", `生成失败：\n${this.#errorText(result.error)}`);
                 return;
             }
+            //用量照实记：服务商不返回 usage 时也计一次调用（金额记为 0，界面会写「未返回用量」）
+            addUsage(this, result.usage || { prompt: 0, completion: 0, total: 0, cached: 0 });
+            this.#renderUsage(result.usage);
             const parsed = extractJSON(result.content);
             if (!parsed) {
                 this.#setBusy("draft", false);
@@ -976,7 +1106,8 @@ shadow.innerHTML=`
             this.renderDrafts();
             this.renderHistory();
             this.#setBusy("draft", false);
-            this.#setProgress("draft", `生成完成 ✓ 共 ${draft.characters.length} 个候选，点卡片上的「一键应用」就能用到编辑器里。`);
+            this.#setProgress("draft", `生成完成 ✓ 共 ${draft.characters.length} 个候选，点卡片上的「一键应用」就能用到编辑器里。${
+                result.usage ? `本次 tokens ${this.#formatNumber(result.usage.total)}。` : "服务商未返回 token 用量。"}`);
         } catch (err) {
             this.#setBusy("draft", false);
             this.#setProgress("draft", `生成出错：${(err && err.message) || err}`);
@@ -1431,9 +1562,13 @@ shadow.innerHTML=`
                 this.#setProgress("art", `扩写失败：${this.#errorText(result.error)}（也可以直接用本地拼好的提示词生成）`);
                 return;
             }
+            //扩写也是一次对话调用，同样计入用量（它不发送技能书）
+            addUsage(this, result.usage || { prompt: 0, completion: 0, total: 0, cached: 0 });
+            this.#renderUsage(result.usage);
             this.#q(".art-prompt").value = result.content.trim();
             this.#setBusy("art", false);
-            this.#setProgress("art", "提示词已写好 ✓ 可以直接改，然后点「生成原画」。");
+            this.#setProgress("art", `提示词已写好 ✓ 可以直接改，然后点「生成原画」。${
+                result.usage ? `（tokens ${this.#formatNumber(result.usage.total)}）` : ""}`);
         } catch (err) {
             this.#setBusy("art", false);
             this.#setProgress("art", `扩写出错：${(err && err.message) || err}`);
@@ -1533,7 +1668,7 @@ shadow.innerHTML=`
             this.#setBusy("art", false);
             this.renderCandidates();
             this.#setProgress("art", saved
-                ? `出图完成 ✓ 已存 ${saved} 张候选图（在下面点「用作立绘」才会真正换立绘）。`
+                ? `出图完成 ✓ 已存 ${saved} 张候选图（在下面点「用作立绘」才会真正换立绘）。生图按张计费，不计 token。`
                 : "接口返回了图片，但保存失败：检查「设置 → 工作区」里的资源目录是否存在。");
         } catch (err) {
             this.#setBusy("art", false);

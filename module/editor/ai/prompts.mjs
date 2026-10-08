@@ -240,9 +240,12 @@ export const CHARACTER_SYSTEM = [
 
 /**
  * 组装「生成武将设计稿」的对话消息
+ *
+ * `input.skillText` 是用户那份《无名杀武将设计规范》（ai/skill.md，可在面板里改/关）。
+ * 它是**软性设计知识**，附在机器契约之后；关了就不发，只留契约。
  * @param {{
  *   request:string, count?:number, prefix?:string, group?:string, hpRange?:string,
- *   skillCount?:string, avoid?:string
+ *   skillCount?:string, avoid?:string, skillText?:string
  * }} input
  * @returns {Array<{role:string,content:string}>}
  */
@@ -259,8 +262,18 @@ export function buildCharacterMessages(input = {}) {
     if (input.skillCount) lines.push(`技能数量：${input.skillCount}`);
     if (input.avoid) lines.push(`不要出现这些内容（避免与已有设计重复）：${input.avoid}`);
     lines.push("", "请直接输出 JSON（不要任何解释文字）。");
+    const skillText = String(input.skillText || "").trim();
+    const system = skillText
+        ? [
+            CHARACTER_SYSTEM,
+            "",
+            "═══ 附：设计规范《无名杀武将设计规范》（用户可编辑的技能书，优先级高于上面的一般性建议，",
+            "但**不得与前面的 JSON 契约、宏模板、事件表、API 清单冲突**——冲突时以契约为准）═══",
+            skillText
+        ].join("\n")
+        : CHARACTER_SYSTEM;
     return [
-        { role: "system", content: CHARACTER_SYSTEM },
+        { role: "system", content: system },
         { role: "user", content: lines.join("\n") }
     ];
 }

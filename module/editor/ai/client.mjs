@@ -385,12 +385,39 @@ export function extractJSON(text) {
 }
 
 /**
+ * 从响应里取用量（token 消耗）。
+ * 各家字段名不完全一致：OpenAI 系是 `prompt_tokens/completion_tokens/total_tokens`，
+ * 部分网关用 `input_tokens/output_tokens`；DeepSeek 还会给 `prompt_cache_hit_tokens`（命中缓存的便宜）。
+ * 一个都没给（本地小模型常见）就返回 null —— 界面上会显示「服务商未返回用量」，而不是编一个数。
+ * @param {any} payload
+ * @returns {{prompt:number, completion:number, total:number, cached:number}|null}
+ */
+export function extractUsage(payload) {
+    const usage = payload && payload.usage;
+    if (!usage || typeof usage !== "object") return null;
+    const pick = (...keys) => {
+        for (const key of keys) {
+            const value = Number(usage[key]);
+            if (Number.isFinite(value)) return value;
+        }
+        return 0;
+    };
+    const prompt = pick("prompt_tokens", "input_tokens");
+    const completion = pick("completion_tokens", "output_tokens");
+    const total = pick("total_tokens") || prompt + completion;
+    const details = usage.prompt_tokens_details || usage.input_tokens_details || {};
+    const cached = pick("prompt_cache_hit_tokens", "cached_tokens") || Number(details.cached_tokens) || 0;
+    if (!prompt && !completion && !total) return null;
+    return { prompt, completion, total, cached };
+}
+
+/**
  * 对话补全
  * @param {{
  *   baseUrl:string, apiKey:string, model:string, messages:Array<{role:string,content:string}>,
  *   temperature?:number, timeout?:number, jsonMode?:boolean, signal?:AbortSignal
  * }} options
- * @returns {Promise<{ok:true, content:string, raw:any}|{ok:false, error:{message:string,hint:string,detail?:string}}>}
+ * @returns {Promise<{ok:true, content:string, usage:object|null, raw:any}|{ok:false, error:{message:string,hint:string,detail?:string}}>}
  */
 export async function chat({ baseUrl, apiKey, model, messages, temperature = 0.8, timeout, jsonMode = true, signal }) {
     const url = endpoint(baseUrl, "chat/completions");
@@ -421,7 +448,7 @@ export async function chat({ baseUrl, apiKey, model, messages, temperature = 0.8
             }
         };
     }
-    return { ok: true, content, raw: result.data };
+    return { ok: true, content, usage: extractUsage(result.data), raw: result.data };
 }
 
 /**
@@ -585,4 +612,21 @@ export function mimeToExt(mime) {
         case "image/gif": return "gif";
         default: return "png";
     }
+}
+
+/**
+ * 粗略估算一段文字的 token 数（只用于界面提示，别拿它当账单）。
+ * 经验值：汉字/中文标点约 1 字 ≈ 1 token，ASCII 约 4 字符 ≈ 1 token。
+ * 真实用量以服务商返回的 usage 为准（`extractUsage`）。
+ * @param {string} text
+ * @returns {number}
+ */
+export function estimateTokens(text) {
+    const source = String(text || "");
+    let cjk = 0, other = 0;
+    for (const ch of source) {
+        if (/[\u3000-\u9fff\uff00-\uffef]/.test(ch)) cjk++;
+        else other++;
+    }
+    return Math.ceil(cjk + other / 4);
 }
