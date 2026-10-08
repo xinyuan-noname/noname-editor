@@ -267,6 +267,8 @@ mainPage.innerHTML=`
         this.syncTitleWorkspace();
         this.listenWorkspaceChange();
         //扩展被删/取消注册时清空工作区；有效则把登记表同步进 live lib
+        //老草稿（以武将 id 为键）先迁成「编号」键；工作区失效则清空
+        this.migrateDrafts();
         this.serveFor.data.checkWorkspace().then(workspace => {
             if (workspace) this.applyWorkspaceMetaToLib();
             this.syncTitleWorkspace();
@@ -317,6 +319,48 @@ mainPage.innerHTML=`
     get activeCharacterEditor() {
         const list = this.mainPanes.filter(node => node.tagName === "CHARACTER-EDITOR");
         return list.find(node => !node.classList.contains("xy-ED-pane-hidden")) || list[list.length - 1] || null;
+    }
+    /**
+     * 分配一个新草稿编号（与 component.mjs 的 createDraftKey 同一套计数）
+     * @returns {string}
+     */
+    nextDraftKey() {
+        const seq = (Number(this.serveFor.data.getConfig("x19D6_editor.draftSeq")) || 0) + 1;
+        this.serveFor.data.writeConfig("x19D6_editor.draftSeq", seq);
+        return `draft-${seq}`;
+    }
+    /**
+     * 老草稿是以武将 id 为键的 → 迁到「编号」键（原键落成 `id` 字段）。
+     * 不迁的话，在编辑器里改 id 会另存一份新草稿，看着就像「一个武将变多人」。
+     * @returns {number} 迁移条数
+     */
+    migrateDrafts() {
+        const records = this.serveFor.data.getConfig("x19D6_editor.characters");
+        if (!records || typeof records !== "object") return 0;
+        const legacyKeys = Object.keys(records).filter(key => !/^draft-\d+$/.test(key));
+        if (!legacyKeys.length) return 0;
+        //先把计数器顶到已有编号之上，避免新编号撞上老键
+        let seq = Number(this.serveFor.data.getConfig("x19D6_editor.draftSeq")) || 0;
+        Object.keys(records).forEach(key => {
+            const matched = /^draft-(\d+)$/.exec(key);
+            if (matched) seq = Math.max(seq, Number(matched[1]));
+        });
+        this.serveFor.data.writeConfig("x19D6_editor.draftSeq", seq);
+        legacyKeys.forEach(key => {
+            const record = records[key] || {};
+            const draftKey = this.nextDraftKey();
+            records[draftKey] = { ...record, id: record.id || key };
+            delete records[key];
+        });
+        this.serveFor.data.writeConfig("x19D6_editor.characters", records);
+        return legacyKeys.length;
+    }
+    /**
+     * 已打开的武将编辑器
+     * @returns {HTMLElement[]}
+     */
+    get characterEditors() {
+        return this.mainPanes.filter(node => node.tagName === "CHARACTER-EDITOR");
     }
     /**
      * 主区改成「标签栏 + 单面板」：同一时刻只有一个编辑器可见（占满宽度），
@@ -439,10 +483,16 @@ mainPage.innerHTML=`
      * @param {string} [characterId] 传入则挂载时自动载入该武将的草稿
      * @returns {HTMLElement}
      */
-    createCharacterEditor(characterId, data) {
+    createCharacterEditor(draftKey, data) {
+        const records = this.serveFor.data.getConfig("x19D6_editor.characters") || {};
+        //传进来的可能是草稿编号，也可能是武将 id（搜索页的⬅️ / 对外接口 game.x19D6_openCharacterEditor）
+        let key = draftKey && records[draftKey] ? draftKey : "";
+        if (!key && draftKey) {
+            key = Object.keys(records).find(item => records[item] && records[item].id === draftKey) || "";
+        }
         const characterEditor = document.createElement("character-editor");
-        //必须在挂载前设置：组件的 connectedCallback 会按 character-id 载入草稿
-        if (characterId) characterEditor.setAttribute("character-id", characterId);
+        //必须在挂载前设置：组件的 connectedCallback 会按 draft-key 载入草稿
+        if (key) characterEditor.setAttribute("draft-key", key);
         this.mainArea.appendChild(characterEditor);
         //带初始数据（侧栏过滤栏选了武将包/分包时，新武将直接落在该包该分包下）
         if (data && Object.keys(data).length) {
@@ -452,6 +502,9 @@ mainPage.innerHTML=`
                 characterEditor.style.setProperty("--data-package-id", `"${packageName}"`);
             }
             if (data.characterSortName) characterEditor.style.setProperty("--data-character-sort", `"${data.characterSortName}"`);
+        } else if (!key && draftKey) {
+            //没有该武将的草稿：开一份新的，先把武将 id 填上（保存时才分配编号）
+            characterEditor.applyData({ id: draftKey });
         }
         return characterEditor;
     }
@@ -491,16 +544,19 @@ mainPage.innerHTML=`
         const counter = showBox.querySelector(".xy-ED-characte-count");
         const ul = showBox.querySelector("ul");
         ul.replaceChildren();
-        ids.forEach(id => {
-            const data = records[id] || {};
+        ids.forEach(draftKey => {
+            const data = records[draftKey] || {};
             const card = document.createElement("character-info-card");
-            card.setAttribute("character-id", id);
+            const characterId = data.id || draftKey;
+            //character-id 只用于立绘/展示（武将 id）；草稿的唯一标识挂 draft-key
+            card.setAttribute("character-id", characterId);
+            card.setAttribute("draft-key", draftKey);
             //removable 开启「删除」，usable 开启「使用」（点击后发 useCardData 事件）
             card.setAttribute("removable", "true");
             card.setAttribute("usable", "true");
             card.characterInfo = {
-                id,
-                name: data.name || id,
+                id: characterId,
+                name: data.name || characterId,
                 packageName: data.packageId || data.extension,
                 characterSortName: data.characterSortName || data.characterSort,
                 sex: data.sex,
@@ -512,7 +568,9 @@ mainPage.innerHTML=`
                 skillList: Array.isArray(data.skills) ? data.skills : [],
                 dieAudios: []
             };
-            if (data.savedAt) card.title = `最后保存：${new Date(data.savedAt).toLocaleString()}`;
+            const seq = (draftKey.match(/^draft-(\d+)$/) || [])[1];
+            const savedAt = data.savedAt ? `｜最后保存：${new Date(data.savedAt).toLocaleString()}` : "";
+            card.title = `${seq ? `编号 #${seq}` : `草稿：${draftKey}`}${savedAt}`;
             ul.appendChild(card);
         });
         const emptyTitle = emptyCard && emptyCard.querySelector("div");
@@ -923,24 +981,24 @@ mainPage.innerHTML=`
         //点击卡片操作条上的「使用」：继续编辑该草稿
         ul.addEventListener("useCardData", e => {
             const node = e.detail && e.detail.from;
-            const id = node && node.getAttribute && node.getAttribute("character-id");
-            if (!id) return;
-            const opened = this.mainArea.querySelector(`character-editor[character-id="${CSS.escape(id)}"]`);
+            const draftKey = node && node.getAttribute && node.getAttribute("draft-key");
+            if (!draftKey) return;
+            const opened = this.characterEditors.find(editor => editor.draftKey === draftKey);
             if (opened) {
                 //已经开着的草稿：切到它的标签页（主区改标签页后，直接 return 会表现为点了没反应）
                 this.activateMainPane(opened);
                 return;
             }
-            this.createCharacterEditor(id);
+            this.createCharacterEditor(draftKey);
         });
         //点击卡片操作条上的「删除」：丢弃该草稿（写回配置持久化）
         ul.addEventListener("removeCard", e => {
             const node = e.detail && e.detail.from;
-            const id = node && node.getAttribute && node.getAttribute("character-id");
-            if (!id) return;
+            const draftKey = node && node.getAttribute && node.getAttribute("draft-key");
+            if (!draftKey) return;
             const records = this.serveFor.data.getConfig("x19D6_editor.characters");
-            if (!records || !(id in records)) return;
-            delete records[id];
+            if (!records || !(draftKey in records)) return;
+            delete records[draftKey];
             this.serveFor.data.writeConfig("x19D6_editor.characters", records);
             this.loadSideBarCharacter();
         });
@@ -1102,7 +1160,8 @@ mainPage.innerHTML=`
         const useCard = node => {
             const characterId = node?.getAttribute?.("character-id");
             if (characterId) {
-                const opened = this.mainArea.querySelector(`character-editor[character-id="${CSS.escape(characterId)}"]`);
+                //按武将 id 找已打开的编辑器（草稿键现在是编号，不再等于 id）
+                const opened = this.characterEditors.find(editor => editor.getData && editor.getData("id") === characterId);
                 if (opened) this.activateMainPane(opened);
                 else this.createCharacterEditor(characterId);
                 return;

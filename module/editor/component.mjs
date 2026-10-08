@@ -395,9 +395,8 @@ shadow.innerHTML=`
         this.#listenExpanable();
         //扩展跟随设置页的当前工作区
         this.syncWorkspace();
-        //按 id 载入已保存的草稿（新建武将时 id 为空，不载入）
-        const draftId = this.getAttribute("character-id") || this.getData("id");
-        if (draftId) this.loadDraft(draftId);
+        //按草稿编号载入（新建的编辑器没有 draft-key，不载入）
+        if (this.draftKey) this.loadDraft(this.draftKey);
     }
     disconnectedCallback() {
         this.flushDraft();
@@ -1582,7 +1581,37 @@ shadow.innerHTML=`
      */
     getTabTitle() {
         const label = this.getData("id") || this.getData("name");
-        return label ? `武将：${label}` : "武将：未命名";
+        const seq = this.draftSeq;
+        const suffix = seq ? ` #${seq}` : "";
+        return label ? `武将：${label}${suffix}` : `武将：未命名${suffix}`;
+    }
+    /**
+     * 草稿编号（唯一键）。挂在 `draft-key` 属性上：侧栏列表、标签页去重、持久化都以它为准。
+     * @returns {string}
+     */
+    get draftKey() {
+        return this.getAttribute("draft-key") || "";
+    }
+    set draftKey(value) {
+        if (value) this.setAttribute("draft-key", value);
+        else this.removeAttribute("draft-key");
+    }
+    /**
+     * 编号里的序号（`draft-7` → `7`）
+     * @returns {string}
+     */
+    get draftSeq() {
+        return (this.draftKey.match(/^draft-(\d+)$/) || [])[1] || "";
+    }
+    /**
+     * 分配一个新草稿编号。草稿以编号为唯一键、**武将 id 只是数据字段**——
+     * 这样在编辑器里改 id 不会再另存成一份新草稿（踩过：改一次拼音，侧栏就多出一个「武将」）。
+     * @returns {string} 形如 `draft-7`
+     */
+    createDraftKey() {
+        const seq = (Number(this.configQuery("get", { member: "x19D6_editor.draftSeq" })) || 0) + 1;
+        this.configQuery("write", { member: "x19D6_editor.draftSeq", value: seq });
+        return `draft-${seq}`;
     }
     /** 标题相关数据变了 → 冒泡通知主区标签栏刷新 */
     notifyTabTitle() {
@@ -1695,11 +1724,13 @@ shadow.innerHTML=`
             clearTimeout(this.#saveTimer);
             this.#saveTimer = null;
         }
-        const id = this.getData("id");
-        if (!id) return false;
+        //草稿以「编号」为唯一键：改武将 id 只是改字段，不会另存成新草稿
         const data = this.getAllData();
+        //空表单（没编号、没 id、没名字）不落库，避免点开就多一堆空草稿
+        if (!this.draftKey && !data.id && !data.name) return false;
+        if (!this.draftKey) this.draftKey = this.createDraftKey();
         data.savedAt = Date.now();
-        this.configQuery("write", { member: `x19D6_editor.characters.${id}`, value: data });
+        this.configQuery("write", { member: `x19D6_editor.characters.${this.draftKey}`, value: data });
         return true;
     }
     flushDraft() {

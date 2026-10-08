@@ -68,7 +68,8 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
 
 | 配置键 | 内容 |
 |---|---|
-| `x19D6_editor.characters.<武将id>` | 武将草稿全量字段（编辑时 400ms 防抖自动保存，关闭编辑页立即落盘） |
+| `x19D6_editor.characters.<编号>` | 武将草稿全量字段（键是**草稿编号** `draft-<n>`，不是武将 id；编辑时 400ms 防抖自动保存，关闭编辑页立即落盘） |
+| `x19D6_editor.draftSeq` | 草稿编号计数（下一个编号 = `draft-` + (seq+1)） |
 | `x19D6_editor.settings.*` | 基本设置（字号缩放、界面动画、默认挂载父元素、记住上次所在页、当前工作区） |
 | `x19D6_editor.ui.*` | 外壳状态（侧栏宽度比、导航顺序、上次所在页、武将包/分包过滤） |
 | `x19D6_editor.skillEditor.*` | 技能编辑器的配置与缓存 |
