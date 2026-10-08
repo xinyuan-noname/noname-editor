@@ -1100,10 +1100,61 @@ shadow.innerHTML=`
     createGroupOption({ id, name, textShadow, imageData } = {}) {
         const li = document.createElement("li");
         li.dataset.groupOption = id;
-        li.textContent = name;
-        li.style.setProperty("--url", `url(${imageData})`);
-        li.style.setProperty("--group-text-shadow", textShadow);
+        li.textContent = name || id || "";
+        //没有图片就别写 url(undefined)——那会让整个选项渲染成空白格（用户截图里「键」和「＋新增」之间那个空位）
+        if (imageData) li.style.setProperty("--url", `url(${imageData})`);
+        if (textShadow) li.style.setProperty("--group-text-shadow", textShadow);
         return li;
+    }
+    /**
+     * 记下自建宗族（`x19D6_editor.clans` 数组）。宗族没有独立 id，key 就是中文名。
+     * @param {string} name
+     */
+    recordClanName(name) {
+        if (!name) return;
+        const saved = this.configQuery("get", { member: "x19D6_editor.clans" });
+        const clans = Array.isArray(saved) ? saved.slice() : [];
+        if (clans.includes(name)) return;
+        clans.push(name);
+        this.configQuery("write", { member: "x19D6_editor.clans", value: clans });
+    }
+    /**
+     * 把之前自建并保存的势力补回选项列表。
+     * ⚠️ 必须在创建选择管理器**之前**调用（管理器是按当时的节点建的，事后插节点它不认）。
+     * @returns {number} 补了几个
+     */
+    renderCustomGroups() {
+        const groupDataArea = this.getDataAreaDom("group");
+        if (!groupDataArea) return 0;
+        const groupDiy = groupDataArea.querySelector("[data-diy]");
+        if (!groupDiy) return 0;
+        const saved = this.configQuery("get", { member: "x19D6_editor.groups" }) || {};
+        let added = 0;
+        Object.entries(saved).forEach(([groupId, groupName]) => {
+            if (groupDataArea.querySelector(`[data-group-option="${CSS.escape(groupId)}"]`)) return;
+            groupDiy.parentElement.insertBefore(this.createGroupOption({ id: groupId, name: groupName }), groupDiy);
+            added++;
+        });
+        return added;
+    }
+    /**
+     * 把之前自建并保存的宗族补回选项列表（同样要在建管理器之前）
+     * @returns {number} 补了几个
+     */
+    renderCustomClans() {
+        const clansDataArea = this.getDataAreaDom("clans");
+        if (!clansDataArea) return 0;
+        const clanDiy = clansDataArea.querySelector("[data-diy]");
+        if (!clanDiy) return 0;
+        const saved = this.configQuery("get", { member: "x19D6_editor.clans" });
+        const clans = Array.isArray(saved) ? saved : [];
+        let added = 0;
+        clans.forEach(clanName => {
+            if (clansDataArea.querySelector(`[data-clan-option="${CSS.escape(clanName)}"]`)) return;
+            clanDiy.parentElement.insertBefore(this.createClanOption(clanName), clanDiy);
+            added++;
+        });
+        return added;
     }
     setGroup(info) {
         const { groupName, groupTextShadow, groupId } = info;
@@ -1143,6 +1194,8 @@ shadow.innerHTML=`
     }
     #listenGroup() {
         const groupDataArea = this.getDataAreaDom("group")
+        //自建势力先补回列表：选择管理器按当时节点构建，补晚了它就不认
+        this.renderCustomGroups();
         const groupChosenSection = groupDataArea.querySelector("section");
         const groupOptions = groupDataArea.querySelectorAll("[data-group-option]");
         const doubleGroupCheckBox = groupDataArea.querySelector(".checkbox");
@@ -1221,6 +1274,8 @@ shadow.innerHTML=`
     }
     #listenClans() {
         const clansDataArea = this.getDataAreaDom("clans")
+        //自建宗族先补回列表（同上）
+        this.renderCustomClans();
         const clanOptions = clansDataArea.querySelectorAll("[data-clan-option]");
         const manager = this.createUniqueChoiceManager("clans", ...clanOptions)
             .listenAllNodes("pointerup")
@@ -1249,6 +1304,7 @@ shadow.innerHTML=`
                 const newClanOption = this.createClanOption(result);
                 clanDiy.parentElement.insertBefore(newClanOption, clanDiy);
                 manager.append(newClanOption);
+                this.recordClanName(result);
             }
         })
     }
