@@ -720,7 +720,31 @@ shadow.innerHTML=`
             alert(`媒体落盘失败：${relative}\n${(err && err.message) || err}`);
             return "";
         }
+        //同名不同后缀的旧文件要清掉：换格式（png→jpg）后会留下孤儿，
+        //`findAvatarOnDisk()` 那种「按 id 找图」的兜底就可能挑到上一次的旧图
+        await this.removeSiblingAssets(relative);
         return `ext:${relative}`;
+    }
+    /**
+     * 删掉同目录下「主文件名相同、后缀不同」的旧素材（`<id>.png` 与 `<id>.jpg` 只能留一个）
+     * @param {string} relative 工作区相对路径（含文件名）
+     * @returns {Promise<number>} 删掉的个数
+     */
+    async removeSiblingAssets(relative) {
+        const parts = String(relative || "").split("/");
+        const name = parts.pop() || "";
+        const dir = parts.join("/");
+        const base = name.replace(/\.[^.]+$/, "");
+        if (!dir || !base) return 0;
+        try {
+            const [, files] = await this.fileQuery("readFolder", { path: `extension/${dir}` });
+            const targets = (Array.isArray(files) ? files : []).filter(item => item !== name && item.replace(/\.[^.]+$/, "") === base);
+            for (const item of targets) await this.fileQuery("removeFile", { path: `extension/${dir}/${item}` });
+            return targets.length;
+        } catch (err) {
+            console.warn("清理同名旧素材失败", relative, err);
+            return 0;
+        }
     }
     /**
      * 把 `ext:` / `/extension/` / `extension/` 形式的引用还原成工作区相对路径
@@ -861,9 +885,11 @@ shadow.innerHTML=`
                 avatar.classList.add(now?.dataset?.heightSet);
             })
             .chooseFirst();
+        //拖拽一律拦掉浏览器默认行为（默认是把图片当页面打开 / 塞进 <img>）。
+        //⚠️ 不能再用 `done` 早退：**已经有立绘时才是「换一张」最常用的场景**——原来一句
+        //`if (done) return` 让 dragover 不 preventDefault，浏览器根本不会派发 drop（用户实测「拖了没反应」）。
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
             avatar.addEventListener(event, e => {
-                if (avatar.classList.contains("done")) return;
                 e.preventDefault();
                 e.stopPropagation();
             }, false);
@@ -873,14 +899,25 @@ shadow.innerHTML=`
             const fileList = await this.fileQuery("submitFile", { format: "image/*" });
             if (fileList !== null) loadFile(fileList[0]);
         });
-        avatar.addEventListener("drop", e => {
-            if (e?.dataTransfer?.files?.item(0)?.type?.startsWith?.("image")) {
-                loadFile(e.dataTransfer.files[0]);
+        //拖入的可能是：本地图片文件 / 搜索到的原画卡（skin-info-card）/ 网页上的一张图（图片地址）
+        avatar.addEventListener("drop", async e => {
+            const file = Array.from(e?.dataTransfer?.files || []).find(item => item.type?.startsWith?.("image"));
+            if (file) {
+                loadFile(file);
+                return;
             }
+            const dropped = await this.loadDroppedAvatar(e.dataTransfer);
+            if (!dropped) return;
+            imgType = dropped.type;
+            //落盘即存草稿：记录与生成的武将包文件当轮就更新（别只靠 400ms 防抖）
+            this.saveDraft();
         });
-        resetButton.addEventListener("pointerup", () => {
-            avatar.classList.remove("done");
+        resetButton.addEventListener("pointerup", async () => {
+            //重置要把编辑态一并清掉：裁到一半点重置会残留 cutting/editing，界面看着像卡住
+            avatar.classList.remove("done", "editing", "cutting", "loading");
+            img.onerror = null;
             img.removeAttribute("src");
+            img.classList.remove("full-width", "full-height");
             img.style.cssText = "";
             //重置是显式清空：连记录里的引用一起清（否则下次保存又会把旧引用写回去）
             const previous = this.avatarReference || this.storedAvatarReference || this.getData("avatar");
@@ -888,8 +925,10 @@ shadow.innerHTML=`
             this.storedAvatarReference = "";
             this.avatarCleared = true;
             this.changeData("avatar", "");
-            //同生共死：重置立绘 = 删掉已落盘的那张
-            if (previous) this.removeAssetFile(previous);
+            //同生共死：重置立绘 = 删掉已落盘的那张；**等删完再存草稿**，免得新图刚写盘就被这次删除带走
+            if (previous) await this.removeAssetFile(previous);
+            //立刻落一次草稿：重置后记录 / 生成的武将包文件当轮更新（原来只靠防抖，看着像没生效）
+            this.saveDraft();
         });
         cutButton.addEventListener("pointerup", () => {
             avatar.classList.add("cutting", "editing");
@@ -2307,6 +2346,146 @@ shadow.innerHTML=`
             console.warn("裁剪结果落盘失败", relative, err);
             return "";
         }
+    }
+    /**
+     * 处理「非文件」的原画拖入：搜索到的原画卡（`skin-info-card`）、武将卡、网页上的一张图。
+     * 拿到图片地址后走**与本地选图同一条落盘链路**（`saveLocalAsset`）——目录配置、
+     * `<武将id>.<ext>` 命名、与草稿同生共死全都一致。
+     * @param {DataTransfer} [dataTransfer]
+     * @returns {Promise<{reference: string, type: string}|null>}
+     */
+    async loadDroppedAvatar(dataTransfer) {
+        const url = this.readDroppedImageUrl(dataTransfer);
+        if (!url) return null;
+        if (!this.workspace) {
+            alert("请先在设置页选择工作区。");
+            return null;
+        }
+        try {
+            const blob = await this.fetchImageBlob(url);
+            if (!blob || !blob.size) throw new Error("读到的图片是空的");
+            const type = blob.type || this.imageTypeFromUrl(url) || "image/png";
+            const file = new File([blob], this.imageFileName(url, type), { type });
+            const reference = await this.saveLocalAsset(file, "extension-character-image");
+            if (!reference) return null;
+            this.avatarReference = reference;
+            this.storedAvatarReference = reference;
+            this.avatarCleared = false;
+            if (!this.showAvatar(reference)) return null;
+            return { reference, type };
+        } catch (err) {
+            console.warn("原画区：拖入的图片落盘失败", url, err);
+            alert(`这张图没能存进扩展：${url}\n${(err && err.message) || err}\n（也可以先把图片保存到本地，再拖进原画区）`);
+            return null;
+        }
+    }
+    /**
+     * 从 `drop` 载荷里读出**图片地址**：拖卡片（沿用技能区/珠联璧合区那套 `chosen-card` 约定）、
+     * 拖 `<img>`、拖网页上的图都会进这里。取不到返回 ""。
+     * @param {DataTransfer} [dataTransfer]
+     * @returns {string}
+     */
+    readDroppedImageUrl(dataTransfer) {
+        if (!dataTransfer) return "";
+        //① 编辑器内部的卡片拖拽：卡片把自己 id 设成 chosen-card 并写进 text（同一约定，见 component-infoCard.mjs）
+        let cardId = "";
+        try { cardId = dataTransfer.getData("text"); } catch (err) { cardId = ""; }
+        if (cardId) {
+            const url = this.readCardImageUrl(document.getElementById(cardId));
+            if (url) return url;
+        }
+        //② 浏览器默认的图片拖拽：text/uri-list、text/html（内容是 `<img src=…>`）、text/plain
+        for (const type of ["text/uri-list", "text/html", "text/plain"]) {
+            let raw = "";
+            try { raw = dataTransfer.getData(type); } catch (err) { raw = ""; }
+            const url = this.pickImageUrl(raw);
+            if (url) return url;
+        }
+        return "";
+    }
+    /**
+     * 卡片（搜索结果的武将卡 / 原画卡）里那张图的地址：优先 `<img src>`，武将卡是 `setBackground` 写的背景图。
+     * @param {HTMLElement} [card]
+     * @returns {string}
+     */
+    readCardImageUrl(card) {
+        if (!card || !card.shadowRoot) return "";
+        const main = card.shadowRoot.querySelector(".main-content") || card.shadowRoot;
+        const src = main.querySelector?.("img")?.getAttribute?.("src") || "";
+        if (src) return src;
+        const background = main.style?.backgroundImage || (main === card.shadowRoot ? "" : getComputedStyle(main).backgroundImage);
+        const matched = /url\(["']?(.+?)["']?\)/i.exec(background || "");
+        if (matched) return matched[1];
+        const skinInfo = card.skinInfo;
+        if (skinInfo && typeof skinInfo === "object") return String(skinInfo.link || skinInfo.src || skinInfo.image || "");
+        return "";
+    }
+    /**
+     * 从任意拖拽文本里挑出图片地址（`<img src=…>` / uri-list 的一行 / 纯地址）。
+     * ⚠️ 不能只靠后缀判断：wiki 的图片地址常常没有 `.png/.jpg`（认死后缀就会「拖了没反应」）。
+     * @param {string} [raw]
+     * @returns {string}
+     */
+    pickImageUrl(raw) {
+        const text = String(raw || "").trim();
+        if (!text) return "";
+        const matched = /<img[^>]+src\s*=\s*["']?([^"'\s>]+)/i.exec(text);
+        const candidate = (matched ? matched[1] : text.split(/[\r\n\s]+/)[0] || "").trim();
+        return this.isImageUrl(candidate) ? candidate : "";
+    }
+    /**
+     * @param {string} value
+     * @returns {boolean}
+     */
+    isImageUrl(value) {
+        const text = String(value || "").trim();
+        if (!text || /^(javascript|about|mailto):/i.test(text)) return false;
+        if (/^(data:image\/|blob:)/i.test(text)) return true;
+        //http(s)、页面根路径（`/extension/…`、`/image/…`）、相对路径，以及任何带图片后缀的地址
+        if (/^(https?:|\/|\.{1,2}\/)/i.test(text)) return true;
+        return /\.(png|jpe?g|gif|webp|bmp|avif|jfif)(\?|#|$)/i.test(text);
+    }
+    /**
+     * 图片地址 → Blob。桌面端窗口是 `webSecurity:false`（app/main.js:43849），跨域的 wiki 图也能直接 fetch。
+     * @param {string} url
+     * @returns {Promise<Blob>}
+     */
+    async fetchImageBlob(url) {
+        const response = await fetch(url, { mode: "cors", credentials: "omit" });
+        if (!response.ok && response.status !== 0) throw new Error(`HTTP ${response.status}`);
+        return response.blob();
+    }
+    /**
+     * 给个文件名——只为拿扩展名（`saveLocalAsset` 用 `file.name` 的后缀决定存成什么）
+     * @param {string} url
+     * @param {string} type
+     * @returns {string}
+     */
+    imageFileName(url, type) {
+        const matched = /([^/?#]+)\.(png|jpe?g|gif|webp|bmp|avif|jfif)/i.exec(String(url || ""));
+        //只留字母/数字/中文与 . _ -（\p{L} 含 CJK；\w 只认 ASCII，会把中文名洗成下划线）
+        const base = matched ? matched[1].replace(/[^\p{L}\p{N}._-]/gu, "_") : "dropped-avatar";
+        return `${base}.${this.imageExtension(type || this.imageTypeFromUrl(url))}`;
+    }
+    /**
+     * MIME → 扩展名（认不出按 png；`saveLocalAsset` 只拿 `file.name` 的后缀当扩展名）
+     * @param {string} type
+     * @returns {string}
+     */
+    imageExtension(type) {
+        const clean = String(type || "").split("/")[1]?.toLowerCase()?.replace("jpeg", "jpg") || "";
+        return ["png", "jpg", "gif", "webp", "bmp", "avif", "jfif"].includes(clean) ? clean : "png";
+    }
+    /**
+     * 地址后缀 → MIME（服务器不给 content-type 时兜底；认不出返回 ""）
+     * @param {string} url
+     * @returns {string}
+     */
+    imageTypeFromUrl(url) {
+        const matched = /\.(png|jpe?g|gif|webp|bmp|avif|jfif)(?:\?|#|$)/i.exec(String(url || ""));
+        if (!matched) return "";
+        const ext = matched[1].toLowerCase();
+        return `image/${ext === "jpg" || ext === "jfif" ? "jpeg" : ext}`;
     }
     /**
      * 同步体力/护甲旁边的血格、甲格（`.hp`/`.hujia` 的 `lost` 类）。
