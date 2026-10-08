@@ -101,9 +101,13 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
     提示行会显示该目录的绝对路径；**建目录失败会在此处显式报错**（不再静默）。
   - **打开草稿的回填**：`applyData()` 除了写 dataset/CSS 变量，还会同步 contenteditable 的**文字**（姓名/拼音/id）、
     选项的选中态（性别/势力/宗族，**走 `UniqueChoiceManager.choose()`**，不能只写 `chosen` 类）、
-    体力/上限/护甲数字框、以及顶部「所属分包」那几个 CSS 变量——
+    体力/上限/护甲数字框**以及旁边的血格/甲格**（`.hp`/`.hujia` 的 `lost` 类与容器的 healthy/damaged/dangerous）、
+    立绘（`getAllData()` 会把 `avatar` 挪进 `trashBin` 并从草稿删掉，所以要从 `trashBin` 里恢复），
+    以及顶部「所属分包」那几个 CSS 变量——
     否则数据其实载入了，界面看着却是空的。
   - **自建势力图标落盘**：自建势力对话框画布生成的 data URL 会写进 `extension/<工作区>/image/group/<势力id>.png`，
+    选项 URL 要写全 `/extension/<工作区>/image/group/<势力id>.png`（内置图标是 `/image/card/group_wei.png` 这一级，漏掉 `extension/` 就加载不到）；
+    `<img>` 用的地址是 `lib.assetURL + "extension/<相对路径>"`（assetURL 可能是空串，也可能是 `file:///…`）。
     路径记在 `x19D6_editor.groupImages.<势力id>`；选项与重启后的回填都用它（宗族图标仍按游戏 `image/clan/<名>.png` 找）。
   - **工作区失效自动清空**：`extension/<工作区>` 目录不存在、或该名字不在 `lib.config.extensions` 里时，
     `settings.workspace` 会被清空（标题回到「未选择工作区」、草稿列表不再按它过滤）。

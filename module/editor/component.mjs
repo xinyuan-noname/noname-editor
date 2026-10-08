@@ -1164,7 +1164,7 @@ shadow.innerHTML=`
             if (groupDataArea.querySelector(`[data-group-option="${CSS.escape(groupId)}"]`)) return;
             const icon = icons[groupId];
             groupDiy.parentElement.insertBefore(
-                this.createGroupOption({ id: groupId, name: groupName, imageData: icon ? `/${icon}` : "" }),
+                this.createGroupOption({ id: groupId, name: groupName, imageData: icon ? `/extension/${icon}` : "" }),
                 groupDiy
             );
             added++;
@@ -1303,7 +1303,7 @@ shadow.innerHTML=`
             if (result) {
                 //图标先落盘，再拿落盘路径建选项（否则刷新后图标就没了）
                 const iconPath = await this.saveGroupIcon(result.id, result.imageData);
-                const newGroupOption = this.createGroupOption({ ...result, imageData: iconPath ? `/${iconPath}` : "" });
+                const newGroupOption = this.createGroupOption({ ...result, imageData: iconPath ? `/extension/${iconPath}` : "" });
                 groupDiy.parentElement.insertBefore(newGroupOption, groupDiy);
                 singleManager.append(newGroupOption);
                 doubleManager.append(newGroupOption);
@@ -2025,7 +2025,9 @@ shadow.innerHTML=`
         if (data.extension) this.style.setProperty("--data-extension", `"${data.extension}"`);
         if (data.packageId) this.style.setProperty("--data-package-id", `"${lib.translate[data.packageId + "_character_config"] || data.packageId}"`);
         if (data.characterSortName) this.style.setProperty("--data-character-sort", `"${data.characterSortName}"`);
-        //体力 / 体力上限 / 护甲的数字框
+        //立绘：getAllData 会把 avatar 挪进 trashBin（ext: 路径），草稿里没有 avatar 字段，所以从这里恢复
+        this.syncAvatarFromTrashBin(data.trashBin);
+        //体力 / 体力上限 / 护甲的数字框与旁边的血/甲格
         this.syncHpInputs();
         return this;
     }
@@ -2092,6 +2094,52 @@ shadow.innerHTML=`
                 const text = String(value);
                 if (input.textContent !== text) input.textContent = text;
             });
+        this.syncHpPips();
+    }
+    /**
+     * 从 `trashBin` 里的图片路径恢复立绘。
+     * `getAllData()` 会把 `avatar` 推进 `trashBin` 并从草稿里删掉，所以重新打开时没人把它放回 `<img>`。
+     * @param {string[]} trashBin
+     * @returns {boolean}
+     */
+    syncAvatarFromTrashBin(trashBin) {
+        if (!Array.isArray(trashBin)) return false;
+        const portrait = trashBin.find(path => typeof path === "string" && /(^|\/)image\//.test(path));
+        if (!portrait) return false;
+        const relative = portrait.startsWith("ext:") ? portrait.slice(4) : portrait.replace(/^.*?extension\//, "");
+        if (!relative) return false;
+        //lib.assetURL 可能是 file:///… 也可能是空串：拼出来才是 <img> 能加载的地址
+        const url = /^file:|^https?:/.test(portrait) ? portrait : `${lib.assetURL || ""}extension/${relative}`;
+        this.reloadAvatar(url);
+        return true;
+    }
+    /**
+     * 同步体力/护甲旁边的血格、甲格（`.hp`/`.hujia` 的 `lost` 类）。
+     * 光改数字框不够——那些格子是独立的 class 状态（用户反馈「数值和旁边的图片不同步」）。
+     */
+    syncHpPips() {
+        const hpArea = this.getDataAreaDom("hp");
+        if (!hpArea) return;
+        const hp = this.getData("hp");
+        const maxHp = this.getData("maxHp");
+        const hujia = this.getData("hujia");
+        const hpContainer = hpArea.querySelector(".hpContainer");
+        if (hpContainer) {
+            Array.from(hpContainer.querySelectorAll(".hp")).forEach((pip, index) => {
+                pip.classList.toggle("lost", index >= hp);
+            });
+            //容器上的血量档位类（与点 +/- 时用的是同一套）
+            hpContainer.classList.remove("healthy", "damaged", "dangerous");
+            const ratio = maxHp ? hp / maxHp : 0;
+            hpContainer.classList.add(ratio <= 0.25 ? "dangerous" : ratio <= 0.5 ? "damaged" : "healthy");
+        }
+        const hujiaContainer = hpArea.querySelector(".hujiaContainer");
+        if (hujiaContainer) {
+            Array.from(hujiaContainer.querySelectorAll(".hujia")).forEach((pip, index) => {
+                if (pip.classList.contains("reset")) return;
+                pip.classList.toggle("lost", index >= hujia);
+            });
+        }
     }
     /**
      * 按 id 载入草稿

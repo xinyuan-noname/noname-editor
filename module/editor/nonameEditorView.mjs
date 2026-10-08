@@ -736,7 +736,12 @@ mainPage.innerHTML=`
                     if (Array.isArray(value) && !value.length) return false;
                     return true;
                 })
-                .map(([key, value]) => `        ${key}: ${JSON.stringify(value)}`);
+                .map(([key, value]) => {
+                    if (key === "trashBin" && Array.isArray(value)) {
+                        value = value.map(item => this.normalizeAssetPath(item)).filter(Boolean);
+                    }
+                    return `        ${key}: ${JSON.stringify(value)}`;
+                });
             characterLines.push(`    ${JSON.stringify(record.id)}: {\n${fields.join(",\n")}\n    }`);
             if (record.name) translateLines.push(`    ${JSON.stringify(record.id)}: ${JSON.stringify(record.name)}`);
             if (record.intro) introLines.push(`    ${JSON.stringify(record.id)}: ${JSON.stringify(record.intro)}`);
@@ -908,6 +913,21 @@ mainPage.innerHTML=`
             this.workspaceSyncTimer = null;
             this.syncWorkspaceMetaToFile();
         }, 1500);
+    }
+
+    /**
+     * 把素材路径归一成 `ext:<工作区相对路径>`（草稿里可能是 file:///… 或 `extension/…` 形式，
+     * 直接写进生成的武将包文件会让路径带上机器相关前缀）
+     * @param {string} path
+     * @returns {string}
+     */
+    normalizeAssetPath(path) {
+        const text = String(path || "");
+        if (!text) return "";
+        if (text.startsWith("ext:")) return text;
+        const matched = /(?:^|\/)extension\/(.+)$/.exec(text);
+        if (matched) return `ext:${matched[1]}`;
+        return text;
     }
     /**
      * 工作区的「武将包 / 分包」登记表：`x19D6_editor.workspaceMeta.<工作区>`
@@ -1087,7 +1107,7 @@ mainPage.innerHTML=`
      */
     async removeDraftAssets(record) {
         if (!record) return;
-        const references = [record.avatar, ...(Array.isArray(record.dieAudios) ? record.dieAudios : [])].filter(Boolean);
+        const references = [record.avatar, ...(Array.isArray(record.trashBin) ? record.trashBin : []), ...(Array.isArray(record.dieAudios) ? record.dieAudios : [])].filter(Boolean);
         for (const reference of references) {
             const text = String(reference);
             const relative = text.startsWith("ext:") ? text.slice(4) : text.replace(/^\/?extension\//, "");
