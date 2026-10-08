@@ -826,16 +826,6 @@ shadow.innerHTML=`
         applyButton.textContent = draft.__applied ? "重新应用" : "一键应用";
         applyButton.title = "编译技能 → 局内生效 → 新建武将草稿并填好属性";
         applyButton.addEventListener("pointerup", () => this.applyDraft(index));
-        const artButton = document.createElement("button");
-        artButton.type = "button";
-        artButton.className = "ghost";
-        artButton.textContent = "去画原画";
-        artButton.addEventListener("pointerup", () => {
-            const select = this.#q(".art-subject");
-            select.value = `draft:${index}`;
-            this.#prefillArtPrompt();
-            this.#q('[data-block="art"]').scrollIntoView({ block: "start", behavior: "smooth" });
-        });
         const copyButton = document.createElement("button");
         copyButton.type = "button";
         copyButton.className = "ghost";
@@ -844,7 +834,7 @@ shadow.innerHTML=`
             JSON.stringify(draft, (key, value) => (key.startsWith("__") ? undefined : value), 2),
             copyButton
         ));
-        actions.append(applyButton, artButton, copyButton);
+        actions.append(applyButton, copyButton);
         card.appendChild(actions);
         return card;
     }
