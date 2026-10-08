@@ -437,6 +437,12 @@ export class MultipleChoiceManager {
      * @returns {this}
      */
     select(target) {
+        //找不到目标就直接返回：`selectByFind()` 命中不到时会把 undefined 递进来，
+        //原来会把它塞进 #chosenList 并惊动回调 —— 调用方的 `target.dataset.…` 当场 TypeError
+        //（用户反馈：把「激将」拖进技能列表弹 Cannot read properties of undefined）。
+        if (!target) return this;
+        //已选中的节点再 select 一次：不重复入列、也不重复触发回调
+        if (this.#chosenList.includes(target)) return this;
         this.#chosenList.push(target);
         this.collect(target, this.#chosenList, this.collectFilter);
         this.callback?.("add", target, this.#chosenList);

@@ -281,7 +281,7 @@ shadow.innerHTML=`
                 </span>
                 <section data-by="more" class="hidden flex-column">
                     <ul>
-                        <li class="checkbox" data-more-option="isZhuGong">
+                        <li class="checkbox" data-more-option="isZhugong">
                             <p>常备主公</p>
                             <span></span>
                         </li>
@@ -1812,8 +1812,11 @@ shadow.innerHTML=`
         const manager = this.createMultipleChoiceManager("more", ...options)
             .listenAllNodes("pointerup")
             .setCallback((type, target, funMap) => {
+                if (!target) return;
                 funMap.forClass("chosen");
-                this.changeMoreSetting(target.dataset.moreOption)
+                //按回调类型显式置位/清除：不传第二个参数会走 changeMoreSetting 的 undefined 分支**取反**，
+                //同一个节点被 select 两次（比如拖两次同一个技能）反而会把刚勾上的标记又取消掉
+                this.changeMoreSetting(target.dataset.moreOption, type !== "delete");
             });
     }
     introStandardize(html) {
@@ -2108,6 +2111,8 @@ shadow.innerHTML=`
         this.restoreChoice("sex", this.sexChoiceManager, data.sex);
         this.restoreChoice("group", this.groupChoiceManager, data.group);
         this.restoreChoice("clans", this.clanChoiceManager, data.clans);
+        //「更多设置」的勾选态（主公技/隐藏技/BOSS…）：见 restoreMoreSettings 的说明
+        this.restoreMoreSettings(data);
         if (data.groupName) this.setGroup({ groupId: data.group, groupName: data.groupName });
         //顶部「所属分包」那行用的是 CSS 变量，载入时同样要设
         if (data.extension) this.style.setProperty("--data-extension", `"${data.extension}"`);
@@ -2169,6 +2174,26 @@ shadow.innerHTML=`
         if (manager && manager.chosen !== node) manager.choose(node);
         else if (!manager) node.classList.add("chosen");
         return true;
+    }
+
+    /**
+     * 回填「更多设置」的勾选态（主公技 / 隐藏技 / BOSS / 炉石系列标记…）。
+     * ⚠️ 不能只靠 `changeData`：它写属性的目标是 `[data-<kebab>]` 节点，而这些标记的宿主属性
+     * （`data-is-zhugong` / `data-has-hidden-skill` …）是**点击时**由 `changeMoreSetting` 现挂上去的，
+     * 新实例里根本不存在 → `applyData` 的 `changeData("isZhugong", true)` 是空操作，
+     * 于是重新打开草稿时这些标记会**静默丢失**（界面不勾选、下次保存就没了）。
+     * 走选择管理器：勾选态与属性一次同步（选中会触发回调 → `changeMoreSetting` 落属性）。
+     * @param {object} data 草稿数据
+     */
+    restoreMoreSettings(data) {
+        const manager = this.getMultipleChocieManager("more");
+        const areaDom = this.getDataAreaDom("more");
+        if (!manager || !areaDom) return;
+        areaDom.querySelectorAll("li[data-more-option]").forEach(node => {
+            const wanted = Boolean(data[node.dataset.moreOption]);
+            if (wanted) manager.select(node);
+            else manager.unselect(node);
+        });
     }
     /**
      * 回填体力 / 体力上限 / 护甲的数字框
