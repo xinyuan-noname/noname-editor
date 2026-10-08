@@ -17,8 +17,10 @@
  * 两个关键取舍：
  * 1. **图片一律先读成二进制 → blob URL**：立绘/图标若是 file:// 地址，画进 canvas 会污染画布，
  *    之后 `toDataURL`/`toBlob` 直接抛 SecurityError（导出就废了）。
- * 2. 卡面全部**程序化绘制**（不依赖任何卡框素材图），势力图标用引擎自带的 `image/card/group_*.png`，
- *    找不到就退回篆书势力大字。
+ * 2. 卡面**程序化绘制**（不依赖任何卡框素材图），但**图标一律复用编辑器/引擎已有的图**：
+ *    势力图标 `image/card/group_*.png`、体力珠 `theme/style/hp/image/glass1-4.png`、
+ *    护甲盾 `image/card/shield.png`、主公 `module/editor/image/icon/zhugong.png`
+ *    —— 与武将编辑器「体力&护甲」区、侧栏导航是同一批素材（统一风格）；任一素材缺失就退回自绘/篆书大字。
  */
 
 /** 卡面逻辑尺寸：63×88mm 的实体武将牌比例（88 / 63 ≈ 1.397） */
@@ -174,8 +176,147 @@ function drawVerticalText(ctx, text, x, top, { font, lineHeight, fill, stroke, s
     return y;
 }
 
-/** 体力格 / 护甲格 / 主公印（体力 > 9 时用引擎那种「X + 数字」写法） */
+/** 体力 / 护甲 / 主公 的素材图——**与武将编辑器「体力&护甲」区完全同一批图**（统一风格） */
+const PIP_ASSETS = {
+    healthy: "theme/style/hp/image/glass1.png",
+    damaged: "theme/style/hp/image/glass2.png",
+    dangerous: "theme/style/hp/image/glass3.png",
+    empty: "theme/style/hp/image/glass4.png",
+    shield: "image/card/shield.png",
+};
+
+/**
+ * 本模块所在扩展在 app 根下的相对路径（形如 `extension/魂氏编辑器`）——取扩展内素材（主公图标）要用
+ * @returns {string} 取不到时返回 ""
+ */
+function extensionRoot() {
+    const matched = /(extension\/[^/]+)\//.exec(String(import.meta.url || "").replace(/\\/g, "/"));
+    return matched ? matched[1] : "";
+}
+
+/**
+ * 体力 / 护甲 / 主公印：**优先用编辑器自己的素材图**（体力珠 glass1-4、护甲盾 shield.png、主公 zhugong.png），
+ * 状态规则对齐 `style/character-editor.css`：血量比 >0.5 用 glass1、≤0.5 用 glass2、≤0.25 用 glass3，
+ * 空位是 glass4 + `grayscale(100%)` + `opacity:.5`（canvas 里用 `ctx.filter` 复刻）；
+ * 一张素材都拿不到时整行走自绘兜底（见 `drawDrawnHpPips`）。
+ */
 function drawHpPips(ctx, data, W) {
+    const { hp, maxHp, hujia = 0, isZhugong, pips = {} } = data;
+    if (!pips.healthy && !pips.damaged && !pips.dangerous && !pips.empty && !pips.shield && !pips.zhugong) {
+        drawDrawnHpPips(ctx, data, W);
+        return;
+    }
+    const beadSize = 24;
+    const shieldSize = 26;
+    const gap = 1;
+    const top = 14;
+    const rowHeight = Math.max(beadSize, shieldSize);
+    const beadTop = top + (rowHeight - beadSize) / 2;
+    const centerY = top + rowHeight / 2;
+    let right = W - 18;
+    const armor = Math.max(0, Math.min(8, Number(hujia) || 0));
+    const max = Math.max(0, Number(maxHp) || 0);
+    const now = Math.max(0, Number(hp) || 0);
+    const ratio = max > 0 ? now / max : 1;
+    const filledBead = (ratio <= 0.25 && (pips.dangerous || pips.healthy))
+        || (ratio <= 0.5 && (pips.damaged || pips.healthy))
+        || pips.healthy;
+
+    /** 画一张素材图；dim = 空位（灰度 + 半透明，对齐 CSS 的 `.lost`） */
+    const drawAsset = (img, x, y, width, height, dim = false) => {
+        ctx.save();
+        if (dim) {
+            ctx.filter = "grayscale(100%)";
+            ctx.globalAlpha = 0.5;
+        }
+        ctx.drawImage(img, x, y, width, height);
+        ctx.restore();
+    };
+    /** 素材缺张时的自绘单格 */
+    const drawnPip = (x, filled, color = "#c0392b") => {
+        roundRectPath(ctx, x, beadTop, beadSize, beadSize, 4);
+        ctx.fillStyle = filled ? color : "rgba(20,18,16,.78)";
+        ctx.fill();
+        ctx.strokeStyle = filled ? "rgba(255,235,190,.85)" : "rgba(255,235,190,.5)";
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+    };
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    if (isZhugong) {
+        if (pips.zhugong) {
+            drawAsset(pips.zhugong, right - beadSize, top, beadSize, rowHeight);
+        } else {
+            const x = right - beadSize;
+            roundRectPath(ctx, x, top, beadSize, rowHeight, 4);
+            const seal = ctx.createLinearGradient(x, top, x + beadSize, top + rowHeight);
+            seal.addColorStop(0, "#f6dfa0");
+            seal.addColorStop(1, "#b8860b");
+            ctx.fillStyle = seal;
+            ctx.fill();
+            ctx.strokeStyle = "rgba(0,0,0,.65)";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.fillStyle = "#3a2606";
+            ctx.font = `bold 14px ${FONT_TEXT}`;
+            ctx.fillText("主", x + beadSize / 2, centerY + 0.5);
+        }
+        right -= beadSize + gap;
+    }
+
+    // 护甲盾：画在体力珠左边（它是「额外的血」）
+    for (let index = 0; index < armor; index++) {
+        const x = right - shieldSize;
+        if (pips.shield) drawAsset(pips.shield, x, top, shieldSize, shieldSize);
+        else {
+            roundRectPath(ctx, x, beadTop, beadSize, beadSize, 4);
+            ctx.fillStyle = "#2f7f9e";
+            ctx.fill();
+            ctx.strokeStyle = "rgba(190,240,255,.85)";
+            ctx.lineWidth = 1.4;
+            ctx.stroke();
+        }
+        right -= shieldSize + gap;
+    }
+
+    if (max > 9) {
+        //体力上限 >9：一颗「X」珠 + 数字（引擎同款写法）
+        const x = right - beadSize;
+        if (filledBead) drawAsset(filledBead, x, beadTop, beadSize, beadSize);
+        else drawnPip(x, now > 9);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "rgba(0,0,0,.85)";
+        ctx.font = `bold 14px ${FONT_TEXT}`;
+        ctx.strokeText("X", x + beadSize / 2, centerY + 0.5);
+        ctx.fillStyle = "#fff";
+        ctx.fillText("X", x + beadSize / 2, centerY + 0.5);
+        ctx.fillStyle = "#ffe9b0";
+        ctx.font = `bold 20px ${FONT_TEXT}`;
+        ctx.textAlign = "right";
+        ctx.fillText(String(Math.min(now, 99)), x - gap - 1, centerY + 1);
+        ctx.restore();
+        return;
+    }
+    for (let index = 0; index < max; index++) {
+        const x = right - (max - index) * beadSize - (max - 1 - index) * gap;
+        const filled = index < now;
+        if (filled) {
+            if (filledBead) drawAsset(filledBead, x, beadTop, beadSize, beadSize);
+            else drawnPip(x, true);
+        } else if (pips.empty) {
+            drawAsset(pips.empty, x, beadTop, beadSize, beadSize, true);
+        } else {
+            drawnPip(x, false);
+        }
+    }
+    ctx.restore();
+}
+
+/** 体力格 / 护甲格 / 主公印（**没有素材图时的自绘兜底**；体力 > 9 时用引擎那种「X + 数字」写法） */
+function drawDrawnHpPips(ctx, data, W) {
     const { hp, maxHp, hujia = 0, isZhugong } = data;
     const size = 19;
     const gap = 3;
@@ -435,7 +576,8 @@ function drawNameColumn(ctx, data) {
  *   id?:string, name?:string, title?:string, group?:string, groupName?:string,
  *   hp?:number, maxHp?:number, hujia?:number, isZhugong?:boolean,
  *   skills?:{name:string,description:string}[],
- *   art?:HTMLImageElement|null, groupIcon?:HTMLImageElement|null
+ *   art?:HTMLImageElement|null, groupIcon?:HTMLImageElement|null,
+ *   pips?:Record<string,HTMLImageElement>
  * }} data
  * @param {{scale?:number}} [config]
  * @returns {HTMLCanvasElement}
@@ -612,17 +754,47 @@ async function collectCardData(host, objectURLs) {
         name: host.textQuery("skillTranslation", { text: skillId, attr: "name" }) || skillId,
         description: host.textQuery("skillTranslation", { text: skillId, attr: "info" }) || "",
     }));
-    const [art, groupIcon] = await Promise.all([
+    const [art, groupIcon, pips] = await Promise.all([
         loadArtImage(host, objectURLs),
         loadGroupIcon(host, group, objectURLs),
+        loadPipAssets(host, objectURLs),
     ]);
     return {
         id, name, title, group, groupName,
         hp, maxHp,
         hujia: Number(host.getData("hujia")) || 0,
         isZhugong: Boolean(host.getData("isZhugong")),
-        skills, art, groupIcon,
+        skills, art, groupIcon, pips,
     };
+}
+
+/**
+ * 体力/护甲/主公的素材图（`PIP_ASSETS` + 扩展里的主公图标）。
+ * 缺哪张就少哪张：绘制端逐格回退到自绘，不会因为少一张图就整行消失。
+ * @returns {Promise<Record<string, HTMLImageElement>>} 键同 PIP_ASSETS（+ zhugong）
+ */
+async function loadPipAssets(host, objectURLs) {
+    const result = {};
+    await Promise.all(Object.entries(PIP_ASSETS).map(async ([key, path]) => {
+        const url = await readAssetObjectURL(host, path, objectURLs);
+        if (!url) return;
+        try {
+            result[key] = await loadCardImage(url);
+        } catch (err) {
+            console.warn("武将卡：素材图解码失败", path, err);
+        }
+    }));
+    const root = extensionRoot();
+    if (!root) return result;
+    const zhugongPath = `${root}/module/editor/image/icon/zhugong.png`;
+    const zhugongUrl = await readAssetObjectURL(host, zhugongPath, objectURLs);
+    if (!zhugongUrl) return result;
+    try {
+        result.zhugong = await loadCardImage(zhugongUrl);
+    } catch (err) {
+        console.warn("武将卡：主公图标解码失败", err);
+    }
+    return result;
 }
 
 /**

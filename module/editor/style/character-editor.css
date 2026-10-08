@@ -1155,3 +1155,11 @@ div[contenteditable="true"] {
     background-color: #176fd4;
     color: #fff;
 }
+/* 扳手菜单「一键转化为武将卡」：用编辑器自己的卡牌图标（与侧栏 .xy-ED-nav-card 同一批素材），不用 emoji */
+.menu .gen-card {
+    background-image: url(../image/icon/card.png);
+    background-size: 78% 78%;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: drop-shadow(0 0 3px #176fd4);
+}
