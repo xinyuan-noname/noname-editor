@@ -157,6 +157,7 @@ ui.create.x19D6_book = (father, text) => {
         .father(bookBack)
         .exit()
     father.appendChild(bookBack)
+    ui.x19D6_blockWindowKeyboard(bookBack);
     //添加标题和作者
     let headline = element("h4")
         .addClass("x19D6Headline")
@@ -307,6 +308,27 @@ ui.create.x19D6_book = (father, text) => {
     lib.x19D6_library[text.headline + "-" + text.writer] = bookBack
     return book
 }
+/**
+ * 旧版浮层（编辑器主体 / 对话框 / 说明书）都是直接挂在 ui.window 上的独立全局 DOM，
+ * 里面的按键会一路冒泡到 window，命中引擎的 window.onkeydown（init/index.js:827）。
+ * 那个 handler 干的是全局快捷键（清弹窗、Space 暂停、a 自动、w 无懈、Ctrl+S/J…），
+ * 而且**无条件调用 e.key.toLowerCase()**；而 Chromium/Electron 在原生下拉框、输入法、
+ * 自动填充等场景会派发**没有 key 的 keydown**，于是直接抛
+ *   TypeError: Cannot read properties of undefined (reading 'toLowerCase')
+ * （实测：旧版编辑器点「选择模式」里的下拉框即报错）
+ * 引擎自己的代码编辑器页面就是这么处理的（ui/create/index.js:136），新版编辑器也有同样的
+ * listenStopPropagation（nonameEditorView.mjs:1432），旧版浮层此前漏了这一层。
+ * 用冒泡阶段（默认）：节点自身的 keydown 监听（Tab 缩进、回车不换行等）先执行，不受影响。
+ * @param {HTMLElement} root
+ */
+ui.x19D6_blockWindowKeyboard = function (root) {
+    if (!root || root.x19D6_keyboardBlocked) return root;
+    root.x19D6_keyboardBlocked = true;
+    ["keydown", "keyup"].forEach(type => {
+        root.addEventListener(type, e => e.stopPropagation());
+    });
+    return root;
+}
 ui.create.x19D6_curtain = function (father) {
     var back = document.createElement("div")
     if (!father) father = ui.window
@@ -317,6 +339,7 @@ ui.create.x19D6_curtain = function (father) {
     })
     back.classList.add('x19D6Tocenter');
     back.classList.add('x19D6_curtain');
+    ui.x19D6_blockWindowKeyboard(back);
     return back
 }
 ui.create.x19D6_double = function (str) {
@@ -366,6 +389,7 @@ ui.create.x19D6_back = function (str, father) {
         .addClass('xy-ED-skill-interact-back')
         .exit()
     game.x19D6_back = back
+    ui.x19D6_blockWindowKeyboard(back);
     //点击close关闭back
     function closeIt() {
         let modeActionList = {

@@ -46,6 +46,7 @@ function ensureLegacyStyles() {
  * @param {boolean} [readCache] 是否读取上次的编辑缓存
  */
 async function openLegacySkillEditor(readCache = true) {
+    guardWindowKeydown();
     ensureLegacyStyles();
     const { createSkillEditor } = await loadSkillCore();
     return createSkillEditor(readCache);
@@ -232,9 +233,34 @@ async function createSkill(options = {}) {
 }
 
 /**
+ * 引擎 window.onkeydown 的「无 key 事件」防护。
+ * 引擎那个 handler（init/index.js:873 一带）会无条件调用 e.key.toLowerCase()，
+ * 而 Chromium/Electron 在原生下拉框、输入法、自动填充等场景会派发**没有 key 的 keydown**，
+ * 于是整个游戏界面直接抛
+ *   TypeError: Cannot read properties of undefined (reading 'toLowerCase')
+ * （实测：旧版编辑器点「选择模式」里的下拉框即报错）
+ * 这里在引擎原有 handler 外面套一层：没有字符串 key 的事件直接忽略（引擎本来也处理不了），
+ * 其余原样转交。幂等；若 window.onkeydown 之后被重新赋值，下次打开编辑器时会重新包一层。
+ * @returns {boolean} 是否已装好（引擎还没挂 handler 时返回 false）
+ */
+export function guardWindowKeydown() {
+    const handler = window.onkeydown;
+    if (typeof handler !== "function") return false;
+    if (handler.x19D6_keylessGuarded) return true;
+    const guarded = function (e) {
+        if (!e || typeof e.key !== "string") return;
+        return handler.call(this, e);
+    };
+    guarded.x19D6_keylessGuarded = true;
+    window.onkeydown = guarded;
+    return true;
+}
+
+/**
  * 安装对外接口（全部挂在 game 上，统一 x19D6_ 前缀）
  */
 export function installApi() {
+    guardWindowKeydown();
     game.x19D6_editor = getEditor();
     game.x19D6_isReady = () => true;
     game.x19D6_openEditor = openEditor;

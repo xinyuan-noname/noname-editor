@@ -61,6 +61,7 @@ class x19D6_Dialog extends HTMLDivElement {
             .addClass("x19D6ToCenter")
             .father(ui.window)
             .exit();
+        ui.x19D6_blockWindowKeyboard(dialog);
         const back = ui.create.x19D6_curtain()
         const buttonContainer = element("div")
             .style({
