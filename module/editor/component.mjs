@@ -1876,6 +1876,8 @@ shadow.innerHTML=`
         if (!this.draftKey) this.draftKey = this.createDraftKey();
         data.savedAt = Date.now();
         this.configQuery("write", { member: `x19D6_editor.characters.${this.draftKey}`, value: data });
+        //通知外壳：草稿变了 → 把武将/包/分包重新落盘到扩展入口
+        this.triggerEvent("draftSaved", { draftKey: this.draftKey });
         return true;
     }
     flushDraft() {

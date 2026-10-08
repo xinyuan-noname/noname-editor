@@ -367,6 +367,8 @@ mainPage.innerHTML=`
      * 面板之间用标签切换、✕ 关闭。原先的多栏网格会把武将编辑器挤到半宽变形。
      */
     listenMainAreaChange() {
+        //草稿保存（组件派发的 draftSaved）→ 防抖把武将也落盘
+        this.mainArea.addEventListener("draftSaved", () => this.scheduleWorkspaceSync());
         const observer = new MutationObserver(() => this.syncMainTabs());
         observer.observe(this.mainArea, { attributes: false, childList: true, subtree: false });
         //组件内改了 id/名字 → 冒泡 tabTitleChange → 只刷那一个标签
@@ -700,21 +702,24 @@ mainPage.innerHTML=`
         this.characterFilterState = state;
         if (corrected) this.loadSideBarCharacter();
     }
+
     /**
-     * 生成「落盘区块」：把工作区登记表写成对 `lib` 的注册代码（幂等——靠首尾标记整块替换）。
-     * 引擎只加载扩展入口及其 import 图，所以这段代码必须写进 `extension.js` 才会在重启后生效。
+     * 生成「落盘区块」：把工作区登记表（武将包 / 分包）与**所有武将草稿**写成对 `lib` 的注册代码。
+     * 幂等——靠首尾标记整块替换；引擎只加载扩展入口及其 import 图，所以必须写进 `extension.js`。
      * @param {{packages: object, sorts: object}} meta
      * @param {string} [eol]
+     * @param {{codes?: string[], packages?: string[]}} [extra] 武将代码与它们用到的包
      * @returns {string}
      */
-    buildWorkspaceMetaBlock(meta, eol = "\n") {
+    buildWorkspaceMetaBlock(meta, eol = "\n", extra = {}) {
         const packages = (meta && meta.packages) || {};
         const sorts = (meta && meta.sorts) || {};
         const lines = [];
-        lines.push("//#noname-editor-workspace-begin 由《魂氏编辑器》生成：工作区武将包 / 分包登记（整块覆盖，勿手改）");
+        lines.push("//#noname-editor-workspace-begin 由《魂氏编辑器》生成：工作区武将包 / 分包 / 武将（整块覆盖，勿手改）");
         lines.push(";(function (lib) {");
         lines.push("    if (!lib) return;");
         lines.push("    lib.characterPack = lib.characterPack || {};");
+        lines.push("    lib.character = lib.character || {};");
         lines.push("    lib.characterSort = lib.characterSort || {};");
         lines.push("    lib.translate = lib.translate || {};");
         Object.entries(packages).forEach(([packageId, packageName]) => {
@@ -727,6 +732,21 @@ mainPage.innerHTML=`
                 lines.push(`    lib.translate[${JSON.stringify(sortId)}] = ${JSON.stringify(sortName)};`);
             });
         });
+        //草稿用到的包（可能是游戏自带/已扫描到的）也要保证存在，否则下面的 lib.characterPack[包][id] 会炸
+        (extra.packages || []).forEach(packageId => {
+            if (!packageId || packages[packageId]) return;
+            lines.push(`    lib.characterPack[${JSON.stringify(packageId)}] = lib.characterPack[${JSON.stringify(packageId)}] || {};`);
+            lines.push(`    lib.characterSort[${JSON.stringify(packageId)}] = lib.characterSort[${JSON.stringify(packageId)}] || {};`);
+        });
+        //武将本体（worker 生成，与「生成代码」一致）。包一层 try：某个武将写炸了不能连累包/分包注册
+        if ((extra.codes || []).length) {
+            lines.push("    try {");
+            (extra.codes || []).forEach((code, index) => {
+                lines.push("        //—— 武将 " + (index + 1) + " ——");
+                String(code).split(/\r?\n/).forEach(line => lines.push(line ? `        ${line}` : ""));
+            });
+            lines.push("    } catch (err) { console.error(\"魂氏编辑器：武将注册失败\", err); }");
+        }
         lines.push('})(typeof lib !== "undefined" ? lib : (typeof window !== "undefined" ? window.lib : null));');
         lines.push("//#noname-editor-workspace-end");
         return lines.join(eol) + eol;
@@ -749,8 +769,9 @@ mainPage.innerHTML=`
             });
         });
     }
+
     /**
-     * 把武将包 / 分包**落盘**到 `extension/<工作区>/extension.js` 的标记区块（整块替换，幂等）
+     * 把武将包 / 分包 / **武将**落盘到 `extension/<工作区>/extension.js` 的标记区块（整块替换，幂等）
      * @returns {Promise<boolean>}
      */
     async syncWorkspaceMetaToFile() {
@@ -766,8 +787,9 @@ mainPage.innerHTML=`
         }
         if (typeof content !== "string") return false;
         this.applyWorkspaceMetaToLib();
+        const extra = await this.buildCharacterCodes();
         const eol = content.includes("\r\n") ? "\r\n" : "\n";
-        const block = this.buildWorkspaceMetaBlock(this.workspaceMeta, eol).replace(/\r?\n$/, "");
+        const block = this.buildWorkspaceMetaBlock(this.workspaceMeta, eol, extra).replace(/\r?\n$/, "");
         const markBegin = "//#noname-editor-workspace-begin";
         const markEnd = "//#noname-editor-workspace-end";
         let next;
@@ -786,6 +808,45 @@ mainPage.innerHTML=`
             return false;
         }
         return true;
+    }
+    /**
+     * 用 worker 的生成器把每份草稿变成 lib 注册代码（就是「生成代码」里看到的那段）
+     * @returns {Promise<{codes: string[], packages: string[]}>}
+     */
+    async buildCharacterCodes() {
+        const records = this.serveFor.data.getConfig("x19D6_editor.characters") || {};
+        const codes = [];
+        const packages = new Set();
+        for (const [draftKey, record] of Object.entries(records)) {
+            if (!record || !record.id) continue;   //没武将 id 的草稿没法注册
+            if (record.packageId) packages.add(record.packageId);
+            try {
+                const code = await this.serveFor.data.astRequest("genCharacterCode", [record, "object"]);
+                if (code) codes.push(String(code).trim());
+                if (record.characterSort) {
+                    const sortCode = await this.serveFor.data.astRequest("genCharacterSortCode", [{
+                        id: record.id,
+                        characterSort: record.characterSort,
+                        characterSortName: record.characterSortName,
+                        packageId: record.packageId
+                    }, true]);
+                    if (sortCode) codes.push(String(sortCode).trim());
+                }
+            } catch (err) {
+                console.warn("生成武将代码失败", draftKey, err);
+            }
+        }
+        return { codes, packages: Array.from(packages) };
+    }
+    /**
+     * 草稿变动后把「武将」也落盘。防抖 1.5s：编辑时 400ms 一次的自动保存不该每次都重写扩展入口。
+     */
+    scheduleWorkspaceSync() {
+        if (this.workspaceSyncTimer) clearTimeout(this.workspaceSyncTimer);
+        this.workspaceSyncTimer = setTimeout(() => {
+            this.workspaceSyncTimer = null;
+            this.syncWorkspaceMetaToFile();
+        }, 1500);
     }
     /**
      * 工作区的「武将包 / 分包」登记表：`x19D6_editor.workspaceMeta.<工作区>`
@@ -1020,6 +1081,8 @@ mainPage.innerHTML=`
             await this.removeDraftAssets(records[draftKey]);
             delete records[draftKey];
             this.serveFor.data.writeConfig("x19D6_editor.characters", records);
+            //武将删除 → 重新落盘（标记区块里就不会再有它）
+            this.syncWorkspaceMetaToFile();
             this.loadSideBarCharacter();
         });
         //武将包 / 分包过滤栏
