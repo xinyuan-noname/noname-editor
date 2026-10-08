@@ -903,7 +903,8 @@ mainPage.innerHTML=`
     }
     listenSideBarCharacter() {
         const { sideBarCharacter } = this;
-        const noneCharacterCardButton = sideBarCharacter.querySelector("button");
+        //必须限定在空态卡片里：侧栏顶部的武将包/分包「＋」也是 button，裸 querySelector("button") 会抓到它们
+        const noneCharacterCardButton = sideBarCharacter.querySelector(".xy-ED-nocharacterCard>button");
         noneCharacterCardButton.addEventListener("pointerup", () => {
             this.createCharacterEditor("", this.filterDraftData());
         });
