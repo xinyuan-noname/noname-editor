@@ -204,7 +204,7 @@ mainPage.innerHTML=`
                         <button>点击创建</button>
                     </div>
                     <div class="xy-ED-characte-show">
-                        <header><span class="xy-ED-characte-count"></span><span class="xy-ED-refresh-button" title="刷新已保存武将列表">⟳ 刷新</span></header>
+                        <header><span class="xy-ED-characte-count"></span><span class="xy-ED-create-button" title="新建一个武将草稿（会落在当前过滤的武将包 / 分包下）">＋ 新建武将</span><span class="xy-ED-refresh-button" title="刷新已保存武将列表">⟳ 刷新</span></header>
                         <ul></ul>
                     </div>
                 </div>
@@ -1064,9 +1064,10 @@ mainPage.innerHTML=`
         const { sideBarCharacter } = this;
         //必须限定在空态卡片里：侧栏顶部的武将包/分包「＋」也是 button，裸 querySelector("button") 会抓到它们
         const noneCharacterCardButton = sideBarCharacter.querySelector(".xy-ED-nocharacterCard>button");
-        noneCharacterCardButton.addEventListener("pointerup", () => {
-            this.createCharacterEditor("", this.filterDraftData());
-        });
+        const createCharacter = () => this.createCharacterEditor("", this.filterDraftData());
+        noneCharacterCardButton.addEventListener("pointerup", createCharacter);
+        //列表非空时空态卡会被隐藏，所以页头还有一个常驻的「＋ 新建武将」
+        sideBarCharacter.querySelector(".xy-ED-create-button")?.addEventListener("pointerup", createCharacter);
         //每次点开「武将」页都刷新一次列表
         this.navCharacter.addEventListener("pointerup", () => this.loadSideBarCharacter());
         //手动刷新键

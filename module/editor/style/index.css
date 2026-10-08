@@ -620,15 +620,16 @@ body.xy-ED-col-resizing * {
     }
 }
 
-/* 武将页头的计数与刷新键 */
+/* 武将页头的计数、新建与刷新键 */
 .xy-ED-sideBar-character .xy-ED-characte-show>header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 6px;
 }
 
 .xy-ED-sideBar-character .xy-ED-characte-count {
+    flex: 1 1 auto;
     opacity: 0.85;
     font-size: 0.85em;
     overflow: hidden;
@@ -636,18 +637,31 @@ body.xy-ED-col-resizing * {
     white-space: nowrap;
 }
 
-.xy-ED-sideBar-character .xy-ED-refresh-button {
+/* 列表非空时空态卡是隐藏的，所以页头常驻一个创建入口；两个键都放大（原先太小点不准） */
+.xy-ED-sideBar-character .xy-ED-refresh-button,
+.xy-ED-sideBar-character .xy-ED-create-button {
     flex: 0 0 auto;
-    padding: 1px 8px;
+    padding: 3px 10px;
     border-radius: 4px;
     background: #e4d5b7;
     color: #000;
     cursor: pointer;
-    font-size: 0.85em;
+    font-size: 1em;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+.xy-ED-sideBar-character .xy-ED-create-button {
+    background: #cfe3c2;
+    font-weight: 600;
 }
 
 .xy-ED-sideBar-character .xy-ED-refresh-button:hover {
     background: #f3e6c9;
+}
+
+.xy-ED-sideBar-character .xy-ED-create-button:hover {
+    background: #e2f0d6;
 }
 
 /* 标题旁的工作区名：左栏原为定宽 100px（正好是「魂氏编辑器」五个字），装不下工作区名 */
