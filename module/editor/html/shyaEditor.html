@@ -2,12 +2,16 @@
     <div class="toolbar">
         <span class="title">shya 技能编辑器</span>
         <input class="skill-id" type="text" placeholder="技能 id（如 my_skill）" spellcheck="false">
-        <select class="skill-kind" title="插入某类技能的最简模板"></select>
         <span class="buttons">
             <button class="compile" type="button">编译</button>
             <button class="generate" type="button">生成</button>
             <button class="copy" type="button">复制代码</button>
         </span>
+    </div>
+    <div class="kind-bar">
+        <span class="kind-label">技能种类</span>
+        <div class="kind-buttons"></div>
+        <span class="kind-hint" title="快捷键（只在源码框内生效）&#10;Tab 缩进 / Shift+Tab 反缩进&#10;Enter 保持上一行缩进（行尾是 { 或 : 时多缩进一级）&#10;Shift+Alt+↑ / Shift+Alt+↓ 复制当前行（或选区）&#10;Shift+Alt+D 删除当前行（或选区）">快捷键：Tab 缩进 · Shift+Tab 反缩进 · Enter 保持缩进 · Shift+Alt+↑/↓ 复制行 · Shift+Alt+D 删除行</span>
     </div>
     <div class="tools">
         <div class="tools-tabs">

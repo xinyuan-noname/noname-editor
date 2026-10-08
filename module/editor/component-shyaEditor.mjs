@@ -2,7 +2,7 @@
 import { lib, game, ui, get, ai, _status } from "../../../../noname.js";
 import { HTMLNonameFocusUIElement } from "./component-base.mjs";
 import { getVisibleTagGroups, TAG_VISIBLE_LIMIT } from "./shya/tags.mjs";
-import { SKILL_KINDS } from "./shya/skillTemplates.mjs";
+import { SKILL_KINDS, getSkillKind } from "./shya/skillTemplates.mjs";
 
 /** 技能类型宏库的 import：编译前自动注入，不写进文本框（见 prepareSource） */
 const HOST_IMPORT = 'import "./host/skill-type.shya"';
@@ -39,6 +39,12 @@ class HTMLNonameShyaEditorElement extends HTMLNonameFocusUIElement {
     chosenTags = new Set();
     /** 当前技能类型标记（决定显示哪些标签组） */
     skillTypes = [];
+    /** 当前选中的技能种类（SKILL_KINDS 的 key） */
+    currentKind = "";
+    /** 源码是否已被动过：没动过时插模板直接整块替换，避免与初始示例叠在一起 */
+    sourceTouched = false;
+    /** 上一次写入的模板原文：源码还等于它时再点别的种类直接替换，不会越堆越多 */
+    lastTemplateText = "";
     sourceArea = null;
     constructor() {
         super();
@@ -49,12 +55,16 @@ shadow.innerHTML=`
     <div class="toolbar">
         <span class="title">shya 技能编辑器</span>
         <input class="skill-id" type="text" placeholder="技能 id（如 my_skill）" spellcheck="false">
-        <select class="skill-kind" title="插入某类技能的最简模板"></select>
         <span class="buttons">
             <button class="compile" type="button">编译</button>
             <button class="generate" type="button">生成</button>
             <button class="copy" type="button">复制代码</button>
         </span>
+    </div>
+    <div class="kind-bar">
+        <span class="kind-label">技能种类</span>
+        <div class="kind-buttons"></div>
+        <span class="kind-hint" title="快捷键（只在源码框内生效）&#10;Tab 缩进 / Shift+Tab 反缩进&#10;Enter 保持上一行缩进（行尾是 { 或 : 时多缩进一级）&#10;Shift+Alt+↑ / Shift+Alt+↓ 复制当前行（或选区）&#10;Shift+Alt+D 删除当前行（或选区）">快捷键：Tab 缩进 · Shift+Tab 反缩进 · Enter 保持缩进 · Shift+Alt+↑/↓ 复制行 · Shift+Alt+D 删除行</span>
     </div>
     <div class="tools">
         <div class="tools-tabs">
@@ -91,6 +101,12 @@ shadow.innerHTML=`
         const q = sel => this.shadowRoot.querySelector(sel);
         this.sourceArea = q(".source");
         if (this.sourceArea && !this.sourceArea.value) this.sourceArea.value = EXAMPLE_SOURCE;
+        if (this.sourceArea) {
+            //一动源码就记成「已编辑」：此后插模板只插到光标处，不再整块替换
+            this.sourceArea.addEventListener("input", () => { this.sourceTouched = true; });
+            //源码框内的按键增强（Tab 缩进、Enter 缩进、复制/删除行），详见 handleSourceKeydown
+            this.sourceArea.addEventListener("keydown", e => this.handleSourceKeydown(e));
+        }
         const idInput = q(".skill-id");
         if (idInput) idInput.addEventListener("input", () => this.triggerEvent("tabTitleChange"));
         q(".compile").addEventListener("pointerup", () => this.compile());
@@ -106,21 +122,8 @@ shadow.innerHTML=`
             this.chosenTags.clear();
             this.renderTagPanel();
         });
-        //技能模板下拉：选中某类即把该类最简模板插到光标处
-        const kindSelect = q(".skill-kind");
-        if (kindSelect) {
-            SKILL_KINDS.forEach(kind => {
-                const option = document.createElement("option");
-                option.value = kind.key;
-                option.textContent = kind.name + "模板";
-                option.title = kind.hint || "";
-                kindSelect.appendChild(option);
-            });
-            kindSelect.addEventListener("change", () => {
-                this.insertTemplate(kindSelect.value);
-                kindSelect.value = "";
-            });
-        }
+        //技能种类：一排按钮（形态照旧版编辑器的「技能种类」，不用下拉框）
+        this.renderKindBar();
         this.renderTagPanel();
     }
     /**
@@ -266,26 +269,61 @@ shadow.innerHTML=`
         const text = Array.from(this.chosenTags).join(", ");
         const start = this.sourceArea.selectionStart ?? this.sourceArea.value.length;
         const end = this.sourceArea.selectionEnd ?? start;
-        const value = this.sourceArea.value;
-        this.sourceArea.value = value.slice(0, start) + text + value.slice(end);
-        this.sourceArea.selectionStart = this.sourceArea.selectionEnd = start + text.length;
-        this.sourceArea.focus();
+        this.replaceRange(start, end, text);
         this.setDiagnostics(`<span class="ok">已插入 ${this.chosenTags.size} 个标签</span>`);
     }
     /**
-     * 把某类技能的最简模板插到源码光标处（工具栏「技能模板」下拉）
+     * 渲染「技能种类」按钮组：一排按钮，点一个就把该类的模板写进源码。
+     * 形态照旧版编辑器的技能种类（skill/editor.mjs:915-948 的 generateKindsButton），不用下拉框。
+     */
+    renderKindBar() {
+        const root = this.shadowRoot.querySelector(".kind-buttons");
+        if (!root) return;
+        root.replaceChildren();
+        SKILL_KINDS.forEach(kind => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "kind-button";
+            button.dataset.kind = kind.key;
+            button.textContent = kind.name;
+            button.title = `${kind.name}：${kind.hint || ""}\n点击即把该类模板写进源码（源码还是初始示例时整块替换，否则插到光标处）`;
+            if (this.currentKind === kind.key) button.classList.add("chosen");
+            button.addEventListener("pointerup", () => this.chooseKind(kind.key));
+            root.appendChild(button);
+        });
+    }
+    /**
+     * 选中某个技能种类：更新选中态，并写入该类模板
+     * @param {string} key SKILL_KINDS 里的 key
+     */
+    chooseKind(key) {
+        if (!getSkillKind(key)) return;
+        this.currentKind = key;
+        this.renderKindBar();
+        this.insertTemplate(key);
+    }
+    /**
+     * 把某类技能的最简模板写进源码：源码为空或还是初始示例时整块替换，否则插到光标处
      * @param {string} key SKILL_KINDS 里的 key
      */
     insertTemplate(key) {
-        const kind = SKILL_KINDS.find(item => item.key === key);
+        const kind = getSkillKind(key);
         if (!kind || !this.sourceArea) return;
         const text = kind.template;
-        const start = this.sourceArea.selectionStart ?? this.sourceArea.value.length;
-        const end = this.sourceArea.selectionEnd ?? start;
-        const value = this.sourceArea.value;
-        this.sourceArea.value = value.slice(0, start) + text + value.slice(end);
-        this.sourceArea.selectionStart = this.sourceArea.selectionEnd = start + text.length;
-        this.sourceArea.focus();
+        const node = this.sourceArea;
+        //没动过 / 空 / 还是上一次写进去的模板 → 整块替换，点着换种类不会越堆越多
+        if (!this.sourceTouched || !node.value.trim() || node.value === this.lastTemplateText) {
+            this.replaceRange(0, node.value.length, text);
+            //整块替换后光标回到开头、视野回顶部（否则停在模板末尾，看不到开头）
+            node.setSelectionRange(0, 0);
+            node.scrollTop = 0;
+            this.lastTemplateText = text;
+        } else {
+            this.lastTemplateText = "";
+            const start = node.selectionStart ?? node.value.length;
+            const end = node.selectionEnd ?? start;
+            this.replaceRange(start, end, text);
+        }
         //技能 id 输入框空着就顺手填上模板里的 id（只影响标签栏标题）
         const idInput = this.shadowRoot.querySelector(".skill-id");
         if (idInput && !idInput.value) {
@@ -295,7 +333,224 @@ shadow.innerHTML=`
                 this.triggerEvent("tabTitleChange");
             }
         }
-        this.setDiagnostics(`<span class="ok">已插入「${kind.name}」模板：${this.escape(kind.hint || "")}</span>`);
+        this.setDiagnostics(`<span class="ok">已写入「${kind.name}」模板：${this.escape(kind.hint || "")}</span>`);
+    }
+    // ================= 源码输入增强（同步旧版编辑器的合理快捷键） =================
+    /**
+     * 用 execCommand("insertText") 替换一段文本：浏览器原生编辑，Ctrl+Z 撤销栈仍然有效；
+     * 不可用时退回直接改 value（会丢原生撤销栈）。
+     * @param {number} start
+     * @param {number} end
+     * @param {string} text
+     */
+    replaceRange(start, end, text) {
+        const node = this.sourceArea;
+        if (!node) return;
+        node.focus();
+        node.setSelectionRange(start, end);
+        let inserted = false;
+        try {
+            inserted = document.execCommand("insertText", false, text);
+        } catch (err) {
+            inserted = false;
+        }
+        if (!inserted) {
+            const value = node.value;
+            node.value = value.slice(0, start) + text + value.slice(end);
+            node.setSelectionRange(start + text.length, start + text.length);
+        }
+        this.sourceTouched = true;
+    }
+    /**
+     * 推断缩进单位：有行首制表符就用制表符，否则取最小的行首空格数（默认 2 空格，与宏库、模板一致）
+     * @returns {string}
+     */
+    inferIndentUnit() {
+        const value = this.sourceArea ? this.sourceArea.value : "";
+        if (/^\t/m.test(value)) return "\t";
+        let min = 0;
+        for (const line of value.split("\n")) {
+            const matched = /^( +)\S/.exec(line);
+            if (!matched) continue;
+            const count = matched[1].length;
+            if (!min || count < min) min = count;
+        }
+        return " ".repeat(min > 0 && min <= 8 ? min : 2);
+    }
+    /**
+     * 对选区覆盖的整行做逐行变换，并把选区按每行行首的增删映射回去
+     * @param {number} start 选区起点
+     * @param {number} end 选区终点
+     * @param {(line: string, index: number) => { text: string, remove: number, add: number }} map
+     *        逐行变换：remove / add 是该行行首被删掉 / 新增的字符数，用来映射选区
+     * @returns {boolean} 是否发生了改动
+     */
+    transformLines(start, end, map) {
+        const node = this.sourceArea;
+        if (!node) return false;
+        const value = node.value;
+        //选区正好停在某行行首时，不要把那一行算进来
+        const selEnd = end > start && value[end - 1] === "\n" ? end - 1 : end;
+        const from = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+        const nextBreak = value.indexOf("\n", selEnd);
+        const to = nextBreak < 0 ? value.length : nextBreak;
+        const lines = value.slice(from, to).split("\n");
+        const results = lines.map(map);
+        if (results.every((item, index) => item.text === lines[index])) return false;
+        const oldOffsets = [];
+        const newOffsets = [];
+        let oldCursor = 0;
+        let newCursor = 0;
+        for (let i = 0; i < results.length; i++) {
+            oldOffsets.push(oldCursor);
+            newOffsets.push(newCursor);
+            oldCursor += lines[i].length + 1;
+            newCursor += results[i].text.length + 1;
+        }
+        const newText = results.map(item => item.text).join("\n");
+        const mapOffset = offset => {
+            if (offset <= from) return offset;
+            if (offset >= to) return offset + (newText.length - (to - from));
+            let index = 0;
+            while (index + 1 < oldOffsets.length && oldOffsets[index + 1] <= offset - from) index++;
+            const inLine = offset - from - oldOffsets[index];
+            const { remove, add } = results[index];
+            return from + newOffsets[index] + Math.max(0, inLine - remove) + add;
+        };
+        const nextStart = mapOffset(start);
+        const nextEnd = mapOffset(end);
+        this.replaceRange(from, to, newText);
+        node.setSelectionRange(nextStart, nextEnd);
+        return true;
+    }
+    /**
+     * 反缩进一行：先摘掉一个缩进单位，不够就摘到行首
+     * @param {string} line
+     * @param {string} unit
+     * @returns {string}
+     */
+    outdentLine(line, unit) {
+        if (line.startsWith(unit)) return line.slice(unit.length);
+        const lead = /^[ \t]+/.exec(line);
+        if (!lead) return line;
+        const kept = lead[0].startsWith("\t") ? lead[0].length - 1 : Math.max(0, lead[0].length - unit.length);
+        return " ".repeat(kept) + line.slice(lead[0].length);
+    }
+    /**
+     * Tab / Shift+Tab：缩进 / 反缩进选区覆盖的整行（旧版编辑器的 Tab 缩进）
+     * @param {boolean} outdent 是否反缩进
+     */
+    indentLines(outdent) {
+        const node = this.sourceArea;
+        if (!node) return;
+        const unit = this.inferIndentUnit();
+        const start = node.selectionStart ?? 0;
+        const end = node.selectionEnd ?? start;
+        this.transformLines(start, end, line => {
+            if (outdent) {
+                const text = this.outdentLine(line, unit);
+                return { text, remove: line.length - text.length, add: 0 };
+            }
+            return { text: unit + line, remove: 0, add: unit.length };
+        });
+    }
+    /**
+     * Shift+Alt+↑ / Shift+Alt+↓：把选区覆盖的整行复制一份到上方 / 下方（旧版同款）
+     * @param {"up"|"down"} direction
+     */
+    duplicateLines(direction) {
+        const node = this.sourceArea;
+        if (!node) return;
+        const value = node.value;
+        const start = node.selectionStart ?? 0;
+        const end = node.selectionEnd ?? start;
+        const selEnd = end > start && value[end - 1] === "\n" ? end - 1 : end;
+        const from = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+        const nextBreak = value.indexOf("\n", selEnd);
+        const to = nextBreak < 0 ? value.length : nextBreak;
+        const block = value.slice(from, to);
+        const shift = block.length + 1;
+        if (direction === "up") {
+            this.replaceRange(from, from, block + "\n");
+            //复制体落在原位置，选区不动（旧版同款）
+            node.setSelectionRange(start, end);
+        } else {
+            this.replaceRange(to, to, "\n" + block);
+            node.setSelectionRange(start + shift, end + shift);
+        }
+    }
+    /**
+     * Shift+Alt+D：删除选区覆盖的整行（旧版同款）
+     */
+    deleteLines() {
+        const node = this.sourceArea;
+        if (!node) return;
+        const value = node.value;
+        const start = node.selectionStart ?? 0;
+        const end = node.selectionEnd ?? start;
+        const selEnd = end > start && value[end - 1] === "\n" ? end - 1 : end;
+        const from = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+        const nextBreak = value.indexOf("\n", selEnd);
+        const to = nextBreak < 0 ? value.length : nextBreak;
+        //末行没有行尾换行符，就连行首那个换行一起删，别留空行
+        const delFrom = to < value.length ? from : Math.max(0, from - 1);
+        const delTo = to < value.length ? to + 1 : to;
+        if (delFrom >= delTo) return;
+        this.replaceRange(delFrom, delTo, "");
+        node.setSelectionRange(delFrom, delFrom);
+    }
+    /**
+     * 源码框按键（只在源码框内生效）：
+     *   Tab / Shift+Tab      缩进 / 反缩进选中行（旧版编辑器的 Tab 缩进）
+     *   Enter                保持上一行缩进，行尾是 { 或 : 时多缩进一级
+     *   Shift+Alt+↑ / ↓      复制当前行（或选区）
+     *   Shift+Alt+D          删除当前行（或选区）
+     * 这些组合与引擎的全局键（F5 / Ctrl+R / Ctrl+S / Ctrl+J / Space / a / w）不冲突；
+     * 且主区 viewArea 已在冒泡阶段截断 keydown，按键不会漏到引擎的 window.onkeydown。
+     * 刻意没同步旧版的中文语句专属键（Shift+Alt+F 整理、Shift+Alt+S 句式对话框）。
+     * @param {KeyboardEvent} event
+     */
+    handleSourceKeydown(event) {
+        if (!event || typeof event.key !== "string") return;
+        const node = this.sourceArea;
+        if (!node) return;
+        const alt = event.altKey;
+        const shift = event.shiftKey;
+        if (alt && shift && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+            event.preventDefault();
+            this.duplicateLines(event.key === "ArrowUp" ? "up" : "down");
+            return;
+        }
+        if (alt && shift && (event.key === "D" || event.key === "d")) {
+            event.preventDefault();
+            this.deleteLines();
+            return;
+        }
+        if (event.key === "Tab") {
+            event.preventDefault();
+            this.indentLines(shift);
+            return;
+        }
+        if (event.key === "Enter" && !shift && !event.ctrlKey && !event.metaKey && !alt) {
+            //输入法组合中的回车交给输入法自己处理（Chromium 下 isComposing / keyCode 229）
+            if (event.isComposing || event.keyCode === 229) return;
+            const value = node.value;
+            const start = node.selectionStart ?? 0;
+            const end = node.selectionEnd ?? start;
+            const from = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+            const lineBreak = value.indexOf("\n", from);
+            const lineText = value.slice(from, lineBreak < 0 ? value.length : lineBreak);
+            //缩进取整行的行首空白：光标停在行首、整行被选中时 head 是空串，只有读整行才拿得到缩进
+            const indent = (/^[ \t]*/.exec(lineText) || [""])[0];
+            const head = value.slice(from, start);
+            //光标前的行尾是 { 或 : （宏块 / 插槽）就多缩进一级
+            const opensBlock = /[{:]\s*$/.test(head);
+            if (!indent && !opensBlock) return;
+            const inserted = "\n" + indent + (opensBlock ? this.inferIndentUnit() : "");
+            event.preventDefault();
+            this.replaceRange(start, end, inserted);
+            node.setSelectionRange(start + inserted.length, start + inserted.length);
+        }
     }
     /**
      * 编译前注入宿主宏库的 import（HOST_IMPORT 不进文本框，行号按注入行数回退）。
@@ -318,6 +573,8 @@ shadow.innerHTML=`
         if (typeof code === "string" && code.trim()) {
             if (!this.sourceArea) this.sourceArea = this.shadowRoot.querySelector(".source");
             if (this.sourceArea) this.sourceArea.value = code;
+            this.sourceTouched = true;
+            this.lastTemplateText = "";
             this.generatedCode = "";
             const output = this.shadowRoot.querySelector(".output");
             if (output) output.textContent = "";
