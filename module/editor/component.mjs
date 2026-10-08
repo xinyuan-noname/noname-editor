@@ -752,7 +752,8 @@ shadow.innerHTML=`
      * @returns {string}
      */
     assetRelative(reference) {
-        const text = String(reference || "");
+        //显示地址会带 `?t=` 缓存串（见 displayAvatarUrl），这里是「引用 → 真路径」，先剥掉
+        const text = this.stripUrlQuery(reference);
         if (!text || /^(blob|data|https?):/i.test(text)) return "";
         return text.startsWith("ext:") ? text.slice(4) : text.replace(/^\/?extension\//, "");
     }
@@ -837,9 +838,11 @@ shadow.innerHTML=`
         this.recordURL("avatar", url);
         //清掉上一次恢复时挂的 onerror 兜底：否则新图加载失败会被旧路径顶掉
         img.onerror = null;
-        img.src = url;
+        //同名文件换图后地址不变 → 显示地址补 `?t=`，否则浏览器吃缓存、画面还是旧图
+        const displayUrl = this.displayAvatarUrl(url);
+        img.src = displayUrl;
         avatar.classList.add("done");
-        this.changeData("avatar", url);
+        this.changeData("avatar", displayUrl);
         //引用同步：只有能归一成 ext: 的真实文件地址才更新引用；
         //裁剪中间态（blob:）不能覆盖引用，否则草稿里就只剩一个刷新即失效的临时 URL
         const reference = this.toExtReference(url);
@@ -874,9 +877,11 @@ shadow.innerHTML=`
             this.recordURL("avatar", url);
             //清掉上一次恢复时挂的 onerror 兜底：否则新图加载失败会被旧路径顶掉
             img.onerror = null;
-            img.src = url;
+            //同名文件换图后地址不变 → 显示地址补 `?t=`（草稿里仍是干净的 ext: 引用）
+            const displayUrl = this.displayAvatarUrl(url);
+            img.src = displayUrl;
             avatar.classList.add("done");
-            this.changeData("avatar", url);
+            this.changeData("avatar", displayUrl);
         }
         this.createUniqueChoiceManager("height-set", ...avatarDataArea.querySelectorAll(".height-set"))
             .listenSiblings("pointerup")
@@ -2192,8 +2197,32 @@ shadow.innerHTML=`
         if (!text) return false;
         //引擎的其它 trashBin 标记，不是立绘
         if (/^(sex|des|ruby|tempname|character|mode|db):/i.test(text)) return false;
-        const relative = text.replace(/^(ext|img):/i, "");
+        const relative = this.stripUrlQuery(text).replace(/^(ext|img):/i, "");
         return /\.(png|jpe?g|gif|webp|bmp|avif|jfif)$/i.test(relative) || /(^|\/)image\//i.test(relative);
+    }
+    /**
+     * 去掉 URL 上的查询串与锚点（`a.png?t=123` → `a.png`）。
+     * 显示地址会带 `?t=` 缓存串，而**引用/磁盘路径**必须干净，所有「引用 ↔ 路径」的地方都先过它。
+     * @param {string} value
+     * @returns {string}
+     */
+    stripUrlQuery(value) {
+        return String(value || "").replace(/[?#].*$/, "");
+    }
+    /**
+     * 显示用地址：给同一个地址补一个 `?t=<时间戳>`。
+     * 立绘文件名固定是 `<武将id>.<ext>`，**换图后地址不变** → 浏览器直接命中缓存，界面还是旧图
+     * （用户实测：草稿/生成的武将包文件都当轮更新了，画面却不变）。
+     * ⚠️ 只加在显示上（`<img src>` 与 `--data-avatar`）；草稿与生成文件里始终是干净的 `ext:<路径>`。
+     * @param {string} url
+     * @returns {string}
+     */
+    displayAvatarUrl(url) {
+        const text = String(url || "");
+        if (!text) return "";
+        //blob:/data: 本身就是唯一地址，不需要（也不该）加参数
+        if (/^(blob|data):/i.test(text)) return text;
+        return `${this.stripUrlQuery(text)}?t=${Date.now()}`;
     }
     /**
      * `ext:<工作区相对路径>` / `/extension/…` / `<工作区相对路径>` → `<工作区相对路径>`
@@ -2201,12 +2230,12 @@ shadow.innerHTML=`
      * @returns {string}
      */
     referenceRelative(reference) {
-        const text = String(reference || "").trim();
+        const text = this.stripUrlQuery(reference).trim();
         if (!text || /^(blob|data|https?|file|img|db):/i.test(text)) return "";
         return text.replace(/^ext:/i, "").replace(/^\/?extension\//, "");
     }
     /**
-     * 立绘引用 → `<img>` 能加载的地址。
+     * 立绘引用 → `<img>` 能加载的地址（**带 `?t=` 缓存串**，见 `displayAvatarUrl()`）。
      * `ext:` 是引擎的扩展素材约定（工作区相对路径）；`img:`/`db:` 是引擎的其它来源，
      * 编辑器不产生它们、也不去猜拼法 → 返回 ""（不显示，但保存时仍原样保留）。
      * @param {string} reference
@@ -2219,7 +2248,7 @@ shadow.innerHTML=`
         const relative = this.referenceRelative(text);
         if (!relative) return "";
         //lib.assetURL 可能是 file:///… 也可能是空串：拼出来才是 <img> 能加载的地址
-        return `${lib.assetURL || ""}extension/${relative}`;
+        return this.displayAvatarUrl(`${lib.assetURL || ""}extension/${relative}`);
     }
     /**
      * 归一成草稿 `trashBin` 里该写的 `ext:` 路径。
@@ -2228,7 +2257,8 @@ shadow.innerHTML=`
      * @returns {string}
      */
     toExtReference(value) {
-        const text = String(value || "").trim();
+        //显示地址带 `?t=`（见 displayAvatarUrl）→ 写进草稿前必须剥掉，别把时间戳存进 ext: 路径
+        const text = this.stripUrlQuery(value).trim();
         if (!text || /^(blob|data):/i.test(text)) return "";
         if (text.startsWith("ext:")) return text;
         if (/^(https?|file):/i.test(text)) {
@@ -2288,7 +2318,7 @@ shadow.innerHTML=`
             const img = this.getDataAreaDom("avatar").querySelector(".avatar-view img");
             img.onerror = () => {
                 img.onerror = null;
-                const fallback = `/extension/${relative}`;
+                const fallback = this.displayAvatarUrl(`/extension/${relative}`);
                 console.warn("立绘加载失败，改用 app 根路径重试", url, fallback);
                 img.src = fallback;
                 this.changeData("avatar", fallback);
