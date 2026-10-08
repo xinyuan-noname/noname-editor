@@ -752,12 +752,17 @@ mainPage.innerHTML=`
             }
         });
         //自定义势力 / 宗族要补 translate：游戏 lib.translate 里没有的话，界面只会显示原 id
+        //势力还必须是 lib.group 的成员（新将包 character/XJB/index.mjs 就是这么做的），否则游戏不认这个势力
         const groupNames = this.serveFor.data.getConfig("x19D6_editor.groups") || {};
+        const groupRegisterLines = [];
         Object.values(records || {}).forEach(record => {
             if (!record || !record.id) return;
             if ((record.packageId || "") !== packageId) return;
             const groups = [record.group, ...(Array.isArray(record.doubleGroup) ? record.doubleGroup : [])].filter(Boolean);
             groups.forEach(groupId => {
+                if (!Array.isArray(lib.group) || !lib.group.includes(groupId)) {
+                    groupRegisterLines.push(`    if (lib.group && !lib.group.includes(${JSON.stringify(groupId)})) lib.group.push(${JSON.stringify(groupId)});`);
+                }
                 if (lib.translate[groupId]) return;
                 translateLines.push(`    ${JSON.stringify(groupId)}: ${JSON.stringify(groupNames[groupId] || groupId)}`);
             });
@@ -787,7 +792,12 @@ mainPage.innerHTML=`
         const callbackParams = isModule ? "() " : "(lib, game, ui, get, ai, _status) ";
         const indent = text => text.split("\n").map(line => (line ? "    " + line : line)).join("\n");
         const importStatement = 'import { lib, game, ui, get, ai, _status } from "../../../noname.js";';
-        const declarations = [charactersBlock, sortBlock, translatesBlock, sortTranslateBlock];
+        const groupRegisterBlock = groupRegisterLines.length
+            ? `//自定义势力：注册进 lib.group\n${groupRegisterLines.join("\n")}`
+            : "";
+        const declarations = [];
+        if (groupRegisterLines.length) declarations.push(groupRegisterBlock);
+        declarations.push(charactersBlock, sortBlock, translatesBlock, sortTranslateBlock);
         if (introLines.length) declarations.push(introBlock);
         if (pinyinLines.length) declarations.push(pinyinBlock);
         const importStatementBlock = `game.import("character", function ${callbackParams}{\n    return {\n${returns.join(",\n")}\n    };\n});`;
