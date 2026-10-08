@@ -7,6 +7,19 @@ class HTMLNonameCharacterEditorElement extends HTMLNonameFocusUIElement {
      * 草稿自动保存的防抖定时器
      */
     #saveTimer = null;
+    /**
+     * 立绘的权威引用（`ext:<工作区相对路径>`）。
+     * ⚠️ 不能只看 DOM：`getAllData()` 原来是从 `data-avatar` 反推 `trashBin`，只要有一次
+     * 「DOM 里没有立绘」的保存（同一份草稿开了两个编辑器实例、裁剪后只剩 `blob:` URL…），
+     * 记录里的引用就被抹成空数组——文件还在磁盘上，重新打开却再也显示不出来（用户实测）。
+     */
+    avatarReference = "";
+    /** 载入草稿时读到的立绘引用：保存时兜底，避免把记录里已有的引用写没 */
+    storedAvatarReference = "";
+    /** 只有用户显式「重置」立绘，才允许把记录里的引用一并清掉 */
+    avatarCleared = false;
+    /** 载入草稿时记录里原有的 `trashBin`（保存时把非立绘标记原样写回） */
+    loadedTrashBin = [];
     characterAttributes = [
         "extension", "packageId", "characterSort", "characterSortName",
         "avatar",
@@ -737,6 +750,9 @@ shadow.innerHTML=`
             if (relative.includes(oldId)) {
                 const renamed = await this.moveAssetFile(relative, oldId, newId);
                 if (renamed) {
+                    const reference = `ext:${renamed}`;
+                    this.avatarReference = reference;
+                    this.storedAvatarReference = reference;
                     const url = `/extension/${renamed}`;
                     const img = this.getDataAreaDom("avatar").querySelector(".avatar-view img");
                     if (img) img.src = url;
@@ -793,6 +809,13 @@ shadow.innerHTML=`
         img.src = url;
         avatar.classList.add("done");
         this.changeData("avatar", url);
+        //引用同步：只有能归一成 ext: 的真实文件地址才更新引用；
+        //裁剪中间态（blob:）不能覆盖引用，否则草稿里就只剩一个刷新即失效的临时 URL
+        const reference = this.toExtReference(url);
+        if (!reference) return;
+        this.avatarReference = reference;
+        this.storedAvatarReference = reference;
+        this.avatarCleared = false;
     }
     #listenAvatar() {
         let imgType = "", minDelay = 0.01;
@@ -809,6 +832,10 @@ shadow.innerHTML=`
             //落盘：extension/<工作区>/image/character/<武将id>.<ext>
             const reference = await this.saveLocalAsset(file, "extension-character-image");
             if (!reference) return;
+            //落盘成功 → 记下权威引用：保存草稿时以它为准，不再从 DOM 反推
+            this.avatarReference = reference;
+            this.storedAvatarReference = reference;
+            this.avatarCleared = false;
             imgType = file.type;
             img.style.cssText = "";
             //<img> 只认 URL：用 /extension/... 显示；草稿里存同样形式，getAllData 会归一成 ext:
@@ -846,7 +873,11 @@ shadow.innerHTML=`
             avatar.classList.remove("done");
             img.removeAttribute("src");
             img.style.cssText = "";
-            const previous = this.getData("avatar");
+            //重置是显式清空：连记录里的引用一起清（否则下次保存又会把旧引用写回去）
+            const previous = this.avatarReference || this.storedAvatarReference || this.getData("avatar");
+            this.avatarReference = "";
+            this.storedAvatarReference = "";
+            this.avatarCleared = true;
             this.changeData("avatar", "");
             //同生共死：重置立绘 = 删掉已落盘的那张
             if (previous) this.removeAssetFile(previous);
@@ -965,7 +996,7 @@ shadow.innerHTML=`
                                 avatar.classList.remove("editing", "loading");
                             })
                         } else {
-                            this.reloadAvatar(await this.multiMediaQuery("staticImgClip", {
+                            const cropped = await this.multiMediaQuery("staticImgClip", {
                                 img,
                                 x: parseFloat(cutter.style.left) || 0,
                                 y: parseFloat(cutter.style.top) || 0,
@@ -974,7 +1005,11 @@ shadow.innerHTML=`
                                 dataForm: "blobURL",
                                 type: imgType,
                                 useClientData: true
-                            }));
+                            });
+                            this.reloadAvatar(cropped);
+                            //裁剪结果必须落盘：原来只把 blob: URL 写进草稿（引擎不认 blob:、刷新即失效），
+                            //于是一裁剪，原画就再也回不来（实测 server log 里 trashBin 只剩 blob:xxx）
+                            await this.saveCroppedAvatar(cropped);
                             avatar.classList.remove("cutting", "editing", "loading");
                         }
                     } else {
@@ -2026,7 +2061,9 @@ shadow.innerHTML=`
         if (data.packageId) this.style.setProperty("--data-package-id", `"${lib.translate[data.packageId + "_character_config"] || data.packageId}"`);
         if (data.characterSortName) this.style.setProperty("--data-character-sort", `"${data.characterSortName}"`);
         //立绘：getAllData 会把 avatar 挪进 trashBin（ext: 路径），草稿里没有 avatar 字段，所以从这里恢复
-        this.syncAvatarFromTrashBin(data.trashBin);
+        this.loadedTrashBin = Array.isArray(data.trashBin) ? data.trashBin.slice() : [];
+        if (data.avatar) this.avatarReference = data.avatar;
+        this.syncAvatarFromTrashBin(data.trashBin, data);
         //体力 / 体力上限 / 护甲的数字框与旁边的血/甲格
         this.syncHpInputs();
         return this;
@@ -2097,21 +2134,157 @@ shadow.innerHTML=`
         this.syncHpPips();
     }
     /**
-     * 从 `trashBin` 里的图片路径恢复立绘。
-     * `getAllData()` 会把 `avatar` 推进 `trashBin` 并从草稿里删掉，所以重新打开时没人把它放回 `<img>`。
-     * @param {string[]} trashBin
+     * 判断一条 `trashBin` 条目是不是立绘引用。
+     * 引擎只认带前缀的条目（`ext:`/`img:`/`db:`/`sex:`…），老数据里也出现过裸路径。
+     * @param {string} value
      * @returns {boolean}
      */
-    syncAvatarFromTrashBin(trashBin) {
-        if (!Array.isArray(trashBin)) return false;
-        const portrait = trashBin.find(path => typeof path === "string" && /(^|\/)image\//.test(path));
-        if (!portrait) return false;
-        const relative = portrait.startsWith("ext:") ? portrait.slice(4) : portrait.replace(/^.*?extension\//, "");
-        if (!relative) return false;
+    isAvatarReference(value) {
+        const text = String(value || "").trim();
+        if (!text) return false;
+        //引擎的其它 trashBin 标记，不是立绘
+        if (/^(sex|des|ruby|tempname|character|mode|db):/i.test(text)) return false;
+        const relative = text.replace(/^(ext|img):/i, "");
+        return /\.(png|jpe?g|gif|webp|bmp|avif|jfif)$/i.test(relative) || /(^|\/)image\//i.test(relative);
+    }
+    /**
+     * `ext:<工作区相对路径>` / `/extension/…` / `<工作区相对路径>` → `<工作区相对路径>`
+     * @param {string} reference
+     * @returns {string}
+     */
+    referenceRelative(reference) {
+        const text = String(reference || "").trim();
+        if (!text || /^(blob|data|https?|file|img|db):/i.test(text)) return "";
+        return text.replace(/^ext:/i, "").replace(/^\/?extension\//, "");
+    }
+    /**
+     * 立绘引用 → `<img>` 能加载的地址。
+     * `ext:` 是引擎的扩展素材约定（工作区相对路径）；`img:`/`db:` 是引擎的其它来源，
+     * 编辑器不产生它们、也不去猜拼法 → 返回 ""（不显示，但保存时仍原样保留）。
+     * @param {string} reference
+     * @returns {string}
+     */
+    referenceUrl(reference) {
+        const text = String(reference || "").trim();
+        if (!text) return "";
+        if (/^(blob|data|https?|file):/i.test(text)) return text;
+        const relative = this.referenceRelative(text);
+        if (!relative) return "";
         //lib.assetURL 可能是 file:///… 也可能是空串：拼出来才是 <img> 能加载的地址
-        const url = /^file:|^https?:/.test(portrait) ? portrait : `${lib.assetURL || ""}extension/${relative}`;
+        return `${lib.assetURL || ""}extension/${relative}`;
+    }
+    /**
+     * 归一成草稿 `trashBin` 里该写的 `ext:` 路径。
+     * `blob:`/`data:` 是页内临时 URL（刷新即失效）→ 一律不写进草稿（踩过：裁剪后草稿里只剩 blob:xxx）。
+     * @param {string} value
+     * @returns {string}
+     */
+    toExtReference(value) {
+        const text = String(value || "").trim();
+        if (!text || /^(blob|data):/i.test(text)) return "";
+        if (text.startsWith("ext:")) return text;
+        if (/^(https?|file):/i.test(text)) {
+            const matched = /\/extension\/(.+)$/.exec(text);
+            return matched ? `ext:${matched[1]}` : "";
+        }
+        return this.pathQuery("changeToExtPath", { path: text });
+    }
+    /**
+     * 从草稿里挑一个立绘引用：`trashBin` 的图片条目 → 旧的 `avatar` 字段。
+     * `ext:` 优先（编辑器与引擎的约定），其次 `img:`，最后裸路径。
+     * @param {string[]} [trashBin]
+     * @param {object} [record]
+     * @returns {string}
+     */
+    pickAvatarReference(trashBin, record = {}) {
+        const entries = (Array.isArray(trashBin) ? trashBin : []).filter(item => this.isAvatarReference(item));
+        const rank = value => (value.startsWith("ext:") ? 0 : value.startsWith("img:") ? 1 : 2);
+        const ranked = entries.slice().sort((a, b) => rank(a) - rank(b));
+        if (ranked.length) return ranked[0];
+        const legacy = record && (record.avatar || record.img);
+        return legacy ? String(legacy) : "";
+    }
+    /**
+     * 扫描立绘目录，按武将 id 找回磁盘上已有的图（`<立绘目录>/<id>.<ext>`）。
+     * 兜底自愈用：老数据被写坏成空 `trashBin` 时，文件其实还在磁盘上（用户反馈的场景）。
+     * @param {string} id
+     * @returns {Promise<string>} `ext:<工作区相对路径>`；找不到返回 ""
+     */
+    async findAvatarOnDisk(id) {
+        const base = String(id || "").trim();
+        if (!base || !this.workspace) return "";
+        const dir = this.assetDir("extension-character-image");
+        if (!dir) return "";
+        try {
+            const [, files] = await this.fileQuery("readFolder", { path: `extension/${dir}` });
+            const hit = (Array.isArray(files) ? files : []).find(name => name.replace(/\.[^.]+$/, "") === base);
+            return hit ? `ext:${dir}/${hit}` : "";
+        } catch (err) {
+            console.warn("立绘目录扫描失败", dir, err);
+            return "";
+        }
+    }
+    /**
+     * 把立绘引用显示到界面上（`.done` + `--data-avatar` + `<img>`）。
+     * @param {string} reference
+     * @returns {boolean}
+     */
+    showAvatar(reference) {
+        const url = this.referenceUrl(reference);
+        if (!url) return false;
         this.reloadAvatar(url);
         return true;
+    }
+    /**
+     * 从草稿里恢复立绘。
+     * 顺序：`trashBin` 的图片条目 → 旧的 `avatar` 字段 → **磁盘上按武将 id 命名的文件**。
+     * 最后一条是自愈兜底：老数据被写坏成空 `trashBin` 时，文件还在磁盘上，靠扫目录认回来
+     * （用户实测：图在 `image/character/` 里，重新打开编辑器却不显示）。
+     * @param {string[]} [trashBin]
+     * @param {object} [record] 整条草稿（取 legacy 的 `avatar` / `id`）
+     * @returns {Promise<boolean>}
+     */
+    async syncAvatarFromTrashBin(trashBin, record = {}) {
+        try {
+            let reference = this.pickAvatarReference(trashBin, record);
+            let fromDisk = false;
+            if (!reference) {
+                reference = await this.findAvatarOnDisk((record && record.id) || this.getData("id"));
+                fromDisk = Boolean(reference);
+            }
+            if (!reference || this.avatarCleared) return false;
+            this.storedAvatarReference = reference;
+            if (fromDisk) this.avatarReference = reference;
+            return this.showAvatar(reference);
+        } catch (err) {
+            console.warn("恢复立绘失败", err);
+            return false;
+        }
+    }
+    /**
+     * 裁剪结果落盘（同名覆盖），让草稿里始终是 `ext:` 引用。
+     * 不落盘的话草稿只会记下 `blob:` URL：引擎不认、刷新即失效 → 「裁剪一次，原画就回不来了」。
+     * @param {string} url 裁剪结果（`blob:` URL）
+     * @returns {Promise<string>} 落盘后的引用；失败返回 ""
+     */
+    async saveCroppedAvatar(url) {
+        if (!/^blob:/i.test(String(url || ""))) return "";
+        const reference = this.avatarReference || this.storedAvatarReference;
+        const relative = this.referenceRelative(reference);
+        if (!relative) return "";
+        try {
+            const blob = await (await fetch(url)).blob();
+            await this.fileQuery("writeFile", { path: `extension/${relative}`, data: blob });
+            this.avatarReference = reference;
+            this.storedAvatarReference = reference;
+            this.avatarCleared = false;
+            //落盘后界面改回文件地址（DOM/CSS 里的 blob 换掉，刷新后由文件顶上）
+            this.changeData("avatar", this.referenceUrl(reference));
+            return reference;
+        } catch (err) {
+            console.warn("裁剪结果落盘失败", relative, err);
+            return "";
+        }
     }
     /**
      * 同步体力/护甲旁边的血格、甲格（`.hp`/`.hujia` 的 `lost` 类）。
@@ -2150,6 +2323,11 @@ shadow.innerHTML=`
         if (!id) return false;
         const data = this.configQuery("get", { member: `x19D6_editor.characters.${id}` });
         if (!data || typeof data !== "object") return false;
+        //换草稿要先把立绘状态清干净，否则上一份的引用会被写进这一份
+        this.avatarReference = "";
+        this.storedAvatarReference = "";
+        this.avatarCleared = false;
+        this.loadedTrashBin = [];
         this.applyData(data);
         //草稿的扩展一律按当前工作区对待（保存时写回）
         this.syncWorkspace();
@@ -2208,10 +2386,21 @@ shadow.innerHTML=`
             dataList.sex = "male";
             dataList.trashBin.push("sex:male_castrated");
         }
-        if (dataList.avatar) {
-            dataList.trashBin.push(this.pathQuery("changeToExtPath", { path: dataList.avatar }));
-            delete dataList.avatar;
-        }
+        //立绘引用：以编辑器持有的引用为准，**不从 DOM 反推**——
+        //只要有一次「DOM 里没有立绘」的保存（同草稿开两个实例、裁剪后只剩 blob: URL…），
+        //原来那种从 dataset.avatar 重建 trashBin 的写法就会把已存盘的引用抹成空数组，
+        //文件还在磁盘上、重新打开却再也回不来（用户反馈的 bug 就是这么产生的）。
+        const avatarValue = this.avatarCleared ? "" : (this.avatarReference || this.storedAvatarReference || dataList.avatar);
+        const avatarEntry = this.toExtReference(avatarValue);
+        if (avatarEntry) dataList.trashBin.push(avatarEntry);
+        delete dataList.avatar;
+        //记录里原有的非立绘标记（sex:male_castrated / des:… 等）原样写回，别在保存时丢掉
+        (this.loadedTrashBin || []).forEach(item => {
+            if (typeof item !== "string" || !item) return;
+            if (this.isAvatarReference(item)) return;
+            if (dataList.trashBin.includes(item)) return;
+            dataList.trashBin.push(item);
+        });
         if (dataList.dieAudios) {
             dataList.dieAudios = dataList.dieAudios.map(path => this.pathQuery("changeToExtPath", { path }));
         }

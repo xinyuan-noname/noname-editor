@@ -492,6 +492,15 @@ mainPage.innerHTML=`
         if (!key && draftKey) {
             key = Object.keys(records).find(item => records[item] && records[item].id === draftKey) || "";
         }
+        //同一份草稿只留一个编辑器：两个实例各存各的，会把对方刚写的立绘引用覆盖成空
+        //（实测 server log：同一份草稿交替写入 ext:… 与空 trashBin，最后文件在磁盘上却恢复不出来）
+        if (key) {
+            const opened = this.characterEditors.find(editor => editor.draftKey === key);
+            if (opened) {
+                this.activateMainPane(opened);
+                return opened;
+            }
+        }
         const characterEditor = document.createElement("character-editor");
         //必须在挂载前设置：组件的 connectedCallback 会按 draft-key 载入草稿
         if (key) characterEditor.setAttribute("draft-key", key);
