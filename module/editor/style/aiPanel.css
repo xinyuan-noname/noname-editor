@@ -327,21 +327,6 @@ input[type="range"] {
     background: rgba(255, 255, 255, 0.24);
 }
 
-.advanced {
-    font-size: 0.9em;
-}
-
-.advanced > summary {
-    cursor: pointer;
-    opacity: 0.85;
-}
-
-.advanced[open] {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
 .progress {
     font-size: 0.82em;
     opacity: 0.85;

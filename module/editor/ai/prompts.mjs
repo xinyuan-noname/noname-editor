@@ -435,8 +435,44 @@ export function fallbackArtPrompt(subject = {}, styleKey = "guofeng") {
     return parts.filter(Boolean).join("，");
 }
 
-/** 原画扩写的系统提示词 */
-export const IMAGE_SYSTEM = [
+// ───────────────────────── 需求改写（「优化提示」按钮）─────────────────────────
+
+/**
+ * 改写需求用的系统提示词。
+ * 用户原来能看到一堆「高级设置」（势力/体力/技能数/前缀…），2026-10 按用户要求下线了——
+ * 那些维度改由这一个按钮承担：把随口写的一句话补齐成明确的设计需求，再交给生成那一步。
+ */
+export const OPTIMIZE_SYSTEM = [
+    "你是《无名杀》（开源三国杀类游戏）的需求改写助手。",
+    "用户会给你一句随口写的武将需求，你要把它改写成**一段更明确的设计需求**，供另一个模型据此产出武将设计稿。",
+    "",
+    "硬性要求：",
+    "1. 只输出改写后的需求本身（一段话，60~150 字），不要解释、不要引号、不要分点编号、不要 markdown 标题。",
+    "2. 把该说清的都补上：势力、性别、体力区间、技能数量、核心玩法机制（用什么换什么）、强度定位（正常/偏强/偏弱）、气质风格。",
+    "3. 用户已经明确写了的**不要改动**；用户没写的，按「与已有设计不重复」的原则补一个合理且保守的选择（强度默认正常）。",
+    "4. **不要**指定技能名、不要写代码、不要给具体数值公式（那是下一步设计稿的事）。",
+    "5. 不要出现「无限摸牌 / 无条件清空手牌 / 无代价持续回血」这类失衡要求。",
+    "6. 用中文输出，不要输出 JSON。"
+].join("\n");
+
+/**
+ * 组装「优化提示」的消息
+ * @param {{ request:string, skillText?:string }} input
+ * @returns {Array<{role:string,content:string}>}
+ */
+export function buildOptimizeMessages(input = {}) {
+    const request = String(input.request || "").trim();
+    const skillText = String(input.skillText || "").trim();
+    const system = skillText
+        ? `${OPTIMIZE_SYSTEM}\n\n（下面是这个项目当前使用的设计规范，改写时参考它，让需求更容易产出符合规范的设计）\n${skillText}`
+        : OPTIMIZE_SYSTEM;
+    return [
+        { role: "system", content: system },
+        { role: "user", content: `把下面这段武将需求改写成一段更明确的设计需求：\n${request}` }
+    ];
+}
+
+/** 原画扩写的系统提示词 */export const IMAGE_SYSTEM = [
     "你是文生图提示词工程师，为《无名杀》（三国杀类游戏）的武将设计竖版卡牌立绘。",
     "把用户给的武将资料扩写成**一段**提示词（中文，120~200 字），只输出提示词本身，不要解释、不要引号、不要分行编号。",
     "必须包含：人物身份与外貌、服饰铠甲的材质与纹样、姿态与神情、光线与色调、背景。",

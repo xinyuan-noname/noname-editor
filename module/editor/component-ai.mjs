@@ -14,7 +14,7 @@ import {
     extractJSON, base64ToBlob, guessImageMime, fetchImageBlob, mimeToExt, normalizeBaseUrl, estimateTokens
 } from "./ai/client.mjs";
 import {
-    ART_STYLES, buildCharacterMessages, buildImageMessages, normalizeDraft, fallbackArtPrompt
+    ART_STYLES, buildCharacterMessages, buildImageMessages, buildOptimizeMessages, normalizeDraft, fallbackArtPrompt
 } from "./ai/prompts.mjs";
 import { ensureHostImport, injectSkillRegistration } from "./ai/skills.mjs";
 import { loadSkillDoc } from "./ai/skillDoc.mjs";
@@ -86,34 +86,6 @@ shadow.innerHTML=`
             <span class="example" data-example="群势力武将，回合外也能用牌，体力4，一个视为技一个触发技">回合外偷袭</span>
             <span class="example" data-example="吴势力女性武将，辅助队友摸牌并回复，体力3，两个技能">团队辅助</span>
         </div>
-        <details class="advanced">
-            <summary>高级设置（可选）</summary>
-            <label class="row"><span>候选数量</span><select class="adv-count"><option value="1">1 个</option><option value="2" selected>2 个</option><option value="3">3 个</option></select></label>
-            <label class="row"><span>势力</span><select class="adv-group">
-                <option value="">不指定</option>
-                <option value="wei">魏</option>
-                <option value="shu">蜀</option>
-                <option value="wu">吴</option>
-                <option value="qun">群雄</option>
-                <option value="jin">晋</option>
-                <option value="shen">神</option>
-            </select></label>
-            <label class="row"><span>体力</span><select class="adv-hp">
-                <option value="">不指定</option>
-                <option value="1~3 血（多技能脆皮）">1~3 血（多技能脆皮）</option>
-                <option value="3 血">3 血</option>
-                <option value="4 血">4 血</option>
-                <option value="5~6 血（少技能厚血）">5~6 血（少技能厚血）</option>
-            </select></label>
-            <label class="row"><span>技能数</span><select class="adv-skillcount">
-                <option value="">不指定</option>
-                <option value="1 个技能">1 个技能</option>
-                <option value="2 个技能">2 个技能</option>
-                <option value="3 个技能">3 个技能</option>
-            </select></label>
-            <label class="row"><span>id 前缀</span><input class="adv-prefix" value="ai_" spellcheck="false" title="生成的武将与技能 id 都会以它开头，避免和已有内容重名"></label>
-            <label class="row"><span>不要出现</span><input class="adv-avoid" spellcheck="false" placeholder="如：卖血、觉醒、限定技"></label>
-        </details>
         <details class="skill-book">
             <summary>AI 技能书（Skill.md）<span class="skill-size muted"></span></summary>
             <label class="row check-row"><span><input type="checkbox" class="skill-enabled" checked>每次生成时把它发给 AI</span></label>
@@ -126,6 +98,7 @@ shadow.innerHTML=`
         </details>
         <div class="actions">
             <button class="gen-draft" type="button">生成设计稿</button>
+            <button class="optimize-prompt ghost" type="button" title="让 AI 把你的描述改写成更明确的设计需求（补势力/体力/技能数/核心机制；会消耗 token）">优化提示</button>
             <button class="cancel-task" type="button" hidden>停止</button>
             <span class="progress"></span>
         </div>
@@ -266,6 +239,7 @@ shadow.innerHTML=`
             <li>
                 <b>第三步：写一句话，生成设计稿</b>
                 <p>切到上方的「生成设计稿」标签页，用一句话描述你想要的武将，点「生成设计稿」。<br>
+                    描述得随意也没关系：点「优化提示」，AI 会把它补齐成明确的设计需求（势力 / 体力 / 技能数 / 核心机制）。<br>
                     每个技能都会附一份可在游戏里直接运行的 shya 源码；点「一键应用」就会变成编辑器里的一份武将草稿。</p>
             </li>
         </ol>
@@ -888,6 +862,7 @@ shadow.innerHTML=`
             this.#q(".request").focus();
         }));
         this.#q(".gen-draft").addEventListener("pointerup", () => this.generateDraft());
+        this.#q(".optimize-prompt")?.addEventListener("pointerup", () => this.optimizePrompt());
         this.#q(".cancel-task").addEventListener("pointerup", () => {
             this.#taskAbort?.abort();
             this.#setProgress("draft", "已请求停止…");
@@ -910,6 +885,7 @@ shadow.innerHTML=`
     #setBusy(scope, busy, text = "") {
         const draftBusy = scope === "draft" && busy;
         this.#q(".gen-draft").disabled = draftBusy;
+        if (this.#q(".optimize-prompt")) this.#q(".optimize-prompt").disabled = draftBusy;
         this.#q(".gen-art").disabled = scope === "art" && busy;
         this.#q(".expand-prompt").disabled = scope === "art" && busy;
         this.#q(".cancel-task").hidden = !draftBusy;
@@ -1034,16 +1010,67 @@ shadow.innerHTML=`
         });
         return { characters: Array.from(characters), skills: Object.keys(lib.skill || {}) };
     }
-    /** 高级设置 → 生成参数 */
-    #advancedOptions() {
-        return {
-            count: Number(this.#q(".adv-count").value) || 2,
-            prefix: (this.#q(".adv-prefix").value.trim().toLowerCase().replace(/[^a-z0-9_]/g, "") || "ai_"),
-            group: this.#q(".adv-group").value,
-            hpRange: this.#q(".adv-hp").value,
-            skillCount: this.#q(".adv-skillcount").value,
-            avoid: this.#q(".adv-avoid").value.trim()
-        };
+    /** 高级设置已按用户要求下线：生成参数只留固定默认值（要调就改这里） */
+    #generationOptions() {
+        return { count: 2, prefix: "ai_" };
+    }
+    /**
+     * 「优化提示」：把随口写的一句话改写成明确的设计需求（补势力/体力/技能数/核心机制/强度）。
+     * 这是用户下线「高级设置」后的替代品——那些维度改成由 AI 按需补全，人只要说清想要什么。
+     * 也是一次对话调用，所以走同一套「停止 / 用量统计」。
+     */
+    async optimizePrompt() {
+        this.#showTab("draft");
+        const config = getTextConfig(this);
+        if (!config.baseUrl || !config.model) {
+            this.openSheet("config");
+            this.#setResult("text", "「优化提示」要用对话接口：在列表里点一家服务商、粘上 API Key，再点「测试连接」。", "warn");
+            return;
+        }
+        const request = this.#q(".request").value.trim();
+        if (!request) {
+            this.#setProgress("draft", "先写一句你想要的武将描述（或点上面的示例），再点「优化提示」。");
+            return;
+        }
+        const controller = new AbortController();
+        this.#taskAbort = controller;
+        this.#setBusy("draft", true, "正在优化提示…（通常几秒到十几秒）");
+        try {
+            const result = await chat({
+                baseUrl: config.baseUrl,
+                apiKey: config.apiKey,
+                model: config.model,
+                temperature: 0.6,
+                jsonMode: false,
+                //技能书同样带上：改写需求时参考设计规范，产出的需求更容易过规范
+                messages: buildOptimizeMessages({ request, skillText: this.#skillBookText() }),
+                signal: controller.signal
+            });
+            if (!result.ok) {
+                this.#setBusy("draft", false);
+                this.#setProgress("draft", `优化失败：\n${this.#errorText(result.error)}`);
+                return;
+            }
+            addUsage(this, result.usage || { prompt: 0, completion: 0, total: 0, cached: 0 });
+            this.#renderUsage(result.usage);
+            //模型偶尔会把整段用引号括起来
+            const text = result.content.trim().replace(/^["“「']+/, "").replace(/["”」']+$/, "").trim();
+            if (!text) {
+                this.#setBusy("draft", false);
+                this.#setProgress("draft", "模型没有给出内容，换个模型或再点一次试试。");
+                return;
+            }
+            this.#q(".request").value = text;
+            this.#setBusy("draft", false);
+            this.#setProgress("draft", `提示已优化 ✓ 可以直接改，或点「生成设计稿」。${
+                result.usage ? `本次 tokens ${this.#formatNumber(result.usage.total)}。` : "服务商未返回 token 用量。"}`);
+        } catch (err) {
+            this.#setBusy("draft", false);
+            this.#setProgress("draft", `优化出错：${(err && err.message) || err}`);
+        } finally {
+            this.#taskAbort = null;
+            this.#q(".cancel-task").hidden = true;
+        }
     }
     /** ① 生成设计稿：对话模型 → JSON → 归一化 → 结果卡片 */
     async generateDraft() {
@@ -1060,7 +1087,7 @@ shadow.innerHTML=`
             this.#setProgress("draft", "先写一句你想要的武将描述（或点上面的示例）。");
             return;
         }
-        const options = this.#advancedOptions();
+        const options = this.#generationOptions();
         const controller = new AbortController();
         this.#taskAbort = controller;
         this.#setBusy("draft", true, "正在生成设计稿…（通常 10~60 秒，可点「停止」）");
@@ -1387,6 +1414,14 @@ shadow.innerHTML=`
         this.#setProgress("draft", failed.length
             ? `已应用 ${applied.length}/${draft.skills.length} 个技能：${failed.join("、")} 没成功（见技能卡上的诊断，可点「打开技能编辑器」改好再应用）。武将草稿已建好。`
             : `已应用 ✓ 武将「${draft.name}」已建成草稿，${applied.length} 个技能已在局内生效（技能卡片见主区）。`);
+        //应用完的下一步就是给这位武将出图：直接切到「生成原画」，并把「画谁」对准刚建好的草稿。
+        //⚠️ 顺序要紧：renderDrafts() 会重刷「画谁」下拉，所以设值必须排在它后面
+        this.#showTab("art");
+        const subjectSelect = this.#q(".art-subject");
+        if (subjectSelect) subjectSelect.value = `draft:${index}`;
+        this.#prefillArtPrompt();
+        this.#setProgress("art", `设计稿已应用 ✓ 上面「画谁」已选中「${draft.name}」，点「生成原画」就能出图。${
+            failed.length ? "（有技能没生效，切回「生成设计稿」看诊断）" : ""}`);
     }
 
     /** 把某份技能源码带进 shya 技能编辑器 */

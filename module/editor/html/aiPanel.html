@@ -27,34 +27,6 @@
             <span class="example" data-example="群势力武将，回合外也能用牌，体力4，一个视为技一个触发技">回合外偷袭</span>
             <span class="example" data-example="吴势力女性武将，辅助队友摸牌并回复，体力3，两个技能">团队辅助</span>
         </div>
-        <details class="advanced">
-            <summary>高级设置（可选）</summary>
-            <label class="row"><span>候选数量</span><select class="adv-count"><option value="1">1 个</option><option value="2" selected>2 个</option><option value="3">3 个</option></select></label>
-            <label class="row"><span>势力</span><select class="adv-group">
-                <option value="">不指定</option>
-                <option value="wei">魏</option>
-                <option value="shu">蜀</option>
-                <option value="wu">吴</option>
-                <option value="qun">群雄</option>
-                <option value="jin">晋</option>
-                <option value="shen">神</option>
-            </select></label>
-            <label class="row"><span>体力</span><select class="adv-hp">
-                <option value="">不指定</option>
-                <option value="1~3 血（多技能脆皮）">1~3 血（多技能脆皮）</option>
-                <option value="3 血">3 血</option>
-                <option value="4 血">4 血</option>
-                <option value="5~6 血（少技能厚血）">5~6 血（少技能厚血）</option>
-            </select></label>
-            <label class="row"><span>技能数</span><select class="adv-skillcount">
-                <option value="">不指定</option>
-                <option value="1 个技能">1 个技能</option>
-                <option value="2 个技能">2 个技能</option>
-                <option value="3 个技能">3 个技能</option>
-            </select></label>
-            <label class="row"><span>id 前缀</span><input class="adv-prefix" value="ai_" spellcheck="false" title="生成的武将与技能 id 都会以它开头，避免和已有内容重名"></label>
-            <label class="row"><span>不要出现</span><input class="adv-avoid" spellcheck="false" placeholder="如：卖血、觉醒、限定技"></label>
-        </details>
         <details class="skill-book">
             <summary>AI 技能书（Skill.md）<span class="skill-size muted"></span></summary>
             <label class="row check-row"><span><input type="checkbox" class="skill-enabled" checked>每次生成时把它发给 AI</span></label>
@@ -67,6 +39,7 @@
         </details>
         <div class="actions">
             <button class="gen-draft" type="button">生成设计稿</button>
+            <button class="optimize-prompt ghost" type="button" title="让 AI 把你的描述改写成更明确的设计需求（补势力/体力/技能数/核心机制；会消耗 token）">优化提示</button>
             <button class="cancel-task" type="button" hidden>停止</button>
             <span class="progress"></span>
         </div>
@@ -207,6 +180,7 @@
             <li>
                 <b>第三步：写一句话，生成设计稿</b>
                 <p>切到上方的「生成设计稿」标签页，用一句话描述你想要的武将，点「生成设计稿」。<br>
+                    描述得随意也没关系：点「优化提示」，AI 会把它补齐成明确的设计需求（势力 / 体力 / 技能数 / 核心机制）。<br>
                     每个技能都会附一份可在游戏里直接运行的 shya 源码；点「一键应用」就会变成编辑器里的一份武将草稿。</p>
             </li>
         </ol>
