@@ -1,0 +1,630 @@
+/*
+ * <ai-panel>（侧栏 AI 页）样式。
+ * 载入到组件自己的 shadowRoot，类名一律**无前缀短名**（与 setting.css / shyaEditor.css 同一约定），
+ * 调色跟设置页保持一致：深底 + 米黄按钮 + 金色标题。
+ * 侧栏最窄只有 180px、最宽 460px，所以全部按单列、可折行来写。
+ */
+
+:host {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+    color: #f7f7f7;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.main {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-sizing: border-box;
+}
+
+/* ── 顶部状态条 ── */
+.topbar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.status-dot {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #c0504d;
+    box-shadow: 0 0 6px #c0504d;
+}
+
+.status-dot.ok {
+    background: #4caf7d;
+    box-shadow: 0 0 6px #4caf7d;
+}
+
+.status-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.9em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.topbar-actions {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 4px;
+}
+
+/* ── 通用块 ── */
+.block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.18);
+    border-radius: 6px;
+    padding: 8px;
+}
+
+h3 {
+    margin: 0;
+    font-size: 1em;
+    font-weight: 900;
+    color: #ffe9a8;
+    text-shadow: 0 0 3px #000;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: 0.9em;
+    min-width: 0;
+}
+
+.row.column {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+}
+
+.row > span:first-child {
+    flex: 0 0 auto;
+    opacity: 0.9;
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.muted {
+    margin: 0;
+    font-size: 0.85em;
+    opacity: 0.82;
+    line-height: 1.5;
+}
+
+.empty-hint {
+    margin: 0;
+    font-size: 0.85em;
+    opacity: 0.7;
+    line-height: 1.5;
+}
+
+/* ── 表单控件 ── */
+button {
+    font: inherit;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid #6b6b6b;
+    background: #e4d5b7;
+    color: #000;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #f3e6c9;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+button.ghost {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f7f7f7;
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+button.ghost:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+select,
+input:not([type]),
+input[type="text"],
+input[type="password"],
+textarea {
+    font: inherit;
+    padding: 3px 6px;
+    border-radius: 4px;
+    border: 1px solid #6b6b6b;
+    background: #f4ecd8;
+    color: #000;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+textarea {
+    width: 100%;
+    resize: vertical;
+}
+
+.row > select,
+.row > input {
+    flex: 1;
+}
+
+input[type="range"] {
+    flex: 1;
+    min-width: 0;
+}
+
+.examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.example {
+    font-size: 0.8em;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+}
+
+.example:hover {
+    background: rgba(255, 255, 255, 0.24);
+}
+
+.advanced {
+    font-size: 0.9em;
+}
+
+.advanced > summary {
+    cursor: pointer;
+    opacity: 0.85;
+}
+
+.advanced[open] {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.progress {
+    font-size: 0.82em;
+    opacity: 0.85;
+}
+
+.result-line {
+    margin: 4px 0 0;
+    font-size: 0.85em;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.result-line.ok {
+    color: #8fe0b8;
+}
+
+.result-line.err {
+    color: #ff9d9d;
+}
+
+.result-line.warn {
+    color: #ffe9a8;
+}
+
+/* ── 设计稿结果 ── */
+.results,
+.candidates {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.draft-card {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 7px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.25);
+    border-left: 3px solid #7aa7ff;
+}
+
+.draft-card.applied {
+    border-left-color: #4caf7d;
+}
+
+.draft-head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.draft-name {
+    font-size: 1.05em;
+    font-weight: 900;
+    color: #ffe9a8;
+}
+
+.draft-meta {
+    font-size: 0.8em;
+    opacity: 0.85;
+}
+
+.draft-note {
+    font-size: 0.82em;
+    opacity: 0.8;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.skill-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 5px;
+}
+
+.skill-item.bad {
+    border-color: #c0504d;
+}
+
+.skill-item.good {
+    border-color: #4caf7d;
+}
+
+.skill-head {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.skill-name {
+    font-weight: 800;
+}
+
+.skill-id {
+    font-size: 0.78em;
+    opacity: 0.7;
+    font-family: Consolas, monospace;
+}
+
+.skill-desc {
+    font-size: 0.84em;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.skill-code {
+    margin: 0;
+    max-height: 16em;
+    overflow: auto;
+    padding: 5px;
+    border-radius: 4px;
+    background: #0d0f14;
+    color: #cfe6ff;
+    font-family: Consolas, monospace;
+    font-size: 0.78em;
+    white-space: pre;
+}
+
+.diag {
+    font-size: 0.8em;
+    color: #ffb0b0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.diag.ok {
+    color: #8fe0b8;
+}
+
+.draft-actions {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+/* ── 候选图 ── */
+.candidate-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 6px;
+}
+
+.candidate {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.candidate img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    cursor: zoom-in;
+    background: #111;
+}
+
+.candidate.broken img {
+    opacity: 0.25;
+}
+
+.candidate-ops {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    flex-wrap: wrap;
+}
+
+.candidate-ops > button {
+    flex: 1;
+    padding: 2px 4px;
+    font-size: 0.78em;
+}
+
+.candidate-meta {
+    padding: 0 4px 4px;
+    font-size: 0.72em;
+    opacity: 0.7;
+    word-break: break-all;
+}
+
+/* ── 历史 ── */
+.history-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.history-list > li {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.86em;
+}
+
+.history-list .history-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.history-list .history-time {
+    font-size: 0.85em;
+    opacity: 0.7;
+    flex: 0 0 auto;
+}
+
+/* ── 配置 / 引导浮层（同面板内整块切换，不做绝对定位覆盖层）── */
+.sheet {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.28);
+    border-radius: 6px;
+    padding: 8px;
+}
+
+.sheet[hidden],
+.block[hidden],
+.sheet-pane[hidden] {
+    display: none;
+}
+
+.sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.sheet-title {
+    font-weight: 900;
+    color: #ffe9a8;
+    text-shadow: 0 0 3px #000;
+}
+
+.sheet-tabs {
+    display: flex;
+    gap: 4px;
+}
+
+.sheet-tabs > button {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.1);
+    color: #f7f7f7;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.sheet-tabs > button.chosen {
+    background: #e4d5b7;
+    color: #000;
+    border-color: #e4d5b7;
+    font-weight: 800;
+}
+
+.sheet-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.profile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.profile {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.08);
+    color: #f7f7f7;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 6px;
+    padding: 5px 7px;
+    line-height: 1.45;
+}
+
+.profile:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.profile.chosen {
+    border-color: #7aa7ff;
+    background: rgba(122, 167, 255, 0.2);
+}
+
+.profile-name {
+    font-weight: 800;
+}
+
+.profile .badge {
+    margin-left: 4px;
+    padding: 0 4px;
+    border-radius: 3px;
+    font-size: 0.72em;
+    background: #7aa7ff;
+    color: #08203f;
+}
+
+.profile-fit,
+.profile-price {
+    display: block;
+    font-size: 0.8em;
+    opacity: 0.85;
+}
+
+.profile-price {
+    color: #ffe9a8;
+}
+
+.profile-help {
+    font-size: 0.85em;
+}
+
+.profile-help b {
+    color: #ffe9a8;
+}
+
+.profile-help ol {
+    margin: 4px 0;
+    padding-left: 1.3em;
+}
+
+.profile-help .tip {
+    display: block;
+    margin-top: 4px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: rgba(255, 233, 168, 0.12);
+    color: #ffe9a8;
+}
+
+.key-field,
+.model-field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.key-field > input,
+.model-field > input {
+    flex: 1;
+    min-width: 0;
+}
+
+.key-field > button,
+.model-field > button {
+    flex: 0 0 auto;
+    padding: 2px 6px;
+}
+
+/* ── 引导 ── */
+.guide-steps {
+    margin: 0;
+    padding-left: 1.3em;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.9em;
+}
+
+.guide-steps b {
+    color: #ffe9a8;
+}
+
+.guide-steps p {
+    margin: 3px 0 0;
+}
+
+.faq {
+    font-size: 0.88em;
+}
+
+.faq > summary {
+    cursor: pointer;
+    font-weight: 800;
+    color: #ffe9a8;
+}
+
+.faq dl {
+    margin: 4px 0 0;
+}
+
+.faq dt {
+    font-weight: 800;
+    margin-top: 5px;
+}
+
+.faq dd {
+    margin: 1px 0 0 0;
+    opacity: 0.88;
+}

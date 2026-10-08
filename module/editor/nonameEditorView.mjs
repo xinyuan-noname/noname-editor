@@ -1,6 +1,7 @@
 "use script";
 import "./component.mjs";
 import "./component-setting.mjs";
+import "./component-ai.mjs";
 import { UniqueChoiceManager, DragManager, toggleMultiClass } from "./encapsulated.mjs";
 
 /**
@@ -89,6 +90,9 @@ export class NonameEditorView {
     get navCard() {
         return this.nav.querySelector(".xy-ED-nav-card")
     }
+    get navAi() {
+        return this.nav.querySelector(".xy-ED-nav-ai")
+    }
     /**
      * @type {NodeListOf<HTMLElement>}
     */
@@ -127,6 +131,13 @@ export class NonameEditorView {
     }
     get sideBarSkill() {
         return this.sideBarContent.querySelector(".xy-ED-sideBar-skill")
+    }
+    /**
+     * 侧栏 AI 页的容器（里面是 <ai-panel>）
+     * @type {HTMLElement}
+     */
+    get sideBarAi() {
+        return this.sideBarContent.querySelector(".xy-ED-sideBar-ai")
     }
     /**
      * @type {NodeListOf<HTMLElement>}
@@ -233,6 +244,7 @@ mainPage.innerHTML=`
                         </div>
                     </div>
                 </div>
+                <div class="xy-ED-sideBar-ai" data-by="ai"><ai-panel></ai-panel></div>
             </div>
             <nav>
                 <div class="xy-ED-nav-setting" data-for="setting" draggable="true"></div>
@@ -240,6 +252,7 @@ mainPage.innerHTML=`
                 <div class="xy-ED-nav-character" data-for="character" draggable="true"></div>
                 <div class="xy-ED-nav-card" data-for="card" draggable="true"></div>
                 <div class="xy-ED-nav-search" data-for="search" draggable="true"></div>
+                <div class="xy-ED-nav-ai" data-for="ai" draggable="true"></div>
             </nav>
         </div>
     </div>
@@ -256,6 +269,7 @@ mainPage.innerHTML=`
         this.listenSideBarCharacter();
         this.listenSideBarSkill();
         this.listenSideBarSearch();
+        this.listenSideBarAi();
         //
         this.listenNavsReOrder();
         this.listenNavChoose();
@@ -1288,6 +1302,15 @@ mainPage.innerHTML=`
         this.navSkill.addEventListener("pointerup", () => {
             if (typeof game.x19D6_openSkillEditor === "function") game.x19D6_openSkillEditor();
         });
+    }
+    /**
+     * 侧栏 AI 页：把外壳交给面板（它要用主区的武将编辑器：建草稿、设立绘、读当前草稿）。
+     * 不走 CustomEvent 是因为「用作立绘」必须拿武将编辑器 saveLocalAsset 的返回值，
+     * 事件传不回来（详见 component-ai.mjs 顶部注释）。
+     */
+    listenSideBarAi() {
+        const panel = this.sideBarAi?.querySelector("ai-panel");
+        if (panel) panel.editorView = this;
     }
     listenSideBarSearch() {
         const { sideBarSearch } = this;

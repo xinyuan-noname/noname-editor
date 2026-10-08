@@ -720,3 +720,14 @@ body.xy-ED-col-resizing * {
     color: #000;
     cursor: pointer;
 }
+
+/* AI 导航项（字形，与「技」同款，无需额外图片资源） */
+.xy-ED-viewArea>.xy-ED-sideBar>nav>.xy-ED-nav-ai::before {
+    content: "AI";
+    font-size: calc(var(--xy-ED-nav-icon) * 0.58);
+    font-weight: 900;
+    line-height: var(--xy-ED-nav-icon);
+    text-align: center;
+    color: #fff;
+    text-shadow: 0 0 3px #000;
+}

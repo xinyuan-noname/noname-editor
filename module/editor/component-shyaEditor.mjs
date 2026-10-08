@@ -308,6 +308,30 @@ shadow.innerHTML=`
         return { source: HOST_IMPORT + "\n" + source, injected: 1 };
     }
     /**
+     * 外部塞一份源码进来（AI 区域「打开技能编辑器」用）。
+     * 只写文本框与技能 id，产物与诊断清空——让用户自己按「编译」确认，不静默生效。
+     * @param {string} code shya 源码
+     * @param {string} [skillId] 技能 id；不传就从源码的 #skill 槽里取
+     * @returns {this}
+     */
+    setSource(code, skillId = "") {
+        if (typeof code === "string" && code.trim()) {
+            if (!this.sourceArea) this.sourceArea = this.shadowRoot.querySelector(".source");
+            if (this.sourceArea) this.sourceArea.value = code;
+            this.generatedCode = "";
+            const output = this.shadowRoot.querySelector(".output");
+            if (output) output.textContent = "";
+            this.setDiagnostics('<span class="warn">已从 AI 区域载入源码：点「编译」检查，再点「生成」在局内生效</span>');
+        }
+        const id = skillId || (/^\s*#skill:\s*([A-Za-z_$][\w$]*)/m.exec(String(code || "")) || [])[1] || "";
+        if (id) {
+            const input = this.shadowRoot.querySelector(".skill-id");
+            if (input) input.value = id;
+        }
+        this.triggerEvent("tabTitleChange");
+        return this;
+    }
+    /**
      * 设置技能类型标记（决定标签组可见性），供外部或后续「基本设置」工具调用
      * @param {string[]} types
      */

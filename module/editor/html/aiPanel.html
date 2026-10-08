@@ -1,0 +1,201 @@
+<section class="main">
+    <header class="topbar">
+        <span class="status-dot"></span>
+        <span class="status-text">未配置接口</span>
+        <span class="topbar-actions">
+            <button class="to-config" type="button" title="填写接口地址与 API Key">⚙ 配置</button>
+            <button class="to-guide" type="button" title="不会设置？看这里">❓ 引导</button>
+        </span>
+    </header>
+
+    <section class="block" data-block="draft">
+        <h3>① 生成武将设计稿</h3>
+        <textarea class="request" rows="3" spellcheck="false" placeholder="用一句话描述你要的武将，例如：蜀势力女性武将，靠卖血换爆发，体力3，两个技能"></textarea>
+        <div class="examples">
+            <span class="example" data-example="蜀势力女性武将，靠卖血换爆发，体力3，两个技能">卖血爆发</span>
+            <span class="example" data-example="魏势力男性武将，靠弃牌控制距离，体力4，一个锁定技">控场封锁</span>
+            <span class="example" data-example="群势力武将，回合外也能用牌，体力4，一个视为技一个触发技">回合外偷袭</span>
+            <span class="example" data-example="吴势力女性武将，辅助队友摸牌并回复，体力3，两个技能">团队辅助</span>
+        </div>
+        <details class="advanced">
+            <summary>高级设置（可选）</summary>
+            <label class="row"><span>候选数量</span><select class="adv-count"><option value="1">1 个</option><option value="2" selected>2 个</option><option value="3">3 个</option></select></label>
+            <label class="row"><span>势力</span><select class="adv-group">
+                <option value="">不指定</option>
+                <option value="wei">魏</option>
+                <option value="shu">蜀</option>
+                <option value="wu">吴</option>
+                <option value="qun">群雄</option>
+                <option value="jin">晋</option>
+                <option value="shen">神</option>
+            </select></label>
+            <label class="row"><span>体力</span><select class="adv-hp">
+                <option value="">不指定</option>
+                <option value="1~3 血（多技能脆皮）">1~3 血（多技能脆皮）</option>
+                <option value="3 血">3 血</option>
+                <option value="4 血">4 血</option>
+                <option value="5~6 血（少技能厚血）">5~6 血（少技能厚血）</option>
+            </select></label>
+            <label class="row"><span>技能数</span><select class="adv-skillcount">
+                <option value="">不指定</option>
+                <option value="1 个技能">1 个技能</option>
+                <option value="2 个技能">2 个技能</option>
+                <option value="3 个技能">3 个技能</option>
+            </select></label>
+            <label class="row"><span>id 前缀</span><input class="adv-prefix" value="ai_" spellcheck="false" title="生成的武将与技能 id 都会以它开头，避免和已有内容重名"></label>
+            <label class="row"><span>不要出现</span><input class="adv-avoid" spellcheck="false" placeholder="如：卖血、觉醒、限定技"></label>
+        </details>
+        <div class="actions">
+            <button class="gen-draft" type="button">生成设计稿</button>
+            <button class="cancel-task" type="button" hidden>停止</button>
+            <span class="progress"></span>
+        </div>
+        <div class="results" data-by="draft">
+            <p class="empty-hint">生成的候选会出现在这里，点「一键应用」即可变成编辑器里的一份武将草稿。</p>
+        </div>
+    </section>
+
+    <section class="block" data-block="art">
+        <h3>② 生成原画</h3>
+        <label class="row"><span>画谁</span><select class="art-subject"></select></label>
+        <textarea class="art-prompt" rows="3" spellcheck="false" placeholder="画面描述；留空则按武将资料自动拼一段"></textarea>
+        <label class="row"><span>画风</span><select class="art-style"></select></label>
+        <div class="art-params">
+            <label class="row"><span>尺寸</span><input class="art-size" list="ai-size-options" spellcheck="false" value="768x1024"></label>
+            <datalist id="ai-size-options" class="size-options"></datalist>
+            <label class="row"><span>张数</span><select class="art-count"><option value="1" selected>1 张</option><option value="2">2 张</option><option value="4">4 张</option></select></label>
+        </div>
+        <label class="row"><span>负面</span><input class="art-negative" spellcheck="false" placeholder="不要出现的元素（可选，部分服务支持）"></label>
+        <div class="actions">
+            <button class="expand-prompt" type="button" title="用对话模型把武将资料扩写成美术提示词">AI 扩写</button>
+            <button class="gen-art" type="button">生成原画</button>
+            <span class="progress art-progress"></span>
+        </div>
+        <div class="candidates" data-by="candidates">
+            <p class="empty-hint">还没有候选图。生成后在这里点「用作立绘」才会真正换掉武将的立绘。</p>
+        </div>
+    </section>
+
+    <section class="block" data-block="history">
+        <h3>生成历史</h3>
+        <ul class="history-list"></ul>
+        <div class="actions"><button class="clear-history" type="button">清空历史</button></div>
+    </section>
+
+    <div class="sheet" data-sheet="config" hidden>
+        <header class="sheet-head">
+            <span class="sheet-title">接口配置</span>
+            <button class="sheet-close" type="button" title="关闭">✕</button>
+        </header>
+        <div class="sheet-tabs">
+            <button type="button" class="chosen" data-config-tab="text">对话接口</button>
+            <button type="button" data-config-tab="image">生图接口</button>
+        </div>
+
+        <div class="sheet-pane" data-config-pane="text">
+            <p class="muted">先点一张服务商卡片（会自动填好地址与模型），再把申请来的 key 粘进去。</p>
+            <div class="profile-list" data-profile-kind="text"></div>
+            <label class="row column"><span>接口地址</span><input class="cfg-baseurl" spellcheck="false" placeholder="例如 https://api.deepseek.com/v1"></label>
+            <label class="row column"><span>API Key</span>
+                <span class="key-field">
+                    <input class="cfg-apikey" type="password" spellcheck="false" placeholder="粘贴服务商给的 key">
+                    <button class="key-toggle" type="button" title="显示 / 隐藏 key">👁</button>
+                </span>
+            </label>
+            <label class="row column"><span>模型</span>
+                <span class="model-field">
+                    <input class="cfg-model" list="ai-text-models" spellcheck="false" placeholder="例如 deepseek-chat">
+                    <button class="cfg-pull" type="button" title="从该地址拉取可用模型列表">拉取</button>
+                </span>
+            </label>
+            <datalist id="ai-text-models" class="model-options"></datalist>
+            <label class="row"><span>温度</span><input class="cfg-temperature" type="range" min="0" max="1.5" step="0.1" value="0.8"><b class="cfg-temperature-value">0.8</b></label>
+            <div class="profile-help"></div>
+            <div class="actions">
+                <button class="cfg-test" type="button">测试连接</button>
+                <button class="cfg-save" type="button">保存</button>
+                <button class="cfg-open-site" type="button">打开申请页</button>
+            </div>
+            <p class="result-line"></p>
+        </div>
+
+        <div class="sheet-pane" data-config-pane="image" hidden>
+            <p class="muted">生图接口可以和对话接口用同一个 key（硅基流动、火山方舟、智谱、OpenAI 都是）。</p>
+            <div class="profile-list" data-profile-kind="image"></div>
+            <label class="row column"><span>接口地址</span><input class="img-baseurl" spellcheck="false" placeholder="例如 https://api.siliconflow.cn/v1"></label>
+            <label class="row column"><span>API Key</span>
+                <span class="key-field">
+                    <input class="img-apikey" type="password" spellcheck="false" placeholder="粘贴服务商给的 key">
+                    <button class="key-toggle" type="button" title="显示 / 隐藏 key">👁</button>
+                </span>
+            </label>
+            <label class="row column"><span>模型</span>
+                <span class="model-field">
+                    <input class="img-model" list="ai-image-models" spellcheck="false" placeholder="例如 Kwai-Kolors/Kolors">
+                    <button class="img-pull" type="button" title="从该地址拉取可用模型列表">拉取</button>
+                </span>
+            </label>
+            <datalist id="ai-image-models" class="model-options"></datalist>
+            <label class="row"><span>尺寸</span><input class="img-size" list="ai-size-options-image" spellcheck="false" value="768x1024"></label>
+            <datalist id="ai-size-options-image" class="size-options"></datalist>
+            <label class="row column"><span>附加参数</span>
+                <input class="img-extra" spellcheck="false" placeholder='可留空；如 {"watermark": false}'>
+            </label>
+            <div class="profile-help"></div>
+            <div class="actions">
+                <button class="img-test" type="button">测试连接</button>
+                <button class="img-save" type="button">保存</button>
+                <button class="img-open-site" type="button">打开申请页</button>
+            </div>
+            <p class="result-line"></p>
+        </div>
+    </div>
+
+    <div class="sheet" data-sheet="guide" hidden>
+        <header class="sheet-head">
+            <span class="sheet-title">三步就能用上 AI</span>
+            <button class="sheet-close" type="button" title="关闭">✕</button>
+        </header>
+        <ol class="guide-steps">
+            <li>
+                <b>第一步：去服务商网站拿一个 API Key</b>
+                <p>AI 能力在服务商那边，编辑器只负责替你发请求，所以要有一个「钥匙」（API Key）。<br>
+                    推荐两家国内直连、注册简单的：<b>DeepSeek</b>（写武将设计稿，便宜）和 <b>硅基流动</b>（一个 key 还能生图）。</p>
+                <p class="muted">key 就像密码：只存在你自己的电脑上（游戏配置里），不要发到群里、不要截图给别人。</p>
+            </li>
+            <li>
+                <b>第二步：把 key 填进编辑器</b>
+                <p>点下面「去配置」→ 在「对话接口」里点服务商卡片（地址会自动填好）→ 粘贴 key → 点「测试连接」。</p>
+                <p class="muted">测试成功会显示「连接正常」并列出模型名；失败会告诉你具体是哪一步错了（key 错 / 地址错 / 余额不足 / 网络不通）。</p>
+            </li>
+            <li>
+                <b>第三步：写一句话，生成设计稿</b>
+                <p>回到「① 生成武将设计稿」，用一句话描述你想要的武将，点「生成设计稿」。<br>
+                    每个技能都会附一份可在游戏里直接运行的 shya 源码；点「一键应用」就会变成编辑器里的一份武将草稿。</p>
+            </li>
+        </ol>
+        <details class="faq">
+            <summary>常见问题</summary>
+            <dl>
+                <dt>要不要花钱？</dt>
+                <dd>多数服务商有新用户免费额度；DeepSeek 充几块钱就能用很久。本地模型（Ollama）完全免费。</dd>
+                <dt>提示 401 / 密钥被拒绝</dt>
+                <dd>key 复制不全或已失效。回服务商后台重新复制（注意别把空格、换行一起粘进来）。</dd>
+                <dt>提示 404 / 地址不存在</dt>
+                <dd>「接口地址」一般只写到 <b>/v1</b> 为止，不要带 <b>/chat/completions</b>。本地模型端口别填错（Ollama 11434、LM Studio 1234）。</dd>
+                <dt>提示 429 / 额度用尽</dt>
+                <dd>免费额度用完或余额不足，去服务商后台充值；也可能是问得太快，等一分钟再试。</dd>
+                <dt>连不上（网络错误）</dt>
+                <dd>国内服务商不需要代理；如果你开着全局代理，先关掉再试。用本地模型时确认 Ollama / LM Studio 已经启动。</dd>
+                <dt>生成的技能编译报错怎么办？</dt>
+                <dd>结果卡片上会显示哪一行错了，点「打开技能编辑器」可以直接改源码再编译；也可以点「重新生成」换一版。</dd>
+                <dt>API Key 会泄露吗？</dt>
+                <dd>请求直接从本机发往你填的地址，编辑器不经过任何中转，也不上传 key。</dd>
+            </dl>
+        </details>
+        <div class="actions">
+            <button class="guide-config" type="button">去配置</button>
+            <button class="guide-done" type="button">我知道了</button>
+        </div>
+    </div>
+</section>

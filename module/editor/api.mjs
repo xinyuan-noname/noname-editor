@@ -129,7 +129,10 @@ async function resolveSkillEditorVersion() {
     return version;
 }
 /**
- * 新版 shya 技能编辑器（接入中：组件与编译链路完成后替换此处）
+ * 新版 shya 技能编辑器
+ * @param {{ parent?: HTMLElement, source?: string, skillId?: string }} [options]
+ *   source / skillId：带一份源码打开（AI 区域的「打开技能编辑器」用）；
+ *   组件实现了 setSource 才生效，没实现就只是打开编辑器。
  */
 async function openShyaSkillEditor(options = {}) {
     const instance = ensureMounted(options.parent);
@@ -143,6 +146,9 @@ async function openShyaSkillEditor(options = {}) {
     } else {
         node = document.createElement("shya-editor");
         instance.view.mainArea.appendChild(node);
+    }
+    if (typeof node.setSource === "function" && (options.source || options.skillId)) {
+        node.setSource(options.source, options.skillId);
     }
     return node;
 }async function openSkillEditor(options = {}) {
@@ -265,6 +271,7 @@ export function installApi() {
     game.x19D6_isReady = () => true;
     game.x19D6_openEditor = openEditor;
     game.x19D6_openSkillEditor = openSkillEditor;
+    game.x19D6_openShyaSkillEditor = openShyaSkillEditor;
     game.x19D6_openLegacySkillEditor = openLegacySkillEditor;
     game.x19D6_openCharacterEditor = openCharacterEditor;
     game.x19D6_createSkill = createSkill;
