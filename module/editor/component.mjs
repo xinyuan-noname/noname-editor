@@ -1078,7 +1078,7 @@ shadow.innerHTML=`
     }
     #listenSex() {
         const sexOptions = this.getDataAreaDom("sex").querySelectorAll("[data-sex-option]");
-        this.createUniqueChoiceManager("sex", ...sexOptions)
+        this.sexChoiceManager = this.createUniqueChoiceManager("sex", ...sexOptions)
             .listenSiblings("pointerup")
             .setCallback((pre, now, funcMap) => {
                 funcMap.forClass("chosen");
@@ -1273,6 +1273,7 @@ shadow.innerHTML=`
                 });
             })
             .choose(groupOptions[0]);
+        this.groupChoiceManager = singleManager;
         doubleManager
             .listenAllNodes("pointerup", (_event, node) => chosenModeManager.getLastestInfo() === "double" && !node.classList.contains("chosen"))
             .setCallback((type, target, funMap) => {
@@ -1337,6 +1338,7 @@ shadow.innerHTML=`
                 }
             })
             .setRevocable(true);
+        this.clanChoiceManager = manager;
         const clanDiy = clansDataArea.querySelector("[data-diy]");
         clanDiy.addEventListener("pointerup", async () => {
             const dialog = document.createElement("noname-dialog");
@@ -2013,10 +2015,11 @@ shadow.innerHTML=`
         }
         //文字输入框（姓名 / 拼音 / id）
         this.syncTextInputs();
-        //选项高亮（选择管理器的高亮是 class，changeData 不碰它）
-        this.markChosenOptions("sex", data.sex);
-        this.markChosenOptions("group", data.group);
-        this.markChosenOptions("clans", data.clans);
+        //选中态：必须走选择管理器的 choose()——只写 class 的话管理器内部状态还是空的，
+        //于是第一次点别的选项时它不知道要摘掉旧的那个（用户反馈：第一次无法切换宗族）
+        this.restoreChoice("sex", this.sexChoiceManager, data.sex);
+        this.restoreChoice("group", this.groupChoiceManager, data.group);
+        this.restoreChoice("clans", this.clanChoiceManager, data.clans);
         if (data.groupName) this.setGroup({ groupId: data.group, groupName: data.groupName });
         //顶部「所属分包」那行用的是 CSS 变量，载入时同样要设
         if (data.extension) this.style.setProperty("--data-extension", `"${data.extension}"`);
@@ -2047,24 +2050,33 @@ shadow.innerHTML=`
             if (idInput && idInput.textContent !== id) idInput.textContent = id;
         }
     }
+
     /**
-     * 回填选项的选中态
+     * 恢复选项选中态。**必须走选择管理器的 `choose()`**：只写 `chosen` 类的话，管理器内部 `chosen` 仍是空的，
+     * 第一次点别的选项时它的 `last` 是 undefined，不会摘掉旧的高亮，看着就是「切不过去」（用户反馈的宗族问题）。
      * @param {"sex"|"group"|"clans"} area
+     * @param {import("./encapsulated.mjs").UniqueChoiceManager} [manager]
      * @param {string|string[]} values
-     * @returns {number} 标记了几个
+     * @returns {boolean} 是否恢复到某个选项
      */
-    markChosenOptions(area, values) {
+    restoreChoice(area, manager, values) {
         const areaDom = this.getDataAreaDom(area);
-        if (!areaDom) return 0;
+        if (!areaDom) return false;
         const list = (Array.isArray(values) ? values : [values]).filter(Boolean);
-        let marked = 0;
-        areaDom.querySelectorAll("[data-sex-option],[data-group-option],[data-clan-option]").forEach(node => {
-            const value = node.dataset.sexOption ?? node.dataset.groupOption ?? node.dataset.clanOption;
-            const chosen = list.includes(value);
-            node.classList.toggle("chosen", chosen);
-            if (chosen) marked++;
-        });
-        return marked;
+        if (!list.length) return false;
+        const config = {
+            sex: ["[data-sex-option]", "sexOption"],
+            group: ["[data-group-option]", "groupOption"],
+            clans: ["[data-clan-option]", "clanOption"]
+        }[area];
+        if (!config) return false;
+        const [selector, key] = config;
+        const node = Array.from(areaDom.querySelectorAll(selector)).find(item => list.includes(item.dataset[key]));
+        if (!node) return false;
+        //已经选中的就别再 choose（可撤销的管理器会把「选同一个」当成取消）
+        if (manager && manager.chosen !== node) manager.choose(node);
+        else if (!manager) node.classList.add("chosen");
+        return true;
     }
     /**
      * 回填体力 / 体力上限 / 护甲的数字框
