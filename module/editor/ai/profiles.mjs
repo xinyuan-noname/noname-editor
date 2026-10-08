@@ -220,6 +220,29 @@ export const IMAGE_PROFILES = [
         tip: "方舟的尺寸只支持它列出的几种，填错会报参数错误。"
     },
     {
+        key: "dashscope",
+        name: "阿里百炼（通义万相 Qwen-Image）",
+        badge: "中文友好",
+        baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        models: ["qwen-image-3.0", "qwen-image-3.0-pro", "qwen-image-2.1-pro"],
+        defaultModel: "qwen-image-3.0",
+        keyUrl: "https://bailian.console.aliyun.com",
+        siteUrl: "https://bailian.console.aliyun.com",
+        sizes: ["1024x1024", "768x1024", "1024x768", "1024x1536"],
+        timeout: 600000,
+        price: "按张计费，新用户有免费额度",
+        fit: "通义万相 Qwen-Image：中文提示词理解好，横竖构图都支持（与通义千问共用一份 key）",
+        steps: [
+            "打开 bailian.console.aliyun.com，登录并开通百炼（和文字模型用同一份 API-KEY 即可）",
+            "右上角「API-KEY」→ 创建 → 复制，粘贴到上面的 API Key 框",
+            "模型选 qwen-image-3.0（标准版）/ qwen-image-3.0-pro（质量更好）/ qwen-image-2.1-pro",
+            "出图比别家慢：单张几十秒到两分钟，多张更久，生成时别关编辑器",
+            "想要更稳的专属域名：控制台「工作空间」里能查到 https://<工作空间ID>.cn-beijing.maas.aliyuncs.com/compatible-mode/v1，填进「接口地址」即可"
+        ],
+        tip: "它返回的是 24 小时有效的图片直链（传 response_format=b64_json 会被忽略），编辑器会自动把图下载存进扩展；"
+            + "另外「负面提示词」只有 qwen-image-3.0 系列支持，2.1-pro 填了可能报参数错误。"
+    },
+    {
         key: "zhipu",
         name: "智谱 CogView",
         baseUrl: "https://open.bigmodel.cn/api/paas/v4",

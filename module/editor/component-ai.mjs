@@ -1413,6 +1413,16 @@ shadow.innerHTML=`
         const config = this.configQuery("get", { member: `x19D6_editor.extensionFileConfig.${workspace}` }) || {};
         return config["extension-character-image"] || `${workspace}/image/character`;
     }
+    /**
+     * 生图超时。预设可以覆盖（阿里百炼官方就建议开 600s：出图本身就慢，多张更久），
+     * 默认给 300s —— 比对话的 180s 宽，别让用户等到一半被自己掐断。
+     * @param {object} config 生图接口配置
+     * @returns {number} 毫秒
+     */
+    #imageTimeout(config) {
+        const profile = this.#profileOf("image", config.provider) || this.#providerOf("image", config.baseUrl);
+        return Number(profile && profile.timeout) || 300000;
+    }
     /** ③ 生成原画 → 存成候选图（**不动**正式立绘，点「用作立绘」才生效） */
     async generateArt() {
         const config = getImageConfig(this);
@@ -1449,6 +1459,7 @@ shadow.innerHTML=`
                 prompt,
                 n: count,
                 size,
+                timeout: this.#imageTimeout(config),
                 extra: Object.keys(extra).length ? extra : null
             });
             if (!result.ok) {
