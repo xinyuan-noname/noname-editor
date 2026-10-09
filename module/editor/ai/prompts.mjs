@@ -15,6 +15,8 @@
  */
 
 import { SKILL_KINDS } from "../shya/skillTemplates.mjs";
+import { CONTENT_MACROS } from "../shya/contentMacros.mjs";
+import { MACRO_BY_KIND } from "../shya/slotLang.mjs";
 
 /** 合法的势力 id（引擎内置；自定义势力请用户自己在编辑器里建） */
 export const GROUPS = ["wei", "shu", "wu", "qun", "jin", "shen"];
@@ -386,6 +388,256 @@ function collectCharacters(raw) {
 /** 设计稿里所有技能的 id（供 UI 检查重名 / 显示） */
 export function draftSkillIds(draft) {
     return (draft && Array.isArray(draft.skills) ? draft.skills : []).map(skill => skill.id).filter(Boolean);
+}
+
+// ───────────────────────────── 技能提示词（「生成技能」页） ─────────────────────────────
+
+/**
+ * 内容宏清单（一行一个宏）：`@draw { #who #num? } —— 摸牌：…`
+ * 数据源是 `shya/contentMacros.mjs`（与 `host/skill-content.shya` 逐槽对齐的那张表）。
+ * 槽名后的 `?` = 可以不写（引擎缺省生效）；标了「语句」的槽直接写语句。
+ * @returns {string}
+ */
+function contentMacroLines() {
+    return CONTENT_MACROS.map(macro => {
+        const slots = macro.slots
+            .map(slot => (slot.type === "stmt" ? `#${slot.slot}（语句）` : `#${slot.slot}${slot.required ? "" : "?"}`))
+            .join(" ");
+        return `@${macro.name} { ${slots} } —— ${macro.cn}：${macro.doc}`;
+    }).join("\n");
+}
+
+/**
+ * 骨架宏模板：指定种类就只给那一个，没指定就把九种全给（让模型自己挑）。
+ * 全给的理由：模板是从编辑器内置宏库抄下来的，一定编得过；少给一种它就可能自己发明槽名。
+ * @param {string} [kind] SKILL_KINDS 的 key；空 = 全给
+ * @returns {string}
+ */
+function skillTemplateSamples(kind = "") {
+    const wanted = SKILL_KINDS.some(item => item.key === kind) ? [kind] : SKILL_KINDS.map(item => item.key);
+    return wanted
+        .map(key => SKILL_KINDS.find(item => item.key === key))
+        .filter(Boolean)
+        .map(item => `【${item.name}】${item.hint}\n${item.template.trim()}`)
+        .join("\n\n");
+}
+
+/** 「生成技能」页的 JSON 契约说明 */
+const SKILL_SCHEMA_TEXT = [
+    "严格输出**一个 JSON 对象**（不要 markdown 围栏、不要解释文字），结构如下：",
+    "{",
+    '  "skills": [',
+    "    {",
+    '      "id": "前缀开头的小写标识符，如 ai_luoshen",',
+    '      "name": "技能名（两到四字）",',
+    '      "description": "技能描述：写清发动时机、条件、目标、效果与次数限制",',
+    '      "shya": "该技能的完整 shya 源码字符串（换行用 \\n）"',
+    "    }",
+    "  ]",
+    "}",
+    "硬性要求：",
+    "1. skills 数组长度 = 用户要求的数量；每份源码只用一个技能宏（@skill_trigger / @skill_phaseUse / …）。",
+    "2. description 里必须出现具体时机词（准备阶段/出牌阶段/当你受到伤害后……）与次数限制（每回合限一次/每阶段限一次/每轮限一次）。",
+    "3. shya 必须是**能直接编译**的源码：一个技能宏 + 下面列出的内容宏与 API，写法遵循速查表；**不要写 import 行**（编辑器编译前会自动注入宏库）。",
+    "4. 源码里的 #skill / #translation / #description 三个槽必须与 JSON 里的 id / name / description 完全一致（id 直接用 JSON 里那个）。",
+    "5. 强度：一个技能每回合稳定获得 1~2 张牌的收益属于正常；禁止无限摸牌、无限连击、无条件清空全场手牌这类失控设计。",
+    "6. JSON 必须是合法 JSON：字符串内部换行要写成 \\n，不要尾逗号，不要注释。"
+].join("\n");
+
+/**
+ * 技能设计的系统提示词。`kind` 指定技能种类时只给那一个骨架模板，没指定就九种全给。
+ * @param {string} [kind] SKILL_KINDS 的 key
+ * @returns {string}
+ */
+function skillSystem(kind = "") {
+    return [
+        "你是一位《无名杀》（开源三国杀类游戏）的技能设计师，擅长设计**能直接运行**的技能。",
+        "你的输出会被程序解析成 JSON、编译成 shya 并注入游戏编辑器，因此格式错误会导致整份设计报废——格式优先于文采。",
+        "",
+        "═══ 一、输出格式 ═══",
+        SKILL_SCHEMA_TEXT,
+        "",
+        "═══ 二、shya 写法速查（必须遵守）═══",
+        SHYA_RULES,
+        "",
+        "═══ 三、技能骨架宏（照抄模板，槽名不要改）═══",
+        skillTemplateSamples(kind),
+        "",
+        "═══ 四、内容宏（技能体里优先用它们，比手写原子调用更短更稳）═══",
+        contentMacroLines(),
+        "用法：@draw { #who: player  #num: 2 }（一行一个具名槽，宏名前不用 @ 之外的前缀）；标了「语句」的槽直接写语句，可以写多行。",
+        "上面没列到的写法就手写引擎调用（player draw(1) / get color(card) 这种），一样用**空格**而不是点。",
+        "",
+        "═══ 五、事件名清单（#trigger 只能用这些）═══",
+        TRIGGER_GROUPS.map(group => `【${group.name}】${group.events.map(([id, note]) => `${id}（${note}）`).join("、")}`).join("\n"),
+        "触发键：字符串默认是 player（你的回合/你身上发生）；若要在别人身上触发写对象，如 #trigger: { global: \"damageEnd\" } 或 { source: \"damageSourceEnd\" }。",
+        "",
+        "═══ 六、可用的 Player 成员 ═══",
+        PLAYER_API.map(line => `- ${line}`).join("\n"),
+        "",
+        "═══ 七、可用的 get 成员 ═══",
+        GET_API.map(line => `- ${line}`).join("\n"),
+        "",
+        "═══ 八、常用变量 ═══",
+        "- 触发技 content 的形参固定是 (event, trigger, player)：player 是技能拥有者，trigger 是触发事件。",
+        "- 触发事件里常用：trigger card（牌）、trigger target（目标）、trigger source（伤害来源）、trigger num（数值）。",
+        "- 主动技 content 里：event cards 是本次选择的牌，event card 是第一张。",
+        "",
+        "═══ 九、示例（照这个形状产出）═══",
+        JSON.stringify({
+            skills: [{
+                id: "ai_quanmou",
+                name: "权谋",
+                description: "当你受到伤害后，你可以摸一张牌，然后若你的手牌数大于体力值，你回复1点体力。每轮限一次。",
+                shya: "@skill_trigger {\n  #skill: ai_quanmou\n  #translation: \"权谋\"\n  #description: \"当你受到伤害后，你可以摸一张牌，然后若你的手牌数大于体力值，你回复1点体力。每轮限一次。\"\n  #trigger: \"damageEnd\"\n  #round: 1\n  #content:\n    @draw {\n      #who: player\n      #num: 1\n    }\n    if (player countCards(\"h\") > player hp) {\n      @recover {\n        #who: player\n        #num: 1\n      }\n    }\n  #ai: { order: 1, result: { player: 1 } }\n}"
+            }]
+        }),
+        "（上面这个 JSON 就是完整可用的形状；注意 shya 字段**从 @skill_trigger 开始**，不要写 import 行。）"
+    ].join("\n");
+}
+
+/** 默认的技能系统提示词（未指定种类：九种骨架全给） */
+export const SKILL_SYSTEM = skillSystem("");
+
+/**
+ * 组装「生成技能」的对话消息
+ *
+ * `input.subject` 是「给谁写」选中的武将资料（不指定则为空）——带上它，技能才会与该武将配合；
+ * `input.kind` 是「技能种类」下拉的 key（空 = 让模型自己挑一种骨架）；
+ * `input.skillText` 是那份《无名杀武将设计规范》（ai/skill.md），与「生成设计稿」同一份开关。
+ * @param {{request:string, kind?:string, count?:number, prefix?:string, subject?:object, skillText?:string}} input
+ * @returns {Array<{role:string,content:string}>}
+ */
+export function buildSkillMessages(input = {}) {
+    const count = Math.max(1, Math.min(3, Number(input.count) || 1));
+    const prefix = String(input.prefix || "ai_");
+    const kind = SKILL_KINDS.find(item => item.key === input.kind) || null;
+    const lines = [
+        `需求：${String(input.request || "").trim() || "自由发挥一个有特色的技能"}`,
+        `候选数量：${count}`,
+        `统一前缀：技能 id 必须以「${prefix}」开头（小写字母、数字、下划线）`
+    ];
+    lines.push(kind
+        ? `技能种类：必须是「${kind.name}」，源码里用 @${MACRO_BY_KIND[kind.key] || `skill_${kind.key}`} 宏`
+        : "技能种类：不限，从上面九种骨架里挑最合适的一种");
+    const subject = input.subject;
+    if (subject && (subject.name || subject.id)) {
+        lines.push("", "这个技能是写给下面这位武将的（要与他配合，不要与他已有的技能重复）：");
+        lines.push(`- 姓名：${subject.name || "未命名"}${subject.id ? `（${subject.id}）` : ""}`);
+        if (subject.group) lines.push(`- 势力：${subject.group}`);
+        lines.push(`- 性别：${subject.sex === "female" ? "女" : "男"}`);
+        if (subject.hp) lines.push(`- 体力：${subject.hp}${subject.maxHp && subject.maxHp !== subject.hp ? `/${subject.maxHp}` : ""}`);
+        const names = (Array.isArray(subject.skills) ? subject.skills : [])
+            .map(skill => (typeof skill === "string" ? skill : skill && skill.name))
+            .filter(Boolean);
+        if (names.length) lines.push(`- 已有技能：${names.join("、")}`);
+        if (subject.intro) lines.push(`- 人物小传：${subject.intro}`);
+    }
+    lines.push("", "请直接输出 JSON（不要任何解释文字）。");
+    const skillText = String(input.skillText || "").trim();
+    const system = skillText
+        ? [
+            skillSystem(kind ? kind.key : ""),
+            "",
+            "═══ 附：设计规范《无名杀武将设计规范》（用户可编辑的技能书，优先级高于上面的一般性建议，",
+            "但**不得与前面的 JSON 契约、宏模板、事件表、API 清单冲突**——冲突时以契约为准）═══",
+            skillText
+        ].join("\n")
+        : skillSystem(kind ? kind.key : "");
+    return [
+        { role: "system", content: system },
+        { role: "user", content: lines.join("\n") }
+    ];
+}
+
+/**
+ * 把源码里的 `#skill` 槽对齐到归一后的 id。
+ *
+ * 为什么必须做：编译器产物恒为 `const <#skill 槽的值> = { … }`，而注入层是按 JSON 里的 id 去
+ * 找 `const <id> = …`（`ai/skills.mjs:injectSkillRegistration`）——两边不一致时，
+ * 编译通过但「生成」会以「产物里没有找到 const <id>」失败。这里就地改槽，两边必然一致。
+ * 值写得再离谱（中文、带横线、带点）也照换——编译器要的是合法标识符，不换就是非法变量名。
+ * 槽不存在就原样返回（缺槽的编译诊断本来就会报出来）。
+ * @param {string} source shya 源码
+ * @param {string} id 归一后的技能 id
+ * @returns {string}
+ */
+export function alignSkillSlot(source, id) {
+    const text = String(source || "");
+    if (!text || !id) return text;
+    return text.replace(/(#\s*(?:skill|技能)\s*:\s*)([^\s,}]+)/, (all, head) => `${head}${id}`);
+}
+
+/** 从各种可能的形状里取出技能数组 */
+function collectSkills(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw !== "object") return [];
+    if (Array.isArray(raw.skills)) return raw.skills;
+    if (Array.isArray(raw.skill_list)) return raw.skill_list;
+    if (Array.isArray(raw.data)) return raw.data;
+    if (raw.skill && typeof raw.skill === "object") return [raw.skill];
+    if (raw.shya || raw.name) return [raw];
+    return [];
+}
+
+/**
+ * 把模型输出归一成技能候选列表（「生成技能」页专用）。
+ * 「模型可能写错」的地方都在这里兜住：脏 id、缺字段、重名、超数量、`#skill` 槽与 id 不一致。
+ * @param {any} raw 模型解析出来的对象
+ * @param {{prefix?:string, count?:number, takenSkillIds?:string[]}} [opts]
+ * @returns {Array<{id:string,name:string,description:string,shya:string,hasCode:boolean}>}
+ */
+export function normalizeSkillDraft(raw, opts = {}) {
+    const prefix = String(opts.prefix || "ai_").toLowerCase().replace(/[^a-z0-9_]/g, "") || "ai_";
+    const used = new Set((opts.takenSkillIds || []).map(id => String(id)));
+    const max = Math.max(1, Math.min(4, Number(opts.count) || 1));
+    return collectSkills(raw).slice(0, max).map((item, index) => {
+        const source = item && typeof item === "object" ? item : {};
+        const name = String(source.name || source.translation || "").trim() || `技能${index + 1}`;
+        const id = uniqueIdentifier(withPrefix(sanitizeIdentifier(source.id, `${prefix}skill${index + 1}`), prefix), used);
+        const description = String(source.description || source.info || "").trim();
+        const sourceText = typeof source.shya === "string" ? source.shya : (typeof source.source === "string" ? source.source : "");
+        const code = sourceText.trim().replace(/^\uFEFF/, "");
+        return { id, name, description, shya: alignSkillSlot(code, id), hasCode: Boolean(code) };
+    });
+}
+
+// ───────────────────── 技能需求改写（「生成技能」页的「优化提示」）─────────────────────
+
+/** 技能需求改写用的系统提示词（与武将那份同构，关注点换成技能的六要素） */
+export const OPTIMIZE_SKILL_SYSTEM = [
+    "你是《无名杀》（开源三国杀类游戏）的技能需求改写助手。",
+    "用户会给你一句随口写的技能需求，你要把它改写成**一段更明确的技能需求**，供另一个模型据此产出技能源码。",
+    "",
+    "硬性要求：",
+    "1. 只输出改写后的需求本身（一段话，40~120 字），不要解释、不要引号、不要分点编号、不要 markdown 标题。",
+    "2. 把该说清的都补上：技能种类（触发技/出牌阶段技/视为技/规则技…）、发动时机、触发条件、目标、收益（摸牌/伤害/回复/标记）、次数限制、是否锁定技。",
+    "3. 用户已经明确写了的**不要改动**；没写的，按「与已有设计不重复、强度保守」补一个合理选择（默认每回合或每轮限一次）。",
+    "4. **不要**给技能名、不要写代码、不要给具体数值公式（那是下一步的事）。",
+    "5. 不要出现「无限摸牌 / 无条件清空手牌 / 无代价持续回血」这类失衡要求。",
+    "6. 用中文输出，不要输出 JSON。"
+].join("\n");
+
+/**
+ * 组装技能「优化提示」的消息
+ * @param {{ request:string, kind?:string, subject?:object, skillText?:string }} input
+ * @returns {Array<{role:string,content:string}>}
+ */
+export function buildSkillOptimizeMessages(input = {}) {
+    const request = String(input.request || "").trim();
+    const kind = SKILL_KINDS.find(item => item.key === input.kind) || null;
+    const lines = [request];
+    if (kind) lines.push(`（技能种类定为：${kind.name}）`);
+    if (input.subject && input.subject.name) lines.push(`（这个技能是写给「${input.subject.name}」的）`);
+    const skillText = String(input.skillText || "").trim();
+    const system = skillText
+        ? `${OPTIMIZE_SKILL_SYSTEM}\n\n（下面是这个项目当前使用的设计规范，改写时参考它，让需求更容易产出符合规范的设计）\n${skillText}`
+        : OPTIMIZE_SKILL_SYSTEM;
+    return [
+        { role: "system", content: system },
+        { role: "user", content: `把下面这段技能需求改写成一段更明确的技能需求：\n${lines.join("\n")}` }
+    ];
 }
 
 // ───────────────────────────── 原画提示词 ─────────────────────────────

@@ -66,9 +66,11 @@
     gap: 4px;
 }
 
-/* ── 主标签栏（设计稿 / 原画 / 历史：同一时刻只显示一页，不再一路往下滚）── */
+/* ── 主标签栏（设计稿 / 技能 / 原画 / 历史：同一时刻只显示一页，不再一路往下滚）── */
 .ai-tabs {
     display: flex;
+    /*四个标签在窄侧栏（180px）放不下就换行，别把标签压成省略号*/
+    flex-wrap: wrap;
     gap: 4px;
 }
 
@@ -77,9 +79,10 @@
 }
 
 .ai-tabs > button {
-    flex: 1;
+    flex: 1 1 5.5em;
     min-width: 0;
-    padding: 4px 2px;
+    padding: 4px 1px;
+    font-size: 0.9em;
     background: rgba(255, 255, 255, 0.08);
     color: #f7f7f7;
     border-color: rgba(255, 255, 255, 0.28);
@@ -466,6 +469,13 @@ input[type="range"] {
     display: flex;
     gap: 5px;
     flex-wrap: wrap;
+}
+
+/* ── 生成技能（技能种类 / 数量 / 给谁写）── */
+.skill-params {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 
 /* ── 候选图 ── */

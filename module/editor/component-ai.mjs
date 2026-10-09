@@ -14,9 +14,11 @@ import {
     extractJSON, base64ToBlob, guessImageMime, fetchImageBlob, mimeToExt, normalizeBaseUrl, estimateTokens
 } from "./ai/client.mjs";
 import {
-    ART_STYLES, buildCharacterMessages, buildImageMessages, buildOptimizeMessages, normalizeDraft, fallbackArtPrompt
+    ART_STYLES, buildCharacterMessages, buildImageMessages, buildOptimizeMessages, normalizeDraft, fallbackArtPrompt,
+    buildSkillMessages, buildSkillOptimizeMessages, normalizeSkillDraft
 } from "./ai/prompts.mjs";
-import { ensureHostImport, injectSkillRegistration } from "./ai/skills.mjs";
+import { ensureHostImports, injectSkillRegistration } from "./ai/skills.mjs";
+import { SKILL_KINDS } from "./shya/skillTemplates.mjs";
 import { loadSkillDoc } from "./ai/skillDoc.mjs";
 import { getSkillRecord, setSkillRecord } from "./persist/skillLibrary.mjs";
 
@@ -26,6 +28,9 @@ import { getSkillRecord, setSkillRecord } from "./persist/skillLibrary.mjs";
  * 动线：① 接口配置（含新手引导）→ ② 生成设计稿（每个技能附一份 shya 源码）
  *      → ③ 一键应用（编译 → 局内生效 → 建武将草稿 → 逐个补技能卡）
  *      → ④ 生成原画 → 候选图 →「用作立绘」。
+ *
+ * 另有「生成技能」页：只产**单个技能**（源码 → 编译 → 局内生效 + 存进技能草稿库），
+ * 给「不想设计整个武将、只想写一个技能」的场景用。
  *
  * 与外壳的耦合只有一处：`editorView`（挂载时由 NonameEditorView 挂上来）。
  * 用它读「主区开着的武将编辑器 / 侧栏过滤的武将包」，并调它建草稿、激活标签页。
@@ -43,6 +48,8 @@ class HTMLNonameAiPanelElement extends HTMLNonameFocusUIElement {
     editorView = null;
     /** 最近一次生成/载入的设计稿（归一化后的对象，卡片顺序即数组下标） */
     #drafts = [];
+    /** 最近一次生成的技能候选（「生成技能」页；卡片顺序即数组下标） */
+    #skillResults = [];
     /** 正在进行的请求：用于「停止」按钮 */
     #taskAbort = null;
     /** 配置页当前在编辑哪一家（{ text: key, image: key }），「申请页」按钮要用它 */
@@ -70,6 +77,7 @@ shadow.innerHTML=`
 
     <div class="ai-tabs">
         <button type="button" class="chosen" data-ai-tab="draft">生成设计稿</button>
+        <button type="button" data-ai-tab="skill">生成技能</button>
         <button type="button" data-ai-tab="art">生成原画</button>
         <button type="button" data-ai-tab="history">生成历史</button>
     </div>
@@ -82,10 +90,10 @@ shadow.innerHTML=`
     <section class="block" data-block="draft">
         <textarea class="request" rows="3" spellcheck="false" placeholder="用一句话描述你要的武将，例如：蜀势力女性武将，靠卖血换爆发，体力3，两个技能"></textarea>
         <div class="examples">
-            <span class="example" data-example="蜀势力女性武将，靠卖血换爆发，体力3，两个技能">卖血爆发</span>
-            <span class="example" data-example="魏势力男性武将，靠弃牌控制距离，体力4，一个锁定技">控场封锁</span>
-            <span class="example" data-example="群势力武将，回合外也能用牌，体力4，一个视为技一个触发技">回合外偷袭</span>
-            <span class="example" data-example="吴势力女性武将，辅助队友摸牌并回复，体力3，两个技能">团队辅助</span>
+            <span class="example" data-target=".request" data-example="蜀势力女性武将，靠卖血换爆发，体力3，两个技能">卖血爆发</span>
+            <span class="example" data-target=".request" data-example="魏势力男性武将，靠弃牌控制距离，体力4，一个锁定技">控场封锁</span>
+            <span class="example" data-target=".request" data-example="群势力武将，回合外也能用牌，体力4，一个视为技一个触发技">回合外偷袭</span>
+            <span class="example" data-target=".request" data-example="吴势力女性武将，辅助队友摸牌并回复，体力3，两个技能">团队辅助</span>
         </div>
         <details class="skill-book">
             <summary>AI 技能书（Skill.md）<span class="skill-size muted"></span></summary>
@@ -105,6 +113,30 @@ shadow.innerHTML=`
         </div>
         <div class="results" data-by="draft">
             <p class="empty-hint">生成的候选会出现在这里，点「一键应用」即可变成编辑器里的一份武将草稿。</p>
+        </div>
+    </section>
+
+    <section class="block" data-block="skill" hidden>
+        <textarea class="skill-request" rows="3" spellcheck="false" placeholder="用一句话描述你要的技能，例如：出牌阶段限一次，弃一张红色牌令一名角色回复1点体力"></textarea>
+        <div class="examples">
+            <span class="example" data-target=".skill-request" data-example="锁定技，当你受到伤害后，你摸一张牌">卖血摸牌</span>
+            <span class="example" data-target=".skill-request" data-example="出牌阶段限一次，你可以弃置一张黑色牌，令一名角色失去1点体力">黑牌压制</span>
+            <span class="example" data-target=".skill-request" data-example="结束阶段开始时，若你的手牌数小于体力值，你可以摸两张牌">残血补牌</span>
+            <span class="example" data-target=".skill-request" data-example="每轮限一次，你可以将一张方块牌当【杀】使用">方块当杀</span>
+        </div>
+        <label class="row"><span>技能种类</span><select class="skill-kind"></select></label>
+        <div class="skill-params">
+            <label class="row"><span>生成数量</span><select class="skill-count"><option value="1" selected>1 个</option><option value="2">2 个</option></select></label>
+            <label class="row"><span>给谁写</span><select class="skill-subject"></select></label>
+        </div>
+        <div class="actions">
+            <button class="gen-skill" type="button">生成技能</button>
+            <button class="optimize-skill-prompt ghost" type="button" title="让 AI 把你的描述改写成更明确的技能需求（补时机/条件/目标/收益/次数限制；会消耗 token）">优化提示</button>
+            <button class="cancel-skill" type="button" hidden>停止</button>
+            <span class="progress skill-progress"></span>
+        </div>
+        <div class="results" data-by="skill">
+            <p class="empty-hint">生成的技能会出现在这里。点「生成」即可局内生效并存进技能草稿库（侧栏「技」）。</p>
         </div>
     </section>
 
@@ -278,6 +310,8 @@ shadow.innerHTML=`
     connectedCallback() {
         this.loadCss("aiPanel", { root: this.shadowRoot });
         this.#renderArtOptions();
+        this.#renderSkillKindOptions();
+        this.#renderSkillSubject();
         this.#restoreConfigs();
         this.#bindEvents();
         this.#refreshStatus();
@@ -342,6 +376,8 @@ shadow.innerHTML=`
         this.#activeTab = valid;
         tabs.forEach(tab => tab.classList.toggle("chosen", tab.dataset.aiTab === valid));
         this.#qa(".block").forEach(node => (node.hidden = node.dataset.block !== valid));
+        //「给谁写」的候选来自主区草稿与当前设计稿，切到本页时重算一次
+        if (valid === "skill") this.#renderSkillSubject();
         this.configQuery("write", { member: "x19D6_editor.ai.ui.lastTab", value: valid });
     }
     /** 标签上的小徽标（设计稿数量 / 候选图数量），count 为 0 就摘掉 */
@@ -424,12 +460,12 @@ shadow.innerHTML=`
         hint.textContent = [
             `来源：${sourceText}`,
             state.text.trim() ? "当前用的是你在面板里改过的版本（点「恢复默认」回到文件原文）" : "当前用的是文件原文",
-            "只作用于「生成设计稿」；「AI 扩写」与生图不发送它。上面那个 token 数是粗略估算，真实用量看用量条。"
+            "作用于「生成设计稿」与「生成技能」；「AI 扩写」与生图不发送它。上面那个 token 数是粗略估算，真实用量看用量条。"
         ].filter(Boolean).join("\n");
     }
     /**
      * token 用量条：本次 + 累计。
-     * ⚠️ 只统计**对话调用**（生成设计稿 / AI 扩写）；生图按张计费、服务商也不返回 token。
+     * ⚠️ 只统计**对话调用**（生成设计稿 / 生成技能 / 提示改写）；生图按张计费、服务商也不返回 token。
      * 有些服务（本地小模型常见）不返回 usage —— 那种情况仍然计一次调用，但金额栏只能写「未返回用量」。
      * @param {{prompt:number,completion:number,total:number,cached:number}|null} [lastUsage]
      */
@@ -450,7 +486,7 @@ shadow.innerHTML=`
         parts.push(`累计 ${this.#formatNumber(usage.total)} tokens / ${usage.calls} 次调用`);
         if (usage.cached) parts.push(`其中缓存命中 ${this.#formatNumber(usage.cached)}`);
         text.textContent = parts.join("｜");
-        text.title = "只统计对话调用（生成设计稿 / AI 扩写）；生图按张计费、不计 token。点「清零」重置累计。";
+        text.title = "只统计对话调用（生成设计稿 / 生成技能 / 提示改写）；生图按张计费、不计 token。点「清零」重置累计。";
         bar.hidden = false;
     }
     #formatNumber(value) {
@@ -858,15 +894,25 @@ shadow.innerHTML=`
             });
         });
         //生成设计稿
+        //示例芯片：写进 data-target 指的那个输入框（设计稿 .request / 技能 .skill-request）
         this.#qa(".example").forEach(node => node.addEventListener("pointerup", () => {
-            this.#q(".request").value = node.dataset.example || "";
-            this.#q(".request").focus();
+            const area = this.#q(node.dataset.target || ".request");
+            if (!area) return;
+            area.value = node.dataset.example || "";
+            area.focus();
         }));
         this.#q(".gen-draft").addEventListener("pointerup", () => this.generateDraft());
         this.#q(".optimize-prompt")?.addEventListener("pointerup", () => this.optimizePrompt());
         this.#q(".cancel-task").addEventListener("pointerup", () => {
             this.#taskAbort?.abort();
             this.#setProgress("draft", "已请求停止…");
+        });
+        //生成技能
+        this.#q(".gen-skill")?.addEventListener("pointerup", () => this.generateSkill());
+        this.#q(".optimize-skill-prompt")?.addEventListener("pointerup", () => this.optimizeSkillPrompt());
+        this.#q(".cancel-skill")?.addEventListener("pointerup", () => {
+            this.#taskAbort?.abort();
+            this.#setProgress("skill", "已请求停止…");
         });
         //原画
         this.#q(".expand-prompt").addEventListener("pointerup", () => this.expandArtPrompt());
@@ -880,16 +926,37 @@ shadow.innerHTML=`
         this.#q('[data-block="art"]').addEventListener("pointerdown", () => this.#renderArtOptions(), true);
     }
     #setProgress(scope, text) {
-        const node = this.#q(scope === "art" ? ".art-progress" : ".progress");
+        //每页各有一个进度节点（原画/技能那两条是多带了各自的类名）
+        const selector = {
+            art: ".art-progress",
+            skill: ".skill-progress"
+        }[scope] || '[data-block="draft"] .progress';
+        const node = this.#q(selector);
         if (node) node.textContent = text || "";
     }
     #setBusy(scope, busy, text = "") {
-        const draftBusy = scope === "draft" && busy;
-        this.#q(".gen-draft").disabled = draftBusy;
-        if (this.#q(".optimize-prompt")) this.#q(".optimize-prompt").disabled = draftBusy;
-        this.#q(".gen-art").disabled = scope === "art" && busy;
-        this.#q(".expand-prompt").disabled = scope === "art" && busy;
-        this.#q(".cancel-task").hidden = !draftBusy;
+        //一次只跑一个任务：按钮与「停止」都按自己那一页收（原画页没有停止按钮）
+        const toggle = (selector, disabled) => {
+            const node = this.#q(selector);
+            if (node) node.disabled = disabled;
+        };
+        if (scope === "draft") {
+            toggle(".gen-draft", busy);
+            toggle(".optimize-prompt", busy);
+        }
+        if (scope === "skill") {
+            toggle(".gen-skill", busy);
+            toggle(".optimize-skill-prompt", busy);
+        }
+        if (scope === "art") {
+            toggle(".gen-art", busy);
+            toggle(".expand-prompt", busy);
+        }
+        const cancel = { draft: ".cancel-task", skill: ".cancel-skill" }[scope];
+        if (cancel) {
+            const node = this.#q(cancel);
+            if (node) node.hidden = !busy;
+        }
         this.#setProgress(scope, busy ? text : "");
     }
     async #testConnection(kind) {
@@ -1302,37 +1369,35 @@ shadow.innerHTML=`
             return draft.__compile;
         }
         draft.skills.forEach(skill => {
-            if (!skill.hasCode) {
-                draft.__compile[skill.id] = { status: "fail", message: "模型没有给出 shya 源码，无法应用（可点「重新生成」换一版）" };
-                return;
-            }
-            const prepared = ensureHostImport(skill.shya);
-            let result = null;
-            try {
-                result = compiler.compile(prepared.source);
-            } catch (err) {
-                draft.__compile[skill.id] = { status: "fail", message: `编译器异常：${(err && err.message) || err}` };
-                return;
-            }
-            const diagnostics = ((result && result.diagnostics) || [])
-                .filter(d => d.severity === "error")
-                .map(d => ({ ...d, line: Math.max(1, d.line - prepared.injected) }));
-            if (!result || !result.ok) {
-                draft.__compile[skill.id] = {
-                    status: "fail",
-                    diagnostics,
-                    message: diagnostics.length ? "" : "编译没有通过，但没有给出具体诊断"
-                };
-                return;
-            }
-            const injected = injectSkillRegistration(result.code, skill.id, { name: skill.name, description: skill.description });
-            if (!injected.ok) {
-                draft.__compile[skill.id] = { status: "fail", message: injected.reason };
-                return;
-            }
-            draft.__compile[skill.id] = { status: "ok", code: injected.code, diagnostics };
+            draft.__compile[skill.id] = this.#compileSkillSource(compiler, skill);
         });
         return draft.__compile;
+    }
+    /**
+     * 编译**一份**技能候选（「生成设计稿」与「生成技能」两条链共用，产物注入规则必须一致）。
+     * @param {object} compiler shya/loader.mjs 的编译器
+     * @param {{id:string,name:string,description:string,shya:string,hasCode:boolean}} skill
+     * @returns {{status:"ok", code:string, diagnostics:Array}|{status:"fail", diagnostics?:Array, message:string}}
+     */
+    #compileSkillSource(compiler, skill) {
+        if (!skill.hasCode) return { status: "fail", message: "模型没有给出 shya 源码，无法应用（换一版再试）" };
+        //两个宿主宏库都要注入：只注入 skill-type 时，模型写的内容宏（@draw 等）会以「宏未定义」失败
+        const prepared = ensureHostImports(skill.shya);
+        let result = null;
+        try {
+            result = compiler.compile(prepared.source);
+        } catch (err) {
+            return { status: "fail", message: `编译器异常：${(err && err.message) || err}` };
+        }
+        const diagnostics = ((result && result.diagnostics) || [])
+            .filter(d => d.severity === "error")
+            .map(d => ({ ...d, line: Math.max(1, d.line - prepared.injected) }));
+        if (!result || !result.ok) {
+            return { status: "fail", diagnostics, message: diagnostics.length ? "" : "编译没有通过，但没有给出具体诊断" };
+        }
+        const injected = injectSkillRegistration(result.code, skill.id, { name: skill.name, description: skill.description });
+        if (!injected.ok) return { status: "fail", message: injected.reason };
+        return { status: "ok", code: injected.code, diagnostics };
     }
 
     /**
@@ -1460,6 +1525,373 @@ shadow.innerHTML=`
             console.warn("复制失败", err);
         } finally {
             area.remove();
+        }
+    }
+
+    // ──────────────────────────── 生成技能 ────────────────────────────
+
+    /**
+     * 「技能种类」下拉：空 = 自动判断（模型自己挑骨架），其余九项来自 shya/skillTemplates.mjs。
+     * 值给 kind key（提示词据此只给那一个骨架模板），显示名用 SKILL_KINDS 的 name（中英两份表里都是中文）。
+     */
+    #renderSkillKindOptions() {
+        const select = this.#q(".skill-kind");
+        if (!select || select.options.length) return;
+        const auto = document.createElement("option");
+        auto.value = "";
+        auto.textContent = "自动判断";
+        select.appendChild(auto);
+        SKILL_KINDS.forEach(kind => {
+            const option = document.createElement("option");
+            option.value = kind.key;
+            option.textContent = kind.name;
+            select.appendChild(option);
+        });
+    }
+    /**
+     * 「给谁写」下拉：不指定 / 当前设计稿 / 主区打开的武将草稿。
+     * 选中谁，就把谁的名字·势力·体力·已有技能塞进需求，技能才会与这位武将配合。
+     */
+    #renderSkillSubject() {
+        const select = this.#q(".skill-subject");
+        if (!select) return;
+        const previous = select.value;
+        select.replaceChildren();
+        const add = (value, label) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = label;
+            select.appendChild(option);
+        };
+        add("", "不指定（通用技能）");
+        this.#drafts.forEach((draft, index) => add(`draft:${index}`, `设计稿：${draft.name}`));
+        (this.editorView?.characterEditors || []).forEach(editor => {
+            const id = editor.getData?.("id");
+            if (!id) return;
+            add(`editor:${id}`, `草稿：${editor.getData("name") || id}（${id}）`);
+        });
+        if (previous && Array.from(select.options).some(option => option.value === previous)) select.value = previous;
+    }
+    /** 当前「给谁写」的资料（不指定返回 null；主区草稿按 id 现查，避免拿到旧数据） */
+    #skillSubject() {
+        const value = this.#q(".skill-subject")?.value || "";
+        if (value.startsWith("draft:")) {
+            const draft = this.#drafts[Number(value.slice(6))];
+            return draft ? { ...draft, skills: (draft.skills || []).map(skill => ({ name: skill.name })) } : null;
+        }
+        if (value.startsWith("editor:")) {
+            const id = value.slice(7);
+            const editor = (this.editorView?.characterEditors || []).find(item => item.getData?.("id") === id);
+            if (!editor) return null;
+            return {
+                id,
+                name: editor.getData("name") || id,
+                sex: editor.getData("sex"),
+                group: editor.getData("group"),
+                hp: editor.getData("hp"),
+                maxHp: editor.getData("maxHp"),
+                intro: editor.getData("intro"),
+                skills: (editor.getData("skills") || []).map(skillId => ({
+                    name: this.textQuery("skillTranslation", { text: skillId, attr: "name" }) || skillId
+                }))
+            };
+        }
+        return null;
+    }
+    /** ① 生成技能：对话模型 → JSON → 归一化 → 自动编译一遍 → 结果卡片 */
+    async generateSkill() {
+        this.#showTab("skill");
+        const config = getTextConfig(this);
+        if (!config.baseUrl || !config.model) {
+            this.openSheet("config");
+            this.#setResult("text", "还没配好对话接口：在列表里点一家服务商、粘上 API Key，再点「测试连接」。", "warn");
+            return;
+        }
+        const request = (this.#q(".skill-request")?.value || "").trim();
+        if (!request) {
+            this.#setProgress("skill", "先写一句你想要的技能描述（或点上面的示例）。");
+            return;
+        }
+        const kind = this.#q(".skill-kind")?.value || "";
+        const count = Number(this.#q(".skill-count")?.value) || 1;
+        const options = this.#generationOptions();
+        const taken = this.#takenIds();
+        const controller = new AbortController();
+        this.#taskAbort = controller;
+        this.#setBusy("skill", true, "正在生成技能…（通常 10~60 秒，可点「停止」）");
+        try {
+            const result = await chat({
+                baseUrl: config.baseUrl,
+                apiKey: config.apiKey,
+                model: config.model,
+                temperature: Number(config.temperature) || 0.8,
+                //技能书同样带上（与「生成设计稿」共用开关）；「给谁写」选中的武将资料也塞进去
+                messages: buildSkillMessages({
+                    request,
+                    kind,
+                    count,
+                    prefix: options.prefix,
+                    subject: this.#skillSubject(),
+                    skillText: this.#skillBookText()
+                }),
+                signal: controller.signal
+            });
+            if (!result.ok) {
+                this.#setBusy("skill", false);
+                this.#setProgress("skill", `生成失败：\n${this.#errorText(result.error)}`);
+                return;
+            }
+            addUsage(this, result.usage || { prompt: 0, completion: 0, total: 0, cached: 0 });
+            this.#renderUsage(result.usage);
+            const parsed = extractJSON(result.content);
+            if (!parsed) {
+                this.#setBusy("skill", false);
+                this.#setProgress("skill", `模型没有返回合法的 JSON（可能被截断，或该模型不擅长结构化输出）。\n返回内容开头：${result.content.slice(0, 160)}`);
+                return;
+            }
+            const skills = normalizeSkillDraft(parsed, { prefix: options.prefix, count, takenSkillIds: taken.skills });
+            if (!skills.length) {
+                this.#setBusy("skill", false);
+                this.#setProgress("skill", `模型没给出技能（JSON 结构对不上）。\n返回内容开头：${result.content.slice(0, 160)}`);
+                return;
+            }
+            this.#skillResults = skills;
+            //生成完直接编译一遍：编译是本地 wasm、很快，让用户当场看到能不能用
+            this.#setProgress("skill", "正在编译校验…");
+            await this.#compileSkillResults();
+            this.renderSkillResults();
+            this.#setBusy("skill", false);
+            const passed = skills.filter(skill => skill.__compile && skill.__compile.status === "ok").length;
+            this.#setProgress("skill", `生成完成 ✓ 共 ${skills.length} 个候选，编译通过 ${passed} 个。点卡片上的「生成」即可局内生效并存进技能草稿库（侧栏「技」）。${
+                result.usage ? `本次 tokens ${this.#formatNumber(result.usage.total)}。` : "服务商未返回 token 用量。"}`);
+        } catch (err) {
+            this.#setBusy("skill", false);
+            this.#setProgress("skill", `生成出错：${(err && err.message) || err}`);
+        } finally {
+            this.#taskAbort = null;
+            const cancel = this.#q(".cancel-skill");
+            if (cancel) cancel.hidden = true;
+        }
+    }
+    /** 「优化提示」：把随口写的技能描述改写成明确需求（时机/条件/目标/收益/次数限制） */
+    async optimizeSkillPrompt() {
+        this.#showTab("skill");
+        const config = getTextConfig(this);
+        if (!config.baseUrl || !config.model) {
+            this.openSheet("config");
+            this.#setResult("text", "「优化提示」要用对话接口：在列表里点一家服务商、粘上 API Key，再点「测试连接」。", "warn");
+            return;
+        }
+        const request = (this.#q(".skill-request")?.value || "").trim();
+        if (!request) {
+            this.#setProgress("skill", "先写一句你想要的技能描述（或点上面的示例），再点「优化提示」。");
+            return;
+        }
+        const controller = new AbortController();
+        this.#taskAbort = controller;
+        this.#setBusy("skill", true, "正在优化提示…（通常几秒到十几秒）");
+        try {
+            const result = await chat({
+                baseUrl: config.baseUrl,
+                apiKey: config.apiKey,
+                model: config.model,
+                temperature: 0.6,
+                jsonMode: false,
+                messages: buildSkillOptimizeMessages({
+                    request,
+                    kind: this.#q(".skill-kind")?.value || "",
+                    subject: this.#skillSubject(),
+                    skillText: this.#skillBookText()
+                }),
+                signal: controller.signal
+            });
+            if (!result.ok) {
+                this.#setBusy("skill", false);
+                this.#setProgress("skill", `优化失败：\n${this.#errorText(result.error)}`);
+                return;
+            }
+            addUsage(this, result.usage || { prompt: 0, completion: 0, total: 0, cached: 0 });
+            this.#renderUsage(result.usage);
+            const text = result.content.trim().replace(/^["“「']+/, "").replace(/["”」']+$/, "").trim();
+            if (!text) {
+                this.#setBusy("skill", false);
+                this.#setProgress("skill", "模型没有给出内容，换个模型或再点一次试试。");
+                return;
+            }
+            const area = this.#q(".skill-request");
+            if (area) area.value = text;
+            this.#setBusy("skill", false);
+            this.#setProgress("skill", `提示已优化 ✓ 可以直接改，或点「生成技能」。${
+                result.usage ? `本次 tokens ${this.#formatNumber(result.usage.total)}。` : "服务商未返回 token 用量。"}`);
+        } catch (err) {
+            this.#setBusy("skill", false);
+            this.#setProgress("skill", `优化出错：${(err && err.message) || err}`);
+        } finally {
+            this.#taskAbort = null;
+            const cancel = this.#q(".cancel-skill");
+            if (cancel) cancel.hidden = true;
+        }
+    }
+    /** 渲染技能候选卡片 */
+    renderSkillResults() {
+        const root = this.#q('.results[data-by="skill"]');
+        if (!root) return;
+        root.replaceChildren();
+        this.#setTabBadge("skill", this.#skillResults.length);
+        if (!this.#skillResults.length) {
+            const hint = document.createElement("p");
+            hint.className = "empty-hint";
+            hint.textContent = "生成的技能会出现在这里。点「生成」即可局内生效并存进技能草稿库（侧栏「技」）。";
+            root.appendChild(hint);
+            return;
+        }
+        this.#skillResults.forEach((skill, index) => root.appendChild(this.#createSkillResultCard(skill, index)));
+        this.#renderSkillSubject();
+    }
+    #createSkillResultCard(skill, index) {
+        const state = skill.__compile || null;
+        const card = document.createElement("div");
+        card.className = "draft-card skill-card";
+        if (skill.__applied) card.classList.add("applied");
+
+        const head = document.createElement("div");
+        head.className = "draft-head";
+        const name = document.createElement("span");
+        name.className = "draft-name";
+        name.textContent = skill.name;
+        const id = document.createElement("span");
+        id.className = "skill-id";
+        id.textContent = skill.id;
+        head.append(name, id);
+        if (!skill.hasCode) {
+            const warn = document.createElement("span");
+            warn.className = "skill-id";
+            warn.textContent = "⚠ 模型没给源码";
+            head.appendChild(warn);
+        }
+        card.appendChild(head);
+
+        const desc = document.createElement("div");
+        desc.className = "skill-desc";
+        desc.textContent = skill.description || "（模型没有给出技能描述）";
+        card.appendChild(desc);
+
+        if (state) {
+            const diag = document.createElement("div");
+            diag.className = `diag ${state.status === "ok" ? "ok" : ""}`;
+            if (state.status === "ok") diag.textContent = "编译通过 ✓ 可点「生成」在局内生效";
+            else if (state.diagnostics && state.diagnostics.length) {
+                diag.textContent = state.diagnostics
+                    .map(d => `${d.line}:${d.col} ${d.severity === "error" ? "错误" : "警告"} [${d.code}] ${d.message}`)
+                    .join("\n");
+            } else diag.textContent = state.message || "编译失败";
+            card.appendChild(diag);
+        }
+
+        if (skill.hasCode) {
+            const details = document.createElement("details");
+            const summary = document.createElement("summary");
+            summary.textContent = "查看 shya 源码";
+            const pre = document.createElement("pre");
+            pre.className = "skill-code";
+            pre.textContent = skill.shya;
+            details.append(summary, pre);
+            card.appendChild(details);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "draft-actions";
+        const applyButton = document.createElement("button");
+        applyButton.type = "button";
+        applyButton.textContent = skill.__applied ? "再次生成" : "生成";
+        applyButton.title = "编译 → 局内生效 → 存进技能草稿库（侧栏「技」里能看到，保存武将时会一起落盘）";
+        applyButton.addEventListener("pointerup", () => this.applySkillResult(index));
+        const compileButton = document.createElement("button");
+        compileButton.type = "button";
+        compileButton.className = "ghost";
+        compileButton.textContent = "编译校验";
+        compileButton.addEventListener("pointerup", async () => {
+            compileButton.disabled = true;
+            compileButton.textContent = "编译中…";
+            await this.#compileSkillResults();
+            this.renderSkillResults();
+        });
+        const editButton = document.createElement("button");
+        editButton.type = "button";
+        editButton.className = "ghost";
+        editButton.textContent = "打开技能编辑器";
+        editButton.title = "把这份源码带进 shya 技能编辑器，改完可以编译、生成";
+        editButton.addEventListener("pointerup", () => this.openInSkillEditor(skill));
+        const copyButton = document.createElement("button");
+        copyButton.type = "button";
+        copyButton.className = "ghost";
+        copyButton.textContent = "复制源码";
+        copyButton.addEventListener("pointerup", () => this.#copyText(skill.shya, copyButton));
+        actions.append(applyButton, compileButton, editButton, copyButton);
+        card.appendChild(actions);
+        return card;
+    }
+    /** 编译所有技能候选（结果写进 `skill.__compile`，与设计稿那条链共用 #compileSkillSource） */
+    async #compileSkillResults() {
+        if (!this.#skillResults.some(skill => skill.hasCode)) return;
+        let compiler = null;
+        try {
+            const { loadCompiler } = await import("./shya/loader.mjs");
+            compiler = await loadCompiler();
+        } catch (err) {
+            this.#skillResults.forEach(skill => {
+                skill.__compile = { status: "fail", message: `编译器载入失败：${(err && err.message) || err}` };
+            });
+            return;
+        }
+        this.#skillResults.forEach(skill => (skill.__compile = this.#compileSkillSource(compiler, skill)));
+    }
+    /**
+     * ② 「生成」：注入 → 局内求值 → 存进技能草稿库（与 shya 编辑器的「生成」同一条链路）。
+     * 草稿键是 `draft-<n>` 编号，由 persist/skillLibrary.mjs 分配 —— 这里只调 setSkillRecord。
+     */
+    async applySkillResult(index) {
+        const skill = this.#skillResults[index];
+        if (!skill) return;
+        if (!skill.__compile || skill.__compile.status !== "ok") {
+            this.#setProgress("skill", "正在编译…");
+            await this.#compileSkillResults();
+            this.renderSkillResults();
+        }
+        const state = skill.__compile;
+        if (!state || state.status !== "ok") {
+            this.#setProgress("skill", `「${skill.name}」没通过编译：先看卡片上的诊断，或点「打开技能编辑器」改源码。`);
+            return;
+        }
+        //安全线：与游戏本体/其它扩展已有的技能重名就拒绝，绝不覆盖别人的技能
+        if (lib.skill[skill.id] && !getSkillRecord(this, skill.id)) {
+            skill.__compile = { status: "fail", message: `技能 id「${skill.id}」与游戏/其它扩展已有的技能重名，已拒绝（换个 id 再生成）` };
+            this.renderSkillResults();
+            this.#setProgress("skill", `技能 id「${skill.id}」已被占用，没有覆盖它。`);
+            return;
+        }
+        try {
+            //与 shya 编辑器的「生成」同一套求值环境；注入那一步见 ai/skills.mjs
+            const run = new Function("_status", "lib", "game", "ui", "get", "ai", state.code);
+            run(_status, lib, game, ui, get, ai);
+            if (!lib.skill[skill.id]) throw new Error("注册后 lib.skill 里仍然没有这个技能");
+            setSkillRecord(this, skill.id, {
+                source: skill.shya,
+                code: state.code,
+                name: skill.name,
+                description: skill.description,
+                workspace: this.workspace
+            });
+            skill.__applied = true;
+            this.renderSkillResults();
+            //侧栏「技」列表立刻能看到这份草稿
+            this.editorView?.loadSideBarSkill?.();
+            this.#setProgress("skill", `已生成 ✓ 技能「${skill.name}」（${skill.id}）已在本局生效，并存进技能草稿库；侧栏「技」里能看到它。${
+                this.workspace ? "" : "（还没选工作区：草稿不会跟着武将落盘，先去设置里选一个扩展）"}`);
+        } catch (err) {
+            skill.__compile = { status: "fail", message: `局内生效失败：${(err && err.message) || err}` };
+            this.renderSkillResults();
+            this.#setProgress("skill", `「${skill.name}」生成失败，见卡片上的诊断。`);
         }
     }
 
