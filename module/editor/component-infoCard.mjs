@@ -197,30 +197,9 @@ class HTMLNonameInfoCardElement extends HTMLNonameFocusUIElement {
                 }
             }; break;
             case "drag-skill": {
-                //把卡片做成「可拖到武将技能区」：沿用 usefor 那套拖拽约定（拖动时自己临时挂
-                //id="chosen-card"、载荷里写 "chosen-card"），另加一个自定义类型带来源标记，
-                //技能区据此「复制一张」而不是「把这张卡搬走」；⬅️ 的语义保持不动。
-                const mainContentDiv = this.shadowRoot.querySelector(".main-content");
-                if (!mainContentDiv) break;
-                if (newValue) {
-                    mainContentDiv.setAttribute("draggable", "true");
-                    mainContentDiv.ondragstart = (e) => {
-                        this.setAttribute("id", "chosen-card");
-                        e.dataTransfer.setData("text", "chosen-card");
-                        try {
-                            e.dataTransfer.setData("application/x19d6-skill-source", String(newValue));
-                        } catch (err) { /* 某些环境不支持自定义类型，忽略 */ }
-                        mainContentDiv.ondragend = () => {
-                            this.removeAttribute("id");
-                            mainContentDiv.ondragend = null;
-                        };
-                    };
-                } else {
-                    mainContentDiv.removeAttribute("draggable");
-                    mainContentDiv.ondragstart = null;
-                }
-            }; break;
-            case "markwords": {
+                //绑定要看 `.main-content` 渲染出来没有（见 applyDragSkill），这里不再自己实现一遍
+                this.applyDragSkill();
+            }; break;            case "markwords": {
                 if (newValue) {
                     this.markTextNode(".main-content", newValue.split(" "), { root: "shadowRoot" })
                 } else {
@@ -228,6 +207,40 @@ class HTMLNonameInfoCardElement extends HTMLNonameFocusUIElement {
                 }
             }
         }
+    }
+    /**
+     * 让内层 `.main-content` 能拖到武将技能区（载荷里带 `drag-skill` 的来源标记）。
+     * 沿用 usefor 那套拖拽约定：拖动时卡片临时挂 `id="chosen-card"`、`text` 写 "chosen-card"，
+     * 另加自定义类型标记来源，技能区据此「复制一张」而不是「把这张卡搬走」；⬅️ 的语义不动。
+     * ⚠️ 只能绑在**已经渲染出来**的 `.main-content` 上，所以有两个调用点：
+     *   ① `drag-skill` 属性变化（`skill-info` 先渲染的调用方走这里）；
+     *   ② 子类渲染完 `skill-info` 之后 —— 侧栏草稿列表是先 `setAttribute("drag-skill")`、
+     *      后赋 `skillInfo`，那一刻卡片里还没有 `.main-content`；而 `skill-info` 渲染又会把它
+     *      整个重建一次，早绑的那份随旧节点一起丢掉（现象：提示写着能拖，实际拖不动）。
+     * @returns {boolean} 是否绑上（没有内容节点或属性为空 → false）
+     */
+    applyDragSkill() {
+        const mainContentDiv = this.shadowRoot.querySelector(".main-content");
+        if (!mainContentDiv) return false;
+        const value = this.getAttribute("drag-skill") || "";
+        if (!value) {
+            mainContentDiv.removeAttribute("draggable");
+            mainContentDiv.ondragstart = null;
+            return false;
+        }
+        mainContentDiv.setAttribute("draggable", "true");
+        mainContentDiv.ondragstart = (e) => {
+            this.setAttribute("id", "chosen-card");
+            e.dataTransfer.setData("text", "chosen-card");
+            try {
+                e.dataTransfer.setData("application/x19d6-skill-source", String(value));
+            } catch (err) { /* 某些环境不支持自定义类型，忽略 */ }
+            mainContentDiv.ondragend = () => {
+                this.removeAttribute("id");
+                mainContentDiv.ondragend = null;
+            };
+        };
+        return true;
     }
     /**
      * @param {"use"|"remove"} type
@@ -279,6 +292,8 @@ class HTMLNonameSkillInfoCardElement extends HTMLNonameInfoCardElement {
                     mainContentDiv.appendChild(audioUl);
                 }
                 showInfo.replaceChildren(fragment);
+                //`skill-info` 每次渲染都会重建 `.main-content`，拖拽绑定要跟着重来（见 applyDragSkill）
+                this.applyDragSkill();
             }
         }
         else super.attributeChangedCallback(name, oldValue, newValue);
