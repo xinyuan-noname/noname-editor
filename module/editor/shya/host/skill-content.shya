@@ -12,29 +12,36 @@
 //     #num: 2                     }
 //   }
 //
-//   三种写法完全等价：#who 是第一个参数，后缀形式把它写在宏名左边；
-//   位置参数也合法。本文件与模块 editor/shya/contentMacros.mjs 的槽表一一对应。
+//   三种写法完全等价：#who 是第一个参数，后缀形式把它写在宏名左边；位置参数也合法。
+//   本文件与模块 editor/shya/contentMacros.mjs 的槽表一一对应（自检会核对两边）。
 //
-// ── 约定（写技能前先读）──────────────────────────────────────────────────────
-//  1. 所有宏都产出 **await 语句**，只能用在 async 函数体里：@skill_* 的 #content / #cost。
-//  2. 值槽分两种：**必填**（写不出缺省，省了就是语义错误：谁/哪张牌/技能 id…）与
-//     **可省**（宏里先给局部变量一个缺省值，再用 `<槽>` 作用域在「写了」时覆盖它）：
-//         draw_num = 1                  // 缺省
-//         <num>draw_num = #num</num>    // 写了才覆盖
-//     于是 `@draw { #who: player }` 就是缺省的一张牌，产物 `player.draw(draw_num)`，
-//     与手写 `player.draw()` 同义（引擎自己的缺省值照样生效，因为传的正是缺省值）。
-//     ⚠️ 作用域**只能出现在语句 / 对象成员 / case 分支**位置，**实参位置放不了**
-//     （`gain(cards<anim>, #anim</anim>)` 报 SYN015/SYN033）——所以缺省必须走「变量 + 覆盖」。
-//  4. 语句槽（#yes / #no / #red / #heart…）不写就整块消失（`<slot>` 作用域），
-//     所以「只关心一个分支」时只写那一个槽；「分支要在、但什么都不做」写 `#x: ""`
-//     （**不能写 `#x: _`**，`_` 在绑定层等价于「没写」，作用域会整块消失）。
-//  5. 需要 JS 回调的地方（判定函数、筛选函数）用 @ts：`#judge: @ts{(card) => …}`。
+// ── 两条核心约定 ─────────────────────────────────────────────────────────────
+//  1. **可省的槽 = 引擎参数对象的成员**。引擎的多形态方法都吃一个参数对象
+//     （`player.draw({ num: 2, source: p })`，源码里就是 `Object.assign(next, params)`，
+//     官方类型注释写的是 `EventDrawParams`），而**对象成员位置正好是 `<槽>` 作用域允许的三处之一**：
+//
+//         await #who draw({
+//           <num>num: #num,</num>          ← 调用点写了就产出这一行
+//           <source>source: #source,</source>
+//         })
+//
+//     于是：不写 → `player.draw({})`（引擎缺省值照样生效，摸一张）；写了 → `player.draw({ num: 2 })`。
+//     **不需要任何中间变量**，也不需要 `@when`／`is void`。
+//     ⚠️ 作用域**不能放在实参位置**（`draw(#num<source>, #source</source>)` 报 SYN015/SYN033）——
+//     所以「可省的参数」只能用参数对象表达，位置实参一律必填。
+//  2. **不支持参数对象的方法（源码里没有 `params` 分支）就用位置实参，且参数必填**：
+//     `loseHp(num)` / `give(cards, target)` / `addMark(name, num)` / `addTempSkill(skill, expire)` /
+//     `gainMultiple(targets, position)` / `line(target, config)` / `chooseToGuanxing(num)` …
+//     （哪些方法支持参数对象见 `_x19D6_backup/tools/legacy-params-audit.mjs` 的实测表，
+//      槽名也参考了旧版编辑器生成器的参数表 `skill/editor/parameter.mjs`。）
+//  3. 判定/询问宏的 `#yes` / `#no` / `#red` / `#heart` 是**语句槽**：不写就整块消失；
+//     「分支要在、但什么都不做」写 `#x: ""`（**不能写 `#x: _`**，`_` 在绑定层等价于「没写」）。
+//  4. 只有三个宏会留下局部变量，而且它们**就是判定结果本身**（分支里要用：
+//     `judge_color_result card` = 判定牌，标准包也是这么写的）：
+//     `judge_color_result` / `judge_bool_result` / `judge_suit_result`。其它宏一行、零变量。
+//  5. 需要 JS 回调（判定评分函数、筛选函数）就写 `@ts` 箭头：`#judge: @ts{(card) => …}`。
 //     shya 没有函数字面量（docs「已知限制」），`fn (x) { }` 不是表达式。
-//  6. 宏内部会声明局部变量，命名统一 `<宏名>_<槽名>`（draw_num / take_card_forced /
-//     judge_color_result …）。同一作用域重复调用同一个宏没问题——但**不要**把局部变量写成
-//     `x: any = …`：带标注时每次展开都是一次声明，会 TC001「重复声明」并在产物里留下两条
-//     `let x`（JS SyntaxError）；去掉标注后 shya 会推断成「第一次 let、后续赋值」。
-//  7. 宏没覆盖的写法（遗计分配牌、洛神循环、多段 chooseControl、伤害属性/来源…）直接写引擎
+//  6. 宏没覆盖的写法（遗计分配牌、洛神循环、多段 chooseControl、需要读询问结果…）直接写引擎
 //     调用：shya 里 `player draw(2)` 就是 `player.draw(2)`（成员访问用空格，没有点号）。
 //     这里只收「标准包里反复出现」的写法，不是引擎 API 的包装层。
 //
@@ -47,10 +54,10 @@
 //   获得牌     奸雄/天妒/遗计/洛神/机捷/忠义                               @gain
 //   弃置牌     离间/流离/苦肉                                             @discard
 //   给出牌     仁德                                                      @give
-//   拿人牌     反馈/反间                                                  @take_card
+//   拿人牌     反馈/反间（要读 {bool,cards} 结果的那半段自己写）             @take_card
 //   弃人牌     过河拆桥类（标准包内 0 处，留给扩展）                        @discard_card
 //   置弃牌堆   忠义                                                      @to_discardpile
-//   置于武将牌 忠义                                                      @to_expansion
+//   置于武将牌 忠义（gaintag 会自动裹成数组，槽里写字符串就行）              @to_expansion
 //   判定看成败 刚烈/刚烈3/铁骑/洛神/鬼才                                  @judge_bool
 //   判定看颜色 铁骑/洛神（+ 后续 80% 的判定技）                            @judge_color
 //   判定看花色 刚烈（红桃）/铁骑（黑桃，主公技）                            @judge_suit
@@ -94,27 +101,25 @@
 
 import "./player.shya"
 
-// ════════════════════════════════ 1. 判定 ════════════════════════════════════
+// ═══════════════════════════════════════════════════════ 1. 判定 ═══════════════
 // 判定结果对象（引擎 content.js 的 judge 事件 + gameEvent.forResult()）：
 //   { card, suit, color, judge, bool }
 //   color = "red" / "black" / "none"，suit = "heart" / "diamond" / "club" / "spade"，
 //   judge 是判定分，bool 是判定成败（判定分为 0 时是 null，按失败处理）。
-// 宏会把结果绑定到 judge_color_result / judge_suit_result / judge_bool_result，
-// 分支里可以直接用它（例：judge_color_result card 就是判定牌）。
-// 局部变量命名统一 `<宏名>_<槽名>`（judge_color_result / draw_num / take_card_forced …），
-// **不要给它们加 `: any` 标注**：带标注时每次展开都是一次声明，同一个宏在同一作用域用两次
-// 会 TC001「变量重复声明」并且产物里出现两条 `let x`（JS SyntaxError）；不加标注则由 shya
-// 推断成「第一次 let、后续赋值」，重复调用安全。（实测 probe19，`node --check` 通过。）
-// 判定函数、筛选函数只能写 @ts 箭头（shya 没有函数字面量）。
+// 宏把结果绑到 judge_*_result，分支里可以直接用（例：judge_color_result card 就是判定牌）。
+// #judge 是判定评分函数（正数算成功），用 @ts 箭头写。
 
 // 判定并按颜色分支。#red / #black / #none 三个槽可任选，不写的分支整条消失。
 macro @judge_color(
   #who: expr,
+  #judge: expr?,
   #red: stmt,
   #black: stmt,
   #none: stmt
 ) {
-  judge_color_result = await #who judge() forResult()
+  judge_color_result = await #who judge({
+    <judge>judge: #judge,</judge>
+  }) forResult()
   case judge_color_result color {
     <red>"red": #red</red>
     <black>"black": #black</black>
@@ -122,17 +127,17 @@ macro @judge_color(
   }
 }
 
-// 判定并按成败分支。#judge 是判定评分函数（返回正数算成功），用 @ts 写箭头函数。
-// 与官方一致地设置 judge2 = result => result.bool（判定动画）。
+// 判定并按成败分支（自动带 judge2 = result => result.bool，判定动画与官方一致）。
 macro @judge_bool(
   #who: expr,
   #judge: expr,
   #yes: stmt,
   #no: stmt
 ) {
-  judge_bool_event = #who judge(#judge)
-  judge_bool_event judge2 = @ts{(result) => result.bool}
-  judge_bool_result = await judge_bool_event forResult()
+  judge_bool_result = await #who judge({
+    judge: #judge,
+    judge2: @ts{(result) => result.bool}
+  }) forResult()
   if judge_bool_result bool {
     #yes
   } else {
@@ -144,13 +149,16 @@ macro @judge_bool(
 // 只需要「红桃才算成功」这类写法时，只写 #heart 一个槽即可。
 macro @judge_suit(
   #who: expr,
+  #judge: expr?,
   #heart: stmt,
   #diamond: stmt,
   #club: stmt,
   #spade: stmt,
   #other: stmt
 ) {
-  judge_suit_result = await #who judge() forResult()
+  judge_suit_result = await #who judge({
+    <judge>judge: #judge,</judge>
+  }) forResult()
   case judge_suit_result suit {
     <heart>"heart": #heart</heart>
     <diamond>"diamond": #diamond</diamond>
@@ -160,193 +168,330 @@ macro @judge_suit(
   }
 }
 
-// ════════════════════════════════ 2. 效果 ════════════════════════════════════
-// 直接对角色做事。引擎这些方法都返回可 await 的事件，宏统一 await 保证顺序。
+// ═══════════════════════════════════════════════════════ 2. 效果 ═══════════════
+// 参数名就是引擎参数对象的键（旧版编辑器生成器的参数表用的是同一批键）。
 
-// 摸牌（#num 张，不写缺省 1 张）
-macro @draw(#who: expr, #num: expr?) {
-  draw_num = 1
-  <num>draw_num = #num</num>
-  await #who draw(draw_num)
+// 摸牌：num 张（不写＝引擎缺省 1 张）/ source 来源 / animate 有无动画 /
+// nodelay 无延迟 / visible 全场可见 / bottom 从牌堆底摸
+macro @draw(
+  #who: expr,
+  #num: expr?,
+  #source: expr?,
+  #animate: expr?,
+  #nodelay: expr?,
+  #visible: expr?,
+  #bottom: expr?
+) {
+  await #who draw({
+    <num>num: #num,</num>
+    <source>source: #source,</source>
+    <animate>animate: #animate,</animate>
+    <nodelay>nodelay: #nodelay,</nodelay>
+    <visible>visible: #visible,</visible>
+    <bottom>bottom: #bottom,</bottom>
+  })
 }
 
-// 令角色受到伤害（#num 点，不写缺省 1 点）。属性伤害/无来源/无卡牌等写法直呼引擎：
-// `target damage(2, "fire")` / `target damage("nocard")`。
-macro @damage(#who: expr, #num: expr?) {
-  damage_num = 1
-  <num>damage_num = #num</num>
-  await #who damage(damage_num)
+// 造成伤害：num 伤害点数（不写＝1）/ nature 属性（"fire"/"thunder"…）/ source 来源 /
+// unreal 虚拟伤害 / nosource 无来源 / nocard 无卡牌 / notrigger 不触发四个时机
+macro @damage(
+  #who: expr,
+  #num: expr?,
+  #nature: expr?,
+  #source: expr?,
+  #unreal: expr?,
+  #nosource: expr?,
+  #nocard: expr?,
+  #notrigger: expr?
+) {
+  await #who damage({
+    <num>num: #num,</num>
+    <nature>nature: #nature,</nature>
+    <source>source: #source,</source>
+    <unreal>unreal: #unreal,</unreal>
+    <nosource>nosource: #nosource,</nosource>
+    <nocard>nocard: #nocard,</nocard>
+    <notrigger>notrigger: #notrigger,</notrigger>
+  })
 }
 
-// 回复体力（#num 点，不写缺省 1 点）
-macro @recover(#who: expr, #num: expr?) {
-  recover_num = 1
-  <num>recover_num = #num</num>
-  await #who recover(recover_num)
+// 回复体力：num 点数（不写＝1）/ source 来源 / nosource 无来源 / nocard 无卡牌
+macro @recover(
+  #who: expr,
+  #num: expr?,
+  #source: expr?,
+  #nosource: expr?,
+  #nocard: expr?
+) {
+  await #who recover({
+    <num>num: #num,</num>
+    <source>source: #source,</source>
+    <nosource>nosource: #nosource,</nosource>
+    <nocard>nocard: #nocard,</nocard>
+  })
 }
 
-// 失去体力（#num 点，不是伤害；不写缺省 1 点）
-macro @lose_hp(#who: expr, #num: expr?) {
-  lose_hp_num = 1
-  <num>lose_hp_num = #num</num>
-  await #who loseHp(lose_hp_num)
+// 失去体力（不是伤害）。引擎 loseHp(num) 只有位置参数 → #num 必填。
+macro @lose_hp(#who: expr, #num: expr) {
+  await #who loseHp(#num)
 }
 
-// 失去体力上限（#num 点，不写缺省 1 点）
+// 失去体力上限（不写 num ＝ 1）
 macro @lose_max_hp(#who: expr, #num: expr?) {
-  lose_max_hp_num = 1
-  <num>lose_max_hp_num = #num</num>
-  await #who loseMaxHp(lose_max_hp_num)
+  await #who loseMaxHp({
+    <num>num: #num,</num>
+  })
 }
 
-// ═══════════════════════════════ 3. 牌的处理 ═════════════════════════════════
+// ═══════════════════════════════════════════════════════ 3. 牌 ═════════════════
 // 牌区记号：h 手牌 / e 装备 / j 判定 / he、hs、hes 等组合（引擎 getCards 约定）。
 
-// 弃置牌（把 #cards 里的牌置入弃牌堆）
-macro @discard(#who: expr, #cards: expr) {
-  await #who discard(#cards)
+// 弃置牌：cards 弃置的牌 / position 从哪个区域弃（影响原区域）/ notBySelf 不是被自己弃置 /
+// discarder 弃置者（默认事件来源）
+macro @discard(
+  #who: expr,
+  #cards: expr,
+  #position: expr?,
+  #notBySelf: expr?,
+  #discarder: expr?
+) {
+  await #who discard({
+    cards: #cards,
+    <position>position: #position,</position>
+    <notBySelf>notBySelf: #notBySelf,</notBySelf>
+    <discarder>discarder: #discarder,</discarder>
+  })
 }
 
-// 获得牌。#anim 是动画名："gain2" 一般式 / "gain" 涌出 / "draw" 背面 / "give"、"giveAuto"；
-// 不写缺省 "gain2"（标准包里最常用的那个）。
-macro @gain(#who: expr, #cards: expr, #anim: expr?) {
-  gain_anim = "gain2"
-  <anim>gain_anim = #anim</anim>
-  await #who gain(#cards, gain_anim)
+// 获得牌：cards 获得的牌 / source 从谁那里获得 / animate 动画（gain2 一般式、gain 涌出、
+// draw 背面、give、giveAuto）/ delay 是否有延迟 / log 录入日志 /
+// fromStorage 从标记中取 / bySelf 视为自己给的
+macro @gain(
+  #who: expr,
+  #cards: expr,
+  #source: expr?,
+  #animate: expr?,
+  #delay: expr?,
+  #log: expr?,
+  #fromStorage: expr?,
+  #bySelf: expr?
+) {
+  await #who gain({
+    cards: #cards,
+    <source>source: #source,</source>
+    <animate>animate: #animate,</animate>
+    <delay>delay: #delay,</delay>
+    <log>log: #log,</log>
+    <fromStorage>fromStorage: #fromStorage,</fromStorage>
+    <bySelf>bySelf: #bySelf,</bySelf>
+  })
 }
 
-// 把牌交给别人（#target 获得）
+// 把牌交给别人。引擎 give(cards, target) 只有位置参数 → 两个槽都必填。
 macro @give(#who: expr, #cards: expr, #target: expr) {
   await #who give(#cards, #target)
 }
 
-// 获得别人的牌（引擎 gainPlayerCard）。#position 例 "he" / "e" / "h"，不写缺省 "he"；
-// #forced 传 true 表示必须选择，不写缺省 false。结果绑定到 take_card_result（.bool / .cards / .card）。
+// 获得别人的牌：from 被拿牌的角色 / select 张数（1、[1,2]）/ position 区域 /
+// forced 必须选 / prompt 询问文字 / visible 该角色手牌可见
+// （要读 { bool, cards } 结果时直呼引擎：`r = await player gainPlayerCard(...) forResult()`）
 macro @take_card(
   #who: expr,
   #from: expr,
+  #select: expr?,
   #position: expr?,
-  #forced: expr?
+  #forced: expr?,
+  #prompt: expr?,
+  #visible: expr?
 ) {
-  take_card_position = "he"
-  <position>take_card_position = #position</position>
-  take_card_forced = false
-  <forced>take_card_forced = #forced</forced>
-  take_card_result = await #who gainPlayerCard(#from, take_card_position, take_card_forced) forResult()
+  await #who gainPlayerCard({
+    target: #from,
+    <select>select: #select,</select>
+    <position>position: #position,</position>
+    <forced>forced: #forced,</forced>
+    <prompt>prompt: #prompt,</prompt>
+    <visible>visible: #visible,</visible>
+  })
 }
 
-// 弃置别人的牌（引擎 discardPlayerCard）。#position 不写缺省 "he"，#forced 不写缺省 false。
-// 结果绑定到 discard_card_result。
+// 弃置别人的牌（键同 @take_card，引擎 discardPlayerCard）
 macro @discard_card(
   #who: expr,
   #from: expr,
+  #select: expr?,
   #position: expr?,
-  #forced: expr?
+  #forced: expr?,
+  #prompt: expr?,
+  #visible: expr?
 ) {
-  discard_card_position = "he"
-  <position>discard_card_position = #position</position>
-  discard_card_forced = false
-  <forced>discard_card_forced = #forced</forced>
-  discard_card_result = await #who discardPlayerCard(#from, discard_card_position, discard_card_forced) forResult()
+  await #who discardPlayerCard({
+    target: #from,
+    <select>select: #select,</select>
+    <position>position: #position,</position>
+    <forced>forced: #forced,</forced>
+    <prompt>prompt: #prompt,</prompt>
+    <visible>visible: #visible,</visible>
+  })
 }
 
-// 失去牌至弃牌堆（与「弃置」不同：没有弃置来源/动画语义，常用于移去武将牌上的牌）
-macro @to_discardpile(#who: expr, #cards: expr) {
-  await #who loseToDiscardpile(#cards)
+// 失去牌至弃牌堆（与「弃置」不同：没有弃置来源语义，常用于移去武将牌上的牌）：
+// cards / source / animate / notBySelf / insert 插入顺序 / blank 背面朝上
+macro @to_discardpile(
+  #who: expr,
+  #cards: expr,
+  #source: expr?,
+  #animate: expr?,
+  #notBySelf: expr?,
+  #insert: expr?,
+  #blank: expr?
+) {
+  await #who loseToDiscardpile({
+    cards: #cards,
+    <source>source: #source,</source>
+    <animate>animate: #animate,</animate>
+    <notBySelf>notBySelf: #notBySelf,</notBySelf>
+    <insert>insert: #insert,</insert>
+    <blank>blank: #blank,</blank>
+  })
 }
 
-// 置于武将牌上（引擎 addToExpansion），并给这些牌打上 #tag 记号。
-// #anim 例 "give"/"gain2"/"draw"，不写缺省 "give"（标准包忠义的用法）。
+// 置于武将牌上：cards / gaintag 牌的记号（槽里写字符串，宏自动裹成数组）/
+// source / animate / delay / log / fromStorage / bySelf
 macro @to_expansion(
   #who: expr,
   #cards: expr,
-  #anim: expr?,
-  #tag: expr
+  #gaintag: expr?,
+  #source: expr?,
+  #animate: expr?,
+  #delay: expr?,
+  #log: expr?,
+  #fromStorage: expr?,
+  #bySelf: expr?
 ) {
-  to_expansion_anim = "give"
-  <anim>to_expansion_anim = #anim</anim>
-  to_expansion_event = #who addToExpansion(#who, to_expansion_anim, #cards)
-  to_expansion_event gaintag add(#tag)
+  await #who addToExpansion({
+    cards: #cards,
+    <gaintag>gaintag: [#gaintag],</gaintag>
+    <source>source: #source,</source>
+    <animate>animate: #animate,</animate>
+    <delay>delay: #delay,</delay>
+    <log>log: #log,</log>
+    <fromStorage>fromStorage: #fromStorage,</fromStorage>
+    <bySelf>bySelf: #bySelf,</bySelf>
+  })
 }
 
-// ═══════════════════════════ 4. 询问与发动代价 ══════════════════════════════
-// @ask_* 系列自带「结果分支」；@ask_target / @ask_card / @cost 用来写官方 cost 函数：
+// ═══════════════════════════════════════════════ 4. 询问与发动代价 ═════════════
+// @ask_* 自带结果分支；@ask_target / @ask_card / @cost 用来写官方 cost 函数：
 // 结果写进 event.result（引擎随后把 targets / cards 归到 event 上，content 里照旧读）。
 
-// 询问是否（chooseBool），按 bool 分支。
+// 询问是否（不写 prompt 就是引擎默认问法），按选择分支。
 macro @ask_bool(
   #who: expr,
-  #text: expr,
+  #prompt: expr?,
   #yes: stmt,
   #no: stmt
 ) {
-  ask_bool_result = await #who chooseBool(#text) forResult()
-  if ask_bool_result bool {
+  if await #who chooseBool({
+    <prompt>prompt: #prompt,</prompt>
+  }) forResult() bool {
     #yes
   } else {
     #no
   }
 }
 
-// 令角色弃置 #num 张牌（chooseToDiscard，不写缺省 1 张），按「弃了没有」分支。
-// 「弃置 N 张牌，否则受到 1 点伤害」这类写法：#no 里写后果。
+// 令角色弃置 num 张牌（不写＝1 张）：num / prompt 询问文字 / position 区域 /
+// forced 必须选 / filterCard 筛牌条件（对象或 @ts 函数）；#no 里写「否则」的后果。
 macro @ask_discard(
   #who: expr,
   #num: expr?,
-  #prompt: expr,
+  #prompt: expr?,
+  #position: expr?,
+  #forced: expr?,
+  #filterCard: expr?,
   #yes: stmt,
   #no: stmt
 ) {
-  ask_discard_num = 1
-  <num>ask_discard_num = #num</num>
-  ask_discard_result = await #who chooseToDiscard(ask_discard_num, #prompt) forResult()
-  if ask_discard_result bool {
+  if await #who chooseToDiscard({
+    <num>selectCard: [#num, #num],</num>
+    <prompt>prompt: #prompt,</prompt>
+    <position>position: #position,</position>
+    <forced>forced: #forced,</forced>
+    <filterCard>filterCard: #filterCard,</filterCard>
+  }) forResult() bool {
     #yes
   } else {
     #no
   }
 }
 
-// 询问目标（chooseTarget），结果写进 event.result —— 官方 cost 的标准写法。
-// #filter 是筛选函数或筛选对象：`lib filter notMe` / `@ts{(card, player, target) => …}`。
-// content 里照旧读 event.targets / event.target。
-macro @ask_target(#who: expr, #prompt: expr, #filter: expr) {
-  event result = await #who chooseTarget(#prompt, #filter) forResult()
+// 询问目标（官方 cost 的标准写法，结果在 event.targets / event.target）：
+// prompt 询问文字 / filterTarget 筛选（`lib filter notMe` 或 @ts 箭头）/
+// selectTarget 数量（数字或 [min,max]）/ forced 必须选
+macro @ask_target(
+  #who: expr,
+  #prompt: expr?,
+  #filterTarget: expr?,
+  #selectTarget: expr?,
+  #forced: expr?
+) {
+  event result = await #who chooseTarget({
+    <prompt>prompt: #prompt,</prompt>
+    <filterTarget>filterTarget: #filterTarget,</filterTarget>
+    <selectTarget>selectTarget: #selectTarget,</selectTarget>
+    <forced>forced: #forced,</forced>
+  }) forResult()
 }
 
-// 询问牌（chooseCard），结果写进 event.result（content 里读 event.cards）。
+// 询问牌（结果在 event.cards）：prompt / filterCard 筛牌 / position 区域 /
+// selectCard 张数 / forced 必须选
 macro @ask_card(
   #who: expr,
-  #position: expr,
-  #prompt: expr,
-  #filter: expr
+  #prompt: expr?,
+  #filterCard: expr?,
+  #position: expr?,
+  #selectCard: expr?,
+  #forced: expr?
 ) {
-  event result = await #who chooseCard(#position, #prompt, #filter) forResult()
+  event result = await #who chooseCard({
+    <prompt>prompt: #prompt,</prompt>
+    <filterCard>filterCard: #filterCard,</filterCard>
+    <position>position: #position,</position>
+    <selectCard>selectCard: #selectCard,</selectCard>
+    <forced>forced: #forced,</forced>
+  }) forResult()
 }
 
 // 通用：把一次询问/选择的结果作为发动代价写进 event.result。
-// 例：@cost(player chooseToDiscard(2, "弃置两张牌") set("logSkill", event skill))
+// 例：@cost(player chooseToDiscard({ selectCard: [2, 2], prompt: "弃置两张牌" }))
 macro @cost(#call: callExpr) {
   event result = await #call forResult()
 }
 
-// 观星（chooseToGuanxing），结果绑定到 guanxing_result（.bool / .moved）。
+// 观星：num 观看张数 / prompt 提示文字；按「有没有动牌」分支（#stay 里通常写加临时技）。
 macro @ask_guanxing(
   #who: expr,
   #num: expr,
-  #prompt: expr
+  #prompt: expr,
+  #moved: stmt,
+  #stay: stmt
 ) {
-  guanxing_result = await #who chooseToGuanxing(#num) set("prompt", #prompt) forResult()
+  if await #who chooseToGuanxing(#num) set("prompt", #prompt) forResult() bool {
+    #moved
+  } else {
+    #stay
+  }
 }
 
-// ═══════════════════════════ 5. 技能与标记 ══════════════════════════════════
+// ═══════════════════════════════════════════════ 5. 技能与标记 ═════════════════
+// 这批引擎方法都只有位置参数（没有 params 分支），所以槽一律必填。
 
 // 临时获得技能，#until 是失效时机：phaseUseEnd / phaseEnd / phaseJieshuBegin / roundStart…
 macro @temp_skill(#who: expr, #id: expr, #until: expr) {
   #who addTempSkill(#id, #until)
 }
 
-// 获得技能（触发 addSkill 事件，会走技能获得流程）
+// 获得技能（触发 addSkill 事件，会走技能获得流程）；#ids 传数组
 macro @add_skills(#who: expr, #ids: expr) {
   #who addSkills(#ids)
 }
@@ -356,18 +501,14 @@ macro @remove_skill(#who: expr, #id: expr) {
   #who removeSkill(#id)
 }
 
-// 获得标记（武将牌上的数值标记；#num 不写缺省 1）
-macro @mark(#who: expr, #id: expr, #num: expr?) {
-  mark_num = 1
-  <num>mark_num = #num</num>
-  #who addMark(#id, mark_num)
+// 获得标记（武将牌上的数值标记）
+macro @mark(#who: expr, #id: expr, #num: expr) {
+  #who addMark(#id, #num)
 }
 
-// 移除标记（#num 不写缺省 1）
-macro @unmark(#who: expr, #id: expr, #num: expr?) {
-  unmark_num = 1
-  <num>unmark_num = #num</num>
-  #who removeMark(#id, unmark_num)
+// 移除标记
+macro @unmark(#who: expr, #id: expr, #num: expr) {
+  #who removeMark(#id, #num)
 }
 
 // 把限定技/觉醒技记为已发动（#id 一般是 event name）
@@ -375,28 +516,22 @@ macro @awaken(#who: expr, #id: expr) {
   #who awakenSkill(#id)
 }
 
-// ═══════════════════════════ 6. 事件数值与流程修正 ═══════════════════════════
+// ═══════════════════════════════════════════════ 6. 事件数值与流程修正 ═════════
 // 这些宏直接改触发事件，写在 @skill_trigger 的 #content 里（需要 trigger 在作用域里）。
 
-// 触发事件数值 +n（摸牌数、伤害数…；例：英姿 trigger.num++；#num 不写缺省 1）
-macro @num_up(#num: expr?) {
-  num_up_num = 1
-  <num>num_up_num = #num</num>
-  trigger num += num_up_num
+// 触发事件数值 +n（摸牌数、伤害数…；例：英姿 trigger.num++）
+macro @num_up(#num: expr) {
+  trigger num += #num
 }
 
-// 触发事件数值 -n（例：裸衣 trigger.num--；#num 不写缺省 1）
-macro @num_down(#num: expr?) {
-  num_down_num = 1
-  <num>num_down_num = #num</num>
-  trigger num -= num_down_num
+// 触发事件数值 -n（例：裸衣 trigger.num--）
+macro @num_down(#num: expr) {
+  trigger num -= #num
 }
 
-// 伤害基数 +n（例：救援/忠义2 的「此【杀】伤害+1」；#num 不写缺省 1）
-macro @base_damage_up(#num: expr?) {
-  base_damage_up_num = 1
-  <num>base_damage_up_num = #num</num>
-  trigger baseDamage += base_damage_up_num
+// 伤害基数 +n（例：救援/忠义2 的「此【杀】伤害+1」）
+macro @base_damage_up(#num: expr) {
+  trigger baseDamage += #num
 }
 
 // 取消触发事件（例：克己 trigger.cancel()）
@@ -411,25 +546,19 @@ macro @to_zero() {
 
 // 把「使用牌指定目标」事件里的目标由 #from 换成 #to（例：同疾/流离 把杀转移给别人）
 macro @retarget(#from: expr, #to: expr) {
-  retarget_event = trigger getParent()
-  retarget_event triggeredTargets2 remove(#from)
-  retarget_event targets remove(#from)
-  retarget_event targets push(#to)
+  trigger getParent() triggeredTargets2 remove(#from)
+  trigger getParent() targets remove(#from)
+  trigger getParent() targets push(#to)
 }
 
-// ════════════════════════════════ 7. 杂项 ═══════════════════════════════════
+// ═══════════════════════════════════════════════════════ 7. 杂项 ═══════════════
 
-// 画一条指示线（#color 例 "green"，不写缺省 "green"）
-macro @line(#who: expr, #target: expr, #color: expr?) {
-  line_color = "green"
-  <color>line_color = #color</color>
-  #who line(#target, line_color)
+// 画一条指示线（#color 例 "green"）
+macro @line(#who: expr, #target: expr, #color: expr) {
+  #who line(#target, #color)
 }
 
-// 一次从多名角色处各获得指定区域的牌（例：突袭 player.gainMultiple(event.targets)；
-// #position 不写缺省 "h"，与引擎 gainMultiple(targets, position = "h") 一致）
-macro @gain_multiple(#who: expr, #targets: expr, #position: expr?) {
-  gain_multiple_position = "h"
-  <position>gain_multiple_position = #position</position>
-  await #who gainMultiple(#targets, gain_multiple_position)
+// 一次从多名角色处各获得指定区域的牌（例：突袭 player.gainMultiple(event.targets, "h")）
+macro @gain_multiple(#who: expr, #targets: expr, #position: expr) {
+  await #who gainMultiple(#targets, #position)
 }
