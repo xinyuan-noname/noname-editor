@@ -26,6 +26,10 @@
 // ============================================================================
 
 /** 托管区标记：面板维护的标签行都夹在这两行之间 */
+// 中英两套槽名（宏库 skill-type.shya / skill-type-cn.shya）的换算集中在这里：
+// **内部一律用英文规范名**，只在「读源码」与「写源码」两个边界上换语言。
+import { SKILL_MACRO_NAMES, canonicalSlot, slotName as localizedSlot } from "./slotLang.mjs";
+
 export const TAG_REGION_BEGIN = "//#tags-begin";
 export const TAG_REGION_END = "//#tags-end";
 
@@ -364,20 +368,22 @@ export function inlineTagSlots(source) {
  */
 export function lineFromTag(key, options = {}) {
     const numbers = options.numbers || {};
+    /** 槽名按语言取：中文库是 #次数 / #锁定技…，英文库是 #usable / #locked… */
+    const name = slot => localizedSlot(slot, options.lang);
     //「发动」页的两个次数标签：n 由芯片旁的 − / + 决定（旧版的 usable-1 / usable-n 仍照收）
-    if (key === "usable" || key === "usable-1" || key === "usable-n") return [`#usable: ${clampNumber(numbers.usable)}`];
-    if (key === "round" || key === "round-1" || key === "round-n") return [`#round: ${clampNumber(numbers.round)}`];
-    if (key === "locked-false") return ["#locked: false"];
-    if (key === "lose-false") return ["#lose: false"];
-    if (key === "discard-false") return ["#discard: false"];
-    if (key === "delay-false") return ["#delay: false"];
-    if (key.startsWith("group-")) return [`#groupSkill: ${JSON.stringify(key.slice(6))}`];
+    if (key === "usable" || key === "usable-1" || key === "usable-n") return [`#${name("usable")}: ${clampNumber(numbers.usable)}`];
+    if (key === "round" || key === "round-1" || key === "round-n") return [`#${name("round")}: ${clampNumber(numbers.round)}`];
+    if (key === "locked-false") return [`#${name("locked")}: false`];
+    if (key === "lose-false") return [`#${name("lose")}: false`];
+    if (key === "discard-false") return [`#${name("discard")}: false`];
+    if (key === "delay-false") return [`#${name("delay")}: false`];
+    if (key.startsWith("group-")) return [`#${name("groupSkill")}: ${JSON.stringify(key.slice(6))}`];
     if (key === "groupSkill") {
         // 页上的「势力技」本身没有值：具体势力点芯片旁的 ⚙ 选（旧版是「特殊设置」页）。
         // 单独选它时写一行注释，既说明去处、也能被面板读回来。
         return ['// 势力技：点旁边的 ⚙ 选一个具体势力（产物 groupSkill: "wei"）'];
     }
-    if (key.startsWith("animation-")) return [`#animationColor: ${JSON.stringify(key.slice(10))}`];
+    if (key.startsWith("animation-")) return [`#${name("animationColor")}: ${JSON.stringify(key.slice(10))}`];
     if (key.startsWith("clan-")) return [`// 宗族：${key.slice(5)}（照旧版不产字段；宗族归属由武将卡设定）`];
     if (key === "mainVice-remove1") {
         const id = String(options.skillId || "");
@@ -385,10 +391,10 @@ export function lineFromTag(key, options = {}) {
         if (options.main !== false) conds.push(`player checkMainSkill(${JSON.stringify(id)})`);
         if (options.vice) conds.push(`(player checkViceSkill(${JSON.stringify(id)}) && !player viceChanged)`);
         if (!conds.length) conds.push(`player checkMainSkill(${JSON.stringify(id)})`);
-        return ["#init:", `  if (${conds.join(" || ")}) player removeMaxHp()`];
+        return [`#${name("init")}:`, `  if (${conds.join(" || ")}) player removeMaxHp()`];
     }
     if (!key) return [];
-    return [`#${key}: true`];
+    return [`#${name(key)}: true`];
 }
 
 /**
@@ -441,9 +447,10 @@ export function tagFromSlotLine(line) {
     const clan = /^\/\/\s*宗族：(.+?)[（(]/.exec(text);
     if (clan) return `clan-${clan[1]}`;
     if (/^\/\/\s*势力技：/.test(text)) return "groupSkill";
-    const matched = /^#([A-Za-z_$][\w$]*)\s*:\s*(.*?)\s*,?$/.exec(text);
+    const matched = new RegExp(`^#(${SLOT_NAME})\\s*:\\s*(.*?)\\s*,?$`).exec(text);
     if (!matched) return "";
-    const slot = matched[1];
+    //中文槽名（#次数）与英文槽名（#usable）都先归一到英文规范名再比对
+    const slot = canonicalSlot(matched[1]);
     const value = matched[2].trim();
     if (slot === "init") return "mainVice-remove1";
     if (slot === "usable") return "usable";
@@ -460,8 +467,10 @@ export function tagFromSlotLine(line) {
 
 /** 标签行里的数字（`#usable: 3` → 3），没有返回 0 */
 function numberFromSlotLine(line) {
-    const matched = /^#(?:usable|round)\s*:\s*(\d+)/.exec(String(line || "").trim());
-    return matched ? Number(matched[1]) : 0;
+    const matched = new RegExp(`^#(${SLOT_NAME})\\s*:\\s*(\\d+)`).exec(String(line || "").trim());
+    if (!matched) return 0;
+    const slot = canonicalSlot(matched[1]);
+    return slot === "usable" || slot === "round" ? Number(matched[2]) : 0;
 }
 
 /** 特殊标签隐含它的父标签：`#groupSkill: "wei"` 也意味着「势力技」被选中 */
@@ -505,8 +514,10 @@ export function tagNumbersFromSource(source) {
     if (!call) return numbers;
     const body = String(source).slice(call.bodyStart, call.bodyEnd);
     for (const line of body.split(/\r?\n/)) {
-        const matched = /^#(usable|round)\s*:\s*(\d+)/.exec(line.trim());
-        if (matched) numbers[matched[1]] = clampNumber(matched[2]);
+        const matched = new RegExp(`^#(${SLOT_NAME})\\s*:\\s*(\\d+)`).exec(line.trim());
+        if (!matched) continue;
+        const slot = canonicalSlot(matched[1]);
+        if (slot === "usable" || slot === "round") numbers[slot] = clampNumber(matched[2]);
     }
     return numbers;
 }
@@ -529,8 +540,8 @@ export function inlineTagKeys(source) {
     for (const line of text.slice(call.bodyStart, call.bodyEnd).split(/\r?\n/)) {
         const trimmed = line.trim();
         if (!trimmed.startsWith("#") || inRegion.has(trimmed)) continue;
-        const slot = /^#([A-Za-z_$][\w$]*)\s*:/.exec(trimmed);
-        if (!slot || !slotNames.has(slot[1])) continue;
+        const slot = new RegExp(`^#(${SLOT_NAME})\\s*:`).exec(trimmed);
+        if (!slot || !slotNames.has(canonicalSlot(slot[1]))) continue;
         const key = tagFromSlotLine(trimmed);
         if (key) keys.add(key);
     }
@@ -567,8 +578,10 @@ export function getSpecialGroups(lib, chosenTags = []) {
 // 花括号配对会跳过 // 行注释、/* 块注释与三种字符串，避免被 `}` / `{` 骗到。
 // ============================================================================
 
-const MACRO_CALL = /@skill_[A-Za-z_]\w*[ \t]*\{/;
-
+/** 技能宏调用：中英两套宏名都认（标签托管区要挂到它体内） */
+const MACRO_CALL = new RegExp(`@(?:${SKILL_MACRO_NAMES.join("|")})[ \\t]*\\{`);
+/** 源码里的槽名：中文标识符也是合法的，不能用 [A-Za-z_] 卡 */
+const SLOT_NAME = "[^\\s:{}]+";
 /** 跳过一段字符串字面量，返回结束引号的下标（未闭合返回文末） */
 function skipQuoted(text, start) {
     const quote = text[start];
@@ -616,7 +629,7 @@ function matchBrace(text, from) {
 }
 
 /**
- * 找到源码里第一个 `@skill_xxx { … }` 调用的括号位置
+ * 找到源码里第一个技能宏调用（`@触发技 { … }` / `@skill_trigger { … }`）的括号位置
  * @param {string} source
  * @returns {{ start: number, bodyStart: number, bodyEnd: number, indent: string } | null}
  */
@@ -681,7 +694,7 @@ export function writeTagRegion(source, lines) {
     if (!list.length) return { ok: true, start: 0, end: 0, text: "" };
     const call = findMacroCall(text);
     if (!call) {
-        return { ok: false, reason: "源码里没有 @skill_* { … } 技能宏调用：先用上面的「技能种类」插入模板，再写入标签" };
+        return { ok: false, reason: "源码里没有技能宏调用（@触发技 / @skill_trigger …）：先用上面的「技能种类」插入模板，再写入标签" };
     }
     return { ok: true, start: call.bodyStart, end: call.bodyStart, text: `\n${regionText(list, call.indent)}` };
 }
@@ -695,25 +708,27 @@ export function writeTagRegion(source, lines) {
  * @param {string[]} lines 新的行（不含缩进）
  * @returns {{ ok: true, start: number, end: number, text: string } | { ok: false, reason: string }}
  */
-export function replaceInlineSlot(source, slot, lines) {
+export function replaceInlineSlot(source, slot, lines, lang = "en") {
     const text = String(source || "");
     const next = (Array.isArray(lines) ? lines : []).filter(line => String(line).trim() !== "");
     if (!next.length) return { ok: false, reason: "没有要写入的行" };
     const call = findMacroCall(text);
-    if (!call) return { ok: false, reason: "源码里没有 @skill_* { … } 技能宏调用" };
+    if (!call) return { ok: false, reason: "源码里没有技能宏调用（@触发技 / @skill_trigger …）" };
     const region = readTagRegion(text);
     const inRegion = new Set(region ? region.lines.map(line => line.trim()) : []);
     const body = text.slice(call.bodyStart, call.bodyEnd);
     let offset = -1;
     let indent = call.indent;
-    for (const match of body.matchAll(/^([ \t]*)#([A-Za-z_$][\w$]*)\s*:[^\n]*$/gm)) {
-        if (match[2] !== slot) continue;
+    //源码里那行可能是中文槽名，也可能还是英文槽名 —— 都归一到规范名再比
+    const lineRx = new RegExp(`^([ \\t]*)#(${SLOT_NAME})\\s*:[^\\n]*$`, "gm");
+    for (const match of body.matchAll(lineRx)) {
+        if (canonicalSlot(match[2]) !== slot) continue;
         if (inRegion.has(match[0].trim())) continue;
         offset = call.bodyStart + match.index;
         indent = match[1] || call.indent;
         break;
     }
-    if (offset < 0) return { ok: false, reason: `宏体里没有手写的 #${slot} 槽` };
+    if (offset < 0) return { ok: false, reason: `宏体里没有手写的 #${localizedSlot(slot, lang)} 槽` };
     const lineBreak = text.indexOf("\n", offset);
     return {
         ok: true,

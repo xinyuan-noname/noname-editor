@@ -1,0 +1,18 @@
+// ⚠️ 本文件由 _x19D6_backup/tools/gen-cn-host.mjs 从英文版宏库机械生成，请勿手改——
+//    改宏库请改英文那份（skill-type.shya / skill-content.shya），再重跑生成脚本；
+//    宏名与插槽名的对照表在 module/editor/shya/slotLang.mjs，生成结果由 cn-host-check.mjs 核对。
+// ═══════════════════════════════════════════════════════════════════════════
+// host —— 无名杀宿主库总入口：一次导入全部声明与技能类型宏库
+//
+//   import "./host/index.shya"        // 声明 + 全部 @skill_* 宏
+//
+// 只想要类型宏（编辑器默认会自动注入这一条）：import "./host/skill-type.shya"
+// 只想要内容宏（摸/伤/判定/询问…）：import "./host/skill-content.shya"
+// 只想要类型声明（自己写宏/函数时）：import "./host/player.shya" 等单个文件。
+// ═══════════════════════════════════════════════════════════════════════════
+import "./player.shya"
+import "./card.shya"
+import "./event.shya"
+import "./game.shya"
+import "./skill-type-cn.shya"
+import "./skill-content-cn.shya"

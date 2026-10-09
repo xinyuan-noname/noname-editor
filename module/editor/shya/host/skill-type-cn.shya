@@ -1,0 +1,1263 @@
+// ⚠️ 本文件由 _x19D6_backup/tools/gen-cn-host.mjs 从英文版宏库机械生成，请勿手改——
+//    改宏库请改英文那份（skill-type.shya / skill-content.shya），再重跑生成脚本；
+//    宏名与插槽名的对照表在 module/editor/shya/slotLang.mjs，生成结果由 cn-host-check.mjs 核对。
+// ═══════════════════════════════════════════════════════════════════════════
+// skill-type —— 无名杀技能类型宏库（魂氏编辑器 / shya 宿主库）
+//
+// 一个技能类别一个宏，宏体按 resources/app/character/standard/skill.js 的真实
+// 字段形状写：函数型字段一律**方法简写**（`filter(event, player) { … }`），
+// `content` / `cost` 一律 `async`；类别名与旧版编辑器「技能种类」一致
+// （module/editor/skill/editor.mjs:922-928 的 skillCategories）。
+//
+//   旧版编辑器类别        宏                      产物开头字段
+//   ─────────────────────────────────────────────────────────────────────
+//   触发类                @触发技          trigger:{ … }
+//   出牌阶段类            @出牌阶段技         enable:"phaseUse"
+//   使用类                @使用技      enable:"chooseToUse"
+//   打出类                @打出技  enable:"chooseToRespond"
+//   使用打出类            @使用打出技       enable:["chooseToUse","chooseToRespond"]
+//   视为技（正交）        @视为技           enable + viewAs
+//   mod技                 @规则技              mod:{ … }
+//   组合技                @组合技            group:[ … ]
+//   自由技能（兜底）      @自由技能              #对象 原样展开
+//
+// 通用插槽（所有技能宏都有）：
+//   #技能:Ident?      技能 id。省略 → 整条定义不产出（可用于只写片段）
+//   #名称:Str?  技能名   → 产物字段 translation（注入时归位到 lib.translate）
+//   #描述:Str?  技能描述 → 产物字段 description（归位到 <标识>_info）
+//   #ai:ObjectLit?     整块 ai 字段
+//
+// 技能标签（旧版「技能标签」页 + 「特殊设置」页）：
+//   槽名就是产物字段名，省略的标签整条消失。数据与映射见 module/editor/shya/tags.mjs。
+//   **选角色专属的 4 个槽（#死亡角色可选 / #离场角色可选 / #多名角色 / #复合选角色）只在本文件
+//   的主动技宏（@出牌阶段技 / @使用技 / @打出技 / @使用打出技 /
+//   @视为技）和兜底的 @自由技能 里**：引擎里它们只参与 enable 类技能的选目标流程
+//   （standard/skill.js 的 lijian、bingshi/skill.js 的 potdimeng），触发技不选目标——
+//   宏、面板「选角色」页、AI 提示词三处口径一致（tags.mjs:TARGET_ONLY_SLOTS）。
+//     #强制发动 / #自动发动 / #直接发动 / #死亡可发动 / … : Bool?   → `<槽>: true`
+//     #锁定技 / #不失去牌 / #不弃置牌 / #延时: Bool?               → `<槽>: false`（旧版 locked-false 等）
+//     #次数 / #轮次: Num?                                    → `usable: n` / `round: n`
+//     #势力技: Str?                                         → `groupSkill: "wei"`
+//     #动画颜色: Str?                                     → `animationColor: "fire"`
+//     #初始化: stmt                                               → init 方法（旧版 mainVice-remove1 阴阳鱼减半个）
+//   完整槽表见每个宏参数表里的「技能标签」段（顺序与 tags.mjs 的 TAG_SLOTS 一致）。
+//
+//
+// 最小用法（编辑器会自动注入 `import "./host/skill-type.shya"`，手写也可以）：
+//
+//   @触发技 {
+//     #技能: my_recover
+//     #名称: "回春"
+//     #描述: "结束阶段开始时，你可以回复 1 点体力。"
+//     #时机: "phaseJieshuBegin"
+//     #条件: return player hp < player maxHp
+//     #效果: player recover(1)
+//   }
+//
+// 约定与坑（改这个文件前先读）：
+//  1. 插槽值**直接写语句**，不要包大括号：`#效果: { … }` 会被当成对象字面量
+//     （parser.cpp:1792 的 looksLikeObjectLit）。多条语句另起一行写，
+//     直到下一个 `#插槽:` 或调用结束的 `}` 为止。
+//  2. 语句体插槽（#条件/#询问/#代价/#效果/#牌条件/#目标条件/#视为筛选）
+//     在宏体里**裸写**（`#条件`），不要用 `@ts{ #槽 }` 包 —— 那是把用户的 shya 语句
+//     当原始 JS 塞进函数体（还会多一层裸块 `{ … } ;`），类型检查/格式化全绕过。
+//     裸槽要求编译器把语句插槽**按语句展开**：`src/macro.cpp` 的 instStmts
+//     （ExprStmt(SlotRef) 分支）与 instBody()（if 分支、while/for-of 体、for-of @range 的体），
+//     2026-10 修复；`@ts{}` 只留给**表达式位置**的值拼接（见下面的 @__技能时机值 等）。
+//     ⚠️ 扩展内置 wasm 必须与这份宏库同批：`module/editor/shya/bin/shya.wasm`
+//     （构建 `build-wasm.bat`，产物在 `build/wasm/`）——旧 wasm 会把多条语句拼成成员链。
+//  3. 过滤器类槽（filter / filterCard / filterTarget / check）的末尾由宏补
+//     `return true`，与旧版编辑器一致：写了 `return` 就提前返回，没写就是永远成立。
+//  4. 省略某个可选插槽时，那个成员**整条消失**（靠 `<插槽>…</插槽>` 作用域），
+//     产物里不会留下 `xxx: undefined` —— 这需要 shya ≥ 1.3.0 的编译器。
+//  5. `#时机: "phaseEnd"` 是糖 → `trigger:{ player: "phaseEnd" }`；
+//     多键 / 多事件照官方写对象：`#时机: { global: "judge", player: ["a","b"] }`。
+//  6. 宏没覆盖的字段（audio / intro / onremove / charlotte / subSkill / getIndex /
+//     logTarget / derivation / 任意 mod 钩子以外的钩子）走 @自由技能 整块写。
+//
+// 四个 enable 类宏（@出牌阶段技 / @使用技 / @打出技 /
+// @使用打出技）的成员表是**刻意平行**的，改其中一个记得同步另外三个。
+// ═══════════════════════════════════════════════════════════════════════════
+
+// 宿主声明（Player / Card / GameEvent / Game）：宏体里的方法形参都标了这些类型，
+// 所以技能体里的 `player hp` / `player draw(2)` / `card suit` 会被真正类型检查，
+// 未声明的成员只是 TC014 警告（按属性读取处理），不会拦下合法代码。
+import "./player.shya"
+import "./card.shya"
+import "./event.shya"
+import "./game.shya"
+// ── 内部：把「事件名字符串 / 事件数组 / 事件对象」归一成 trigger 字段的值 ──
+// 字符串与数组默认落 player 键，与官方 `trigger:{ player: "phaseEnd" }` 同义。
+macro @__技能时机值(#t: expr?) {
+  @when(#t is Str) @ts{{ player: #t }}
+  @when(#t is ArrayLit) @ts{{ player: #t }}
+  @when(#t is ObjectLit) @ts{#t}
+}
+
+// ── 内部：ai 字段默认值（省略时给一个「对自己有利就发动」的保底 AI） ──
+macro @__技能智能值(#ai: expr?) {
+  @when(#ai is ObjectLit) @ts{#ai}
+  @when(#ai is void) @ts{{ order: 1, result: { player: 1 } }}
+}
+
+// ── 内部：启用方式默认值（视为技省略 #enable 时按「使用打出类」处理） ──
+macro @__技能启用值(#enable: expr?) {
+  @when(#enable is Str) @ts{#enable}
+  @when(#enable is ArrayLit) @ts{#enable}
+  @when(#enable is void) @ts{["chooseToUse", "chooseToRespond"]}
+}
+
+// ════════════════════════════════════ 触发类 ════════════════════════════════
+// 旧版编辑器 kind = 'trigger'；可发动性由 filter（自动触发门）与 check（AI/玩家
+// 是否发动）决定，锁定技写 #强制发动: true。
+macro @触发技(
+  #技能: Ident?,
+  #名称: Str?,
+  #描述: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #强制发动: Bool?,
+  #自动发动: Bool?,
+  #直接发动: Bool?,
+  #死亡可发动: Bool?,
+  #锁定技: Bool?,
+  #持恒技: Bool?,
+  #Charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #限定技: Bool?,
+  #觉醒技: Bool?,
+  #使命技: Bool?,
+  #技能动画: Bool?,
+  #主公技: Bool?,
+  #转换技: Bool?,
+  #隐匿技: Bool?,
+  #宗族技: Bool?,
+  #昂扬技: Bool?,
+  #蓄力技: Bool?,
+  #阵法技: Bool?,
+  #主将技: Bool?,
+  #副将技: Bool?,
+  #技能预亮: expr?,
+  #不失去牌: Bool?,
+  #不弃置牌: Bool?,
+  #延时: Bool?,
+  #复合选卡牌: Bool?,
+  #标记持续显示: Bool?,
+  #多指示线: Bool?,
+  #最先触发: Bool?,
+  #最后触发: Bool?,
+  #次数: Num?,
+  #轮次: Num?,
+  #势力技: Str?,
+  #动画颜色: Str?,
+  #初始化: stmt,
+  #时机: expr?,
+  #条件: stmt,
+  #询问: stmt,
+  #代价: stmt,
+  #效果: stmt,
+  #ai: ObjectLit?
+) {
+  #技能 = {
+    <名称>translation: #名称,</名称>
+    <描述>description: #描述,</描述>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <强制发动>forced: #强制发动,</强制发动>
+    <自动发动>frequent: #自动发动,</自动发动>
+    <直接发动>direct: #直接发动,</直接发动>
+    <死亡可发动>forceDie: #死亡可发动,</死亡可发动>
+    <锁定技>locked: #锁定技,</锁定技>
+    <持恒技>persevereSkill: #持恒技,</持恒技>
+    <Charlotte>charlotte: #Charlotte,</Charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <限定技>limited: #限定技,</限定技>
+    <觉醒技>juexingji: #觉醒技,</觉醒技>
+    <使命技>dutySkill: #使命技,</使命技>
+    <技能动画>skillAnimation: #技能动画,</技能动画>
+    <主公技>zhuSkill: #主公技,</主公技>
+    <转换技>zhuanhuanji: #转换技,</转换技>
+    <隐匿技>hiddenSkill: #隐匿技,</隐匿技>
+    <宗族技>clanSkill: #宗族技,</宗族技>
+    <昂扬技>sunbenSkill: #昂扬技,</昂扬技>
+    <蓄力技>chargeSkill: #蓄力技,</蓄力技>
+    <阵法技>zhenfa: #阵法技,</阵法技>
+    <主将技>mainSkill: #主将技,</主将技>
+    <副将技>viceSkill: #副将技,</副将技>
+    <技能预亮>preHidden: #技能预亮,</技能预亮>
+    <不失去牌>lose: #不失去牌,</不失去牌>
+    <不弃置牌>discard: #不弃置牌,</不弃置牌>
+    <延时>delay: #延时,</延时>
+    <复合选卡牌>complexCard: #复合选卡牌,</复合选卡牌>
+    <标记持续显示>mark: #标记持续显示,</标记持续显示>
+    <多指示线>multiline: #多指示线,</多指示线>
+    <最先触发>firstDo: #最先触发,</最先触发>
+    <最后触发>lastDo: #最后触发,</最后触发>
+    <次数>usable: #次数,</次数>
+    <轮次>round: #轮次,</轮次>
+    <势力技>groupSkill: #势力技,</势力技>
+    <动画颜色>animationColor: #动画颜色,</动画颜色>
+    <初始化>
+      init(player: Player, skill) {
+        #初始化
+      },
+    </初始化>
+    <时机>trigger: @__技能时机值(#时机),</时机>
+    <条件>
+      filter(event: GameEvent, player: Player) {
+        #条件
+        return true
+      },
+    </条件>
+    <询问>
+      check(event: GameEvent, player: Player) {
+        #询问
+        return true
+      },
+    </询问>
+    <代价>
+      async cost(event: GameEvent, trigger: GameEvent, player: Player) {
+        #代价
+      },
+    </代价>
+    <效果>
+      async content(event: GameEvent, trigger: GameEvent, player: Player) {
+        #效果
+      },
+    </效果>
+    <ai>ai: @__技能智能值(#ai),</ai>
+  }
+}
+
+// ═══════════════════════════════ 出牌阶段类 ══════════════════════════════════
+// 旧版编辑器 kind = 'enable:"phaseUse"'；选牌条件写 #牌条件（体，末尾自动补
+// return true），或用 #牌值条件 直接给值（`true` / `{ name: "sha" }`，
+// 写了它就以它为准）；选角色条件写 #目标条件。主动技请务必给 #ai。
+macro @出牌阶段技(
+  #技能: Ident?,
+  #名称: Str?,
+  #描述: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #强制发动: Bool?,
+  #自动发动: Bool?,
+  #直接发动: Bool?,
+  #死亡可发动: Bool?,
+  #锁定技: Bool?,
+  #持恒技: Bool?,
+  #Charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #限定技: Bool?,
+  #觉醒技: Bool?,
+  #使命技: Bool?,
+  #技能动画: Bool?,
+  #主公技: Bool?,
+  #转换技: Bool?,
+  #隐匿技: Bool?,
+  #宗族技: Bool?,
+  #昂扬技: Bool?,
+  #蓄力技: Bool?,
+  #阵法技: Bool?,
+  #主将技: Bool?,
+  #副将技: Bool?,
+  #技能预亮: expr?,
+  #死亡角色可选: Bool?,
+  #离场角色可选: Bool?,
+  #多名角色: Bool?,
+  #复合选角色: Bool?,
+  #不失去牌: Bool?,
+  #不弃置牌: Bool?,
+  #延时: Bool?,
+  #复合选卡牌: Bool?,
+  #标记持续显示: Bool?,
+  #多指示线: Bool?,
+  #最先触发: Bool?,
+  #最后触发: Bool?,
+  #次数: Num?,
+  #轮次: Num?,
+  #势力技: Str?,
+  #动画颜色: Str?,
+  #初始化: stmt,
+  #条件: stmt,
+  #牌条件: stmt,
+  #牌值条件: expr?,
+  #选牌: expr?,
+  #目标条件: stmt,
+  #选目标: Num?,
+  #位置: Str?,
+  #提示: Str?,
+  #询问: stmt,
+  #效果: stmt,
+  #ai: ObjectLit?
+) {
+  #技能 = {
+    enable: "phaseUse",
+    <名称>translation: #名称,</名称>
+    <描述>description: #描述,</描述>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <强制发动>forced: #强制发动,</强制发动>
+    <自动发动>frequent: #自动发动,</自动发动>
+    <直接发动>direct: #直接发动,</直接发动>
+    <死亡可发动>forceDie: #死亡可发动,</死亡可发动>
+    <锁定技>locked: #锁定技,</锁定技>
+    <持恒技>persevereSkill: #持恒技,</持恒技>
+    <Charlotte>charlotte: #Charlotte,</Charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <限定技>limited: #限定技,</限定技>
+    <觉醒技>juexingji: #觉醒技,</觉醒技>
+    <使命技>dutySkill: #使命技,</使命技>
+    <技能动画>skillAnimation: #技能动画,</技能动画>
+    <主公技>zhuSkill: #主公技,</主公技>
+    <转换技>zhuanhuanji: #转换技,</转换技>
+    <隐匿技>hiddenSkill: #隐匿技,</隐匿技>
+    <宗族技>clanSkill: #宗族技,</宗族技>
+    <昂扬技>sunbenSkill: #昂扬技,</昂扬技>
+    <蓄力技>chargeSkill: #蓄力技,</蓄力技>
+    <阵法技>zhenfa: #阵法技,</阵法技>
+    <主将技>mainSkill: #主将技,</主将技>
+    <副将技>viceSkill: #副将技,</副将技>
+    <技能预亮>preHidden: #技能预亮,</技能预亮>
+    <死亡角色可选>deadTarget: #死亡角色可选,</死亡角色可选>
+    <离场角色可选>includeOut: #离场角色可选,</离场角色可选>
+    <多名角色>multitarget: #多名角色,</多名角色>
+    <复合选角色>complexTarget: #复合选角色,</复合选角色>
+    <不失去牌>lose: #不失去牌,</不失去牌>
+    <不弃置牌>discard: #不弃置牌,</不弃置牌>
+    <延时>delay: #延时,</延时>
+    <复合选卡牌>complexCard: #复合选卡牌,</复合选卡牌>
+    <标记持续显示>mark: #标记持续显示,</标记持续显示>
+    <多指示线>multiline: #多指示线,</多指示线>
+    <最先触发>firstDo: #最先触发,</最先触发>
+    <最后触发>lastDo: #最后触发,</最后触发>
+    <次数>usable: #次数,</次数>
+    <轮次>round: #轮次,</轮次>
+    <势力技>groupSkill: #势力技,</势力技>
+    <动画颜色>animationColor: #动画颜色,</动画颜色>
+    <初始化>
+      init(player: Player, skill) {
+        #初始化
+      },
+    </初始化>
+    <条件>
+      filter(event: GameEvent, player: Player) {
+        #条件
+        return true
+      },
+    </条件>
+    <牌条件>
+      filterCard(card: Card, player: Player) {
+        #牌条件
+        return true
+      },
+    </牌条件>
+    <牌值条件>filterCard: #牌值条件,</牌值条件>
+    <选牌>selectCard: #选牌,</选牌>
+    <目标条件>
+      filterTarget(card: Card, player: Player, target: Player) {
+        #目标条件
+        return true
+      },
+    </目标条件>
+    <选目标>selectTarget: #选目标,</选目标>
+    <位置>position: #位置,</位置>
+    <提示>prompt: #提示,</提示>
+    <询问>
+      check(card: Card) {
+        #询问
+        return true
+      },
+    </询问>
+    <效果>
+      async content(event: GameEvent, trigger: GameEvent, player: Player) {
+        #效果
+      },
+    </效果>
+    <ai>ai: @__技能智能值(#ai),</ai>
+  }
+}
+
+// ═════════════════════════════════ 使用类 ════════════════════════════════════
+// 旧版编辑器 kind = 'enable:"chooseToUse"'；出牌阶段之外也能主动使用的技能。
+macro @使用技(
+  #技能: Ident?,
+  #名称: Str?,
+  #描述: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #强制发动: Bool?,
+  #自动发动: Bool?,
+  #直接发动: Bool?,
+  #死亡可发动: Bool?,
+  #锁定技: Bool?,
+  #持恒技: Bool?,
+  #Charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #限定技: Bool?,
+  #觉醒技: Bool?,
+  #使命技: Bool?,
+  #技能动画: Bool?,
+  #主公技: Bool?,
+  #转换技: Bool?,
+  #隐匿技: Bool?,
+  #宗族技: Bool?,
+  #昂扬技: Bool?,
+  #蓄力技: Bool?,
+  #阵法技: Bool?,
+  #主将技: Bool?,
+  #副将技: Bool?,
+  #技能预亮: expr?,
+  #死亡角色可选: Bool?,
+  #离场角色可选: Bool?,
+  #多名角色: Bool?,
+  #复合选角色: Bool?,
+  #不失去牌: Bool?,
+  #不弃置牌: Bool?,
+  #延时: Bool?,
+  #复合选卡牌: Bool?,
+  #标记持续显示: Bool?,
+  #多指示线: Bool?,
+  #最先触发: Bool?,
+  #最后触发: Bool?,
+  #次数: Num?,
+  #轮次: Num?,
+  #势力技: Str?,
+  #动画颜色: Str?,
+  #初始化: stmt,
+  #条件: stmt,
+  #牌条件: stmt,
+  #牌值条件: expr?,
+  #选牌: expr?,
+  #目标条件: stmt,
+  #选目标: Num?,
+  #位置: Str?,
+  #提示: Str?,
+  #询问: stmt,
+  #效果: stmt,
+  #ai: ObjectLit?
+) {
+  #技能 = {
+    enable: "chooseToUse",
+    <名称>translation: #名称,</名称>
+    <描述>description: #描述,</描述>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <强制发动>forced: #强制发动,</强制发动>
+    <自动发动>frequent: #自动发动,</自动发动>
+    <直接发动>direct: #直接发动,</直接发动>
+    <死亡可发动>forceDie: #死亡可发动,</死亡可发动>
+    <锁定技>locked: #锁定技,</锁定技>
+    <持恒技>persevereSkill: #持恒技,</持恒技>
+    <Charlotte>charlotte: #Charlotte,</Charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <限定技>limited: #限定技,</限定技>
+    <觉醒技>juexingji: #觉醒技,</觉醒技>
+    <使命技>dutySkill: #使命技,</使命技>
+    <技能动画>skillAnimation: #技能动画,</技能动画>
+    <主公技>zhuSkill: #主公技,</主公技>
+    <转换技>zhuanhuanji: #转换技,</转换技>
+    <隐匿技>hiddenSkill: #隐匿技,</隐匿技>
+    <宗族技>clanSkill: #宗族技,</宗族技>
+    <昂扬技>sunbenSkill: #昂扬技,</昂扬技>
+    <蓄力技>chargeSkill: #蓄力技,</蓄力技>
+    <阵法技>zhenfa: #阵法技,</阵法技>
+    <主将技>mainSkill: #主将技,</主将技>
+    <副将技>viceSkill: #副将技,</副将技>
+    <技能预亮>preHidden: #技能预亮,</技能预亮>
+    <死亡角色可选>deadTarget: #死亡角色可选,</死亡角色可选>
+    <离场角色可选>includeOut: #离场角色可选,</离场角色可选>
+    <多名角色>multitarget: #多名角色,</多名角色>
+    <复合选角色>complexTarget: #复合选角色,</复合选角色>
+    <不失去牌>lose: #不失去牌,</不失去牌>
+    <不弃置牌>discard: #不弃置牌,</不弃置牌>
+    <延时>delay: #延时,</延时>
+    <复合选卡牌>complexCard: #复合选卡牌,</复合选卡牌>
+    <标记持续显示>mark: #标记持续显示,</标记持续显示>
+    <多指示线>multiline: #多指示线,</多指示线>
+    <最先触发>firstDo: #最先触发,</最先触发>
+    <最后触发>lastDo: #最后触发,</最后触发>
+    <次数>usable: #次数,</次数>
+    <轮次>round: #轮次,</轮次>
+    <势力技>groupSkill: #势力技,</势力技>
+    <动画颜色>animationColor: #动画颜色,</动画颜色>
+    <初始化>
+      init(player: Player, skill) {
+        #初始化
+      },
+    </初始化>
+    <条件>
+      filter(event: GameEvent, player: Player) {
+        #条件
+        return true
+      },
+    </条件>
+    <牌条件>
+      filterCard(card: Card, player: Player) {
+        #牌条件
+        return true
+      },
+    </牌条件>
+    <牌值条件>filterCard: #牌值条件,</牌值条件>
+    <选牌>selectCard: #选牌,</选牌>
+    <目标条件>
+      filterTarget(card: Card, player: Player, target: Player) {
+        #目标条件
+        return true
+      },
+    </目标条件>
+    <选目标>selectTarget: #选目标,</选目标>
+    <位置>position: #位置,</位置>
+    <提示>prompt: #提示,</提示>
+    <询问>
+      check(card: Card) {
+        #询问
+        return true
+      },
+    </询问>
+    <效果>
+      async content(event: GameEvent, trigger: GameEvent, player: Player) {
+        #效果
+      },
+    </效果>
+    <ai>ai: @__技能智能值(#ai),</ai>
+  }
+}
+
+// ═════════════════════════════════ 打出类 ════════════════════════════════════
+// 旧版编辑器 kind = 'enable:"chooseToRespond"'；被要求「打出」时可用。
+macro @打出技(
+  #技能: Ident?,
+  #名称: Str?,
+  #描述: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #强制发动: Bool?,
+  #自动发动: Bool?,
+  #直接发动: Bool?,
+  #死亡可发动: Bool?,
+  #锁定技: Bool?,
+  #持恒技: Bool?,
+  #Charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #限定技: Bool?,
+  #觉醒技: Bool?,
+  #使命技: Bool?,
+  #技能动画: Bool?,
+  #主公技: Bool?,
+  #转换技: Bool?,
+  #隐匿技: Bool?,
+  #宗族技: Bool?,
+  #昂扬技: Bool?,
+  #蓄力技: Bool?,
+  #阵法技: Bool?,
+  #主将技: Bool?,
+  #副将技: Bool?,
+  #技能预亮: expr?,
+  #死亡角色可选: Bool?,
+  #离场角色可选: Bool?,
+  #多名角色: Bool?,
+  #复合选角色: Bool?,
+  #不失去牌: Bool?,
+  #不弃置牌: Bool?,
+  #延时: Bool?,
+  #复合选卡牌: Bool?,
+  #标记持续显示: Bool?,
+  #多指示线: Bool?,
+  #最先触发: Bool?,
+  #最后触发: Bool?,
+  #次数: Num?,
+  #轮次: Num?,
+  #势力技: Str?,
+  #动画颜色: Str?,
+  #初始化: stmt,
+  #条件: stmt,
+  #牌条件: stmt,
+  #牌值条件: expr?,
+  #选牌: expr?,
+  #目标条件: stmt,
+  #选目标: Num?,
+  #位置: Str?,
+  #提示: Str?,
+  #询问: stmt,
+  #效果: stmt,
+  #ai: ObjectLit?
+) {
+  #技能 = {
+    enable: "chooseToRespond",
+    <名称>translation: #名称,</名称>
+    <描述>description: #描述,</描述>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <强制发动>forced: #强制发动,</强制发动>
+    <自动发动>frequent: #自动发动,</自动发动>
+    <直接发动>direct: #直接发动,</直接发动>
+    <死亡可发动>forceDie: #死亡可发动,</死亡可发动>
+    <锁定技>locked: #锁定技,</锁定技>
+    <持恒技>persevereSkill: #持恒技,</持恒技>
+    <Charlotte>charlotte: #Charlotte,</Charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <限定技>limited: #限定技,</限定技>
+    <觉醒技>juexingji: #觉醒技,</觉醒技>
+    <使命技>dutySkill: #使命技,</使命技>
+    <技能动画>skillAnimation: #技能动画,</技能动画>
+    <主公技>zhuSkill: #主公技,</主公技>
+    <转换技>zhuanhuanji: #转换技,</转换技>
+    <隐匿技>hiddenSkill: #隐匿技,</隐匿技>
+    <宗族技>clanSkill: #宗族技,</宗族技>
+    <昂扬技>sunbenSkill: #昂扬技,</昂扬技>
+    <蓄力技>chargeSkill: #蓄力技,</蓄力技>
+    <阵法技>zhenfa: #阵法技,</阵法技>
+    <主将技>mainSkill: #主将技,</主将技>
+    <副将技>viceSkill: #副将技,</副将技>
+    <技能预亮>preHidden: #技能预亮,</技能预亮>
+    <死亡角色可选>deadTarget: #死亡角色可选,</死亡角色可选>
+    <离场角色可选>includeOut: #离场角色可选,</离场角色可选>
+    <多名角色>multitarget: #多名角色,</多名角色>
+    <复合选角色>complexTarget: #复合选角色,</复合选角色>
+    <不失去牌>lose: #不失去牌,</不失去牌>
+    <不弃置牌>discard: #不弃置牌,</不弃置牌>
+    <延时>delay: #延时,</延时>
+    <复合选卡牌>complexCard: #复合选卡牌,</复合选卡牌>
+    <标记持续显示>mark: #标记持续显示,</标记持续显示>
+    <多指示线>multiline: #多指示线,</多指示线>
+    <最先触发>firstDo: #最先触发,</最先触发>
+    <最后触发>lastDo: #最后触发,</最后触发>
+    <次数>usable: #次数,</次数>
+    <轮次>round: #轮次,</轮次>
+    <势力技>groupSkill: #势力技,</势力技>
+    <动画颜色>animationColor: #动画颜色,</动画颜色>
+    <初始化>
+      init(player: Player, skill) {
+        #初始化
+      },
+    </初始化>
+    <条件>
+      filter(event: GameEvent, player: Player) {
+        #条件
+        return true
+      },
+    </条件>
+    <牌条件>
+      filterCard(card: Card, player: Player) {
+        #牌条件
+        return true
+      },
+    </牌条件>
+    <牌值条件>filterCard: #牌值条件,</牌值条件>
+    <选牌>selectCard: #选牌,</选牌>
+    <目标条件>
+      filterTarget(card: Card, player: Player, target: Player) {
+        #目标条件
+        return true
+      },
+    </目标条件>
+    <选目标>selectTarget: #选目标,</选目标>
+    <位置>position: #位置,</位置>
+    <提示>prompt: #提示,</提示>
+    <询问>
+      check(card: Card) {
+        #询问
+        return true
+      },
+    </询问>
+    <效果>
+      async content(event: GameEvent, trigger: GameEvent, player: Player) {
+        #效果
+      },
+    </效果>
+    <ai>ai: @__技能智能值(#ai),</ai>
+  }
+}
+
+// ═══════════════════════════════ 使用打出类 ══════════════════════════════════
+// 旧版编辑器 kind = 'enable:["chooseToUse","chooseToRespond"]'；既能使用也能打出。
+macro @使用打出技(
+  #技能: Ident?,
+  #名称: Str?,
+  #描述: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #强制发动: Bool?,
+  #自动发动: Bool?,
+  #直接发动: Bool?,
+  #死亡可发动: Bool?,
+  #锁定技: Bool?,
+  #持恒技: Bool?,
+  #Charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #限定技: Bool?,
+  #觉醒技: Bool?,
+  #使命技: Bool?,
+  #技能动画: Bool?,
+  #主公技: Bool?,
+  #转换技: Bool?,
+  #隐匿技: Bool?,
+  #宗族技: Bool?,
+  #昂扬技: Bool?,
+  #蓄力技: Bool?,
+  #阵法技: Bool?,
+  #主将技: Bool?,
+  #副将技: Bool?,
+  #技能预亮: expr?,
+  #死亡角色可选: Bool?,
+  #离场角色可选: Bool?,
+  #多名角色: Bool?,
+  #复合选角色: Bool?,
+  #不失去牌: Bool?,
+  #不弃置牌: Bool?,
+  #延时: Bool?,
+  #复合选卡牌: Bool?,
+  #标记持续显示: Bool?,
+  #多指示线: Bool?,
+  #最先触发: Bool?,
+  #最后触发: Bool?,
+  #次数: Num?,
+  #轮次: Num?,
+  #势力技: Str?,
+  #动画颜色: Str?,
+  #初始化: stmt,
+  #条件: stmt,
+  #牌条件: stmt,
+  #牌值条件: expr?,
+  #选牌: expr?,
+  #目标条件: stmt,
+  #选目标: Num?,
+  #位置: Str?,
+  #提示: Str?,
+  #询问: stmt,
+  #效果: stmt,
+  #ai: ObjectLit?
+) {
+  #技能 = {
+    enable: ["chooseToUse", "chooseToRespond"],
+    <名称>translation: #名称,</名称>
+    <描述>description: #描述,</描述>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <强制发动>forced: #强制发动,</强制发动>
+    <自动发动>frequent: #自动发动,</自动发动>
+    <直接发动>direct: #直接发动,</直接发动>
+    <死亡可发动>forceDie: #死亡可发动,</死亡可发动>
+    <锁定技>locked: #锁定技,</锁定技>
+    <持恒技>persevereSkill: #持恒技,</持恒技>
+    <Charlotte>charlotte: #Charlotte,</Charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <限定技>limited: #限定技,</限定技>
+    <觉醒技>juexingji: #觉醒技,</觉醒技>
+    <使命技>dutySkill: #使命技,</使命技>
+    <技能动画>skillAnimation: #技能动画,</技能动画>
+    <主公技>zhuSkill: #主公技,</主公技>
+    <转换技>zhuanhuanji: #转换技,</转换技>
+    <隐匿技>hiddenSkill: #隐匿技,</隐匿技>
+    <宗族技>clanSkill: #宗族技,</宗族技>
+    <昂扬技>sunbenSkill: #昂扬技,</昂扬技>
+    <蓄力技>chargeSkill: #蓄力技,</蓄力技>
+    <阵法技>zhenfa: #阵法技,</阵法技>
+    <主将技>mainSkill: #主将技,</主将技>
+    <副将技>viceSkill: #副将技,</副将技>
+    <技能预亮>preHidden: #技能预亮,</技能预亮>
+    <死亡角色可选>deadTarget: #死亡角色可选,</死亡角色可选>
+    <离场角色可选>includeOut: #离场角色可选,</离场角色可选>
+    <多名角色>multitarget: #多名角色,</多名角色>
+    <复合选角色>complexTarget: #复合选角色,</复合选角色>
+    <不失去牌>lose: #不失去牌,</不失去牌>
+    <不弃置牌>discard: #不弃置牌,</不弃置牌>
+    <延时>delay: #延时,</延时>
+    <复合选卡牌>complexCard: #复合选卡牌,</复合选卡牌>
+    <标记持续显示>mark: #标记持续显示,</标记持续显示>
+    <多指示线>multiline: #多指示线,</多指示线>
+    <最先触发>firstDo: #最先触发,</最先触发>
+    <最后触发>lastDo: #最后触发,</最后触发>
+    <次数>usable: #次数,</次数>
+    <轮次>round: #轮次,</轮次>
+    <势力技>groupSkill: #势力技,</势力技>
+    <动画颜色>animationColor: #动画颜色,</动画颜色>
+    <初始化>
+      init(player: Player, skill) {
+        #初始化
+      },
+    </初始化>
+    <条件>
+      filter(event: GameEvent, player: Player) {
+        #条件
+        return true
+      },
+    </条件>
+    <牌条件>
+      filterCard(card: Card, player: Player) {
+        #牌条件
+        return true
+      },
+    </牌条件>
+    <牌值条件>filterCard: #牌值条件,</牌值条件>
+    <选牌>selectCard: #选牌,</选牌>
+    <目标条件>
+      filterTarget(card: Card, player: Player, target: Player) {
+        #目标条件
+        return true
+      },
+    </目标条件>
+    <选目标>selectTarget: #选目标,</选目标>
+    <位置>position: #位置,</位置>
+    <提示>prompt: #提示,</提示>
+    <询问>
+      check(card: Card) {
+        #询问
+        return true
+      },
+    </询问>
+    <效果>
+      async content(event: GameEvent, trigger: GameEvent, player: Player) {
+        #效果
+      },
+    </效果>
+    <ai>ai: @__技能智能值(#ai),</ai>
+  }
+}
+
+// ═══════════════════════════════ 视为技 ═════════════════════════════════════
+// 视为技不是旧版的独立类别（editor.mjs:475 的 isViewAs 判定），而是叠加在上面
+// 任意一种 enable 上：把牌「当作」另一张牌使用/打出。省略 #enable 时默认
+// ["chooseToUse","chooseToRespond"]（武圣、倾国这一类）。
+//   #视为: { name: "shan" }          → 当作闪
+//   #视为: { name: "sha", nature: "fire" } → 当作火杀
+macro @视为技(
+  #技能: Ident?,
+  #名称: Str?,
+  #描述: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #强制发动: Bool?,
+  #自动发动: Bool?,
+  #直接发动: Bool?,
+  #死亡可发动: Bool?,
+  #锁定技: Bool?,
+  #持恒技: Bool?,
+  #Charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #限定技: Bool?,
+  #觉醒技: Bool?,
+  #使命技: Bool?,
+  #技能动画: Bool?,
+  #主公技: Bool?,
+  #转换技: Bool?,
+  #隐匿技: Bool?,
+  #宗族技: Bool?,
+  #昂扬技: Bool?,
+  #蓄力技: Bool?,
+  #阵法技: Bool?,
+  #主将技: Bool?,
+  #副将技: Bool?,
+  #技能预亮: expr?,
+  #死亡角色可选: Bool?,
+  #离场角色可选: Bool?,
+  #多名角色: Bool?,
+  #复合选角色: Bool?,
+  #不失去牌: Bool?,
+  #不弃置牌: Bool?,
+  #延时: Bool?,
+  #复合选卡牌: Bool?,
+  #标记持续显示: Bool?,
+  #多指示线: Bool?,
+  #最先触发: Bool?,
+  #最后触发: Bool?,
+  #次数: Num?,
+  #轮次: Num?,
+  #势力技: Str?,
+  #动画颜色: Str?,
+  #初始化: stmt,
+  #enable: expr?,
+  #视为: ObjectLit?,
+  #牌条件: stmt,
+  #牌值条件: expr?,
+  #视为筛选: stmt,
+  #选牌: expr?,
+  #位置: Str?,
+  #提示: Str?,
+  #询问: stmt,
+  #效果: stmt,
+  #ai: ObjectLit?
+) {
+  #技能 = {
+    enable: @__技能启用值(#enable),
+    <名称>translation: #名称,</名称>
+    <描述>description: #描述,</描述>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <强制发动>forced: #强制发动,</强制发动>
+    <自动发动>frequent: #自动发动,</自动发动>
+    <直接发动>direct: #直接发动,</直接发动>
+    <死亡可发动>forceDie: #死亡可发动,</死亡可发动>
+    <锁定技>locked: #锁定技,</锁定技>
+    <持恒技>persevereSkill: #持恒技,</持恒技>
+    <Charlotte>charlotte: #Charlotte,</Charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <限定技>limited: #限定技,</限定技>
+    <觉醒技>juexingji: #觉醒技,</觉醒技>
+    <使命技>dutySkill: #使命技,</使命技>
+    <技能动画>skillAnimation: #技能动画,</技能动画>
+    <主公技>zhuSkill: #主公技,</主公技>
+    <转换技>zhuanhuanji: #转换技,</转换技>
+    <隐匿技>hiddenSkill: #隐匿技,</隐匿技>
+    <宗族技>clanSkill: #宗族技,</宗族技>
+    <昂扬技>sunbenSkill: #昂扬技,</昂扬技>
+    <蓄力技>chargeSkill: #蓄力技,</蓄力技>
+    <阵法技>zhenfa: #阵法技,</阵法技>
+    <主将技>mainSkill: #主将技,</主将技>
+    <副将技>viceSkill: #副将技,</副将技>
+    <技能预亮>preHidden: #技能预亮,</技能预亮>
+    <死亡角色可选>deadTarget: #死亡角色可选,</死亡角色可选>
+    <离场角色可选>includeOut: #离场角色可选,</离场角色可选>
+    <多名角色>multitarget: #多名角色,</多名角色>
+    <复合选角色>complexTarget: #复合选角色,</复合选角色>
+    <不失去牌>lose: #不失去牌,</不失去牌>
+    <不弃置牌>discard: #不弃置牌,</不弃置牌>
+    <延时>delay: #延时,</延时>
+    <复合选卡牌>complexCard: #复合选卡牌,</复合选卡牌>
+    <标记持续显示>mark: #标记持续显示,</标记持续显示>
+    <多指示线>multiline: #多指示线,</多指示线>
+    <最先触发>firstDo: #最先触发,</最先触发>
+    <最后触发>lastDo: #最后触发,</最后触发>
+    <次数>usable: #次数,</次数>
+    <轮次>round: #轮次,</轮次>
+    <势力技>groupSkill: #势力技,</势力技>
+    <动画颜色>animationColor: #动画颜色,</动画颜色>
+    <初始化>
+      init(player: Player, skill) {
+        #初始化
+      },
+    </初始化>
+    <视为>viewAs: #视为,</视为>
+    <牌条件>
+      filterCard(card: Card, player: Player) {
+        #牌条件
+        return true
+      },
+    </牌条件>
+    <牌值条件>filterCard: #牌值条件,</牌值条件>
+    <视为筛选>
+      viewAsFilter(player: Player) {
+        #视为筛选
+        return true
+      },
+    </视为筛选>
+    <选牌>selectCard: #选牌,</选牌>
+    <位置>position: #位置,</位置>
+    <提示>prompt: #提示,</提示>
+    <询问>
+      check(card: Card) {
+        #询问
+        return true
+      },
+    </询问>
+    <效果>
+      async content(event: GameEvent, trigger: GameEvent, player: Player) {
+        #效果
+      },
+    </效果>
+    <ai>ai: @__技能智能值(#ai),</ai>
+  }
+}
+
+// ═══════════════════════════════ mod技 ══════════════════════════════════════
+// 旧版编辑器叫「修改技」，放在独立板块（editor.mjs:246 的 back.skill.mod）；这里照它的 mod 字段写。
+// #规则 直接写钩子对象，方法简写，与官方 mashu 同形：
+//   @规则技 {
+//     #技能: mashu
+//     #名称: "马术"
+//     #规则: { globalFrom(from, to, distance) { return distance - 1 } }
+//   }
+macro @规则技(
+  #技能: Ident?,
+  #名称: Str?,
+  #描述: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #强制发动: Bool?,
+  #自动发动: Bool?,
+  #直接发动: Bool?,
+  #死亡可发动: Bool?,
+  #锁定技: Bool?,
+  #持恒技: Bool?,
+  #Charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #限定技: Bool?,
+  #觉醒技: Bool?,
+  #使命技: Bool?,
+  #技能动画: Bool?,
+  #主公技: Bool?,
+  #转换技: Bool?,
+  #隐匿技: Bool?,
+  #宗族技: Bool?,
+  #昂扬技: Bool?,
+  #蓄力技: Bool?,
+  #阵法技: Bool?,
+  #主将技: Bool?,
+  #副将技: Bool?,
+  #技能预亮: expr?,
+  #不失去牌: Bool?,
+  #不弃置牌: Bool?,
+  #延时: Bool?,
+  #复合选卡牌: Bool?,
+  #标记持续显示: Bool?,
+  #多指示线: Bool?,
+  #最先触发: Bool?,
+  #最后触发: Bool?,
+  #次数: Num?,
+  #轮次: Num?,
+  #势力技: Str?,
+  #动画颜色: Str?,
+  #初始化: stmt,
+  #规则: ObjectLit,
+  #ai: ObjectLit?
+) {
+  #技能 = {
+    <名称>translation: #名称,</名称>
+    <描述>description: #描述,</描述>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <强制发动>forced: #强制发动,</强制发动>
+    <自动发动>frequent: #自动发动,</自动发动>
+    <直接发动>direct: #直接发动,</直接发动>
+    <死亡可发动>forceDie: #死亡可发动,</死亡可发动>
+    <锁定技>locked: #锁定技,</锁定技>
+    <持恒技>persevereSkill: #持恒技,</持恒技>
+    <Charlotte>charlotte: #Charlotte,</Charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <限定技>limited: #限定技,</限定技>
+    <觉醒技>juexingji: #觉醒技,</觉醒技>
+    <使命技>dutySkill: #使命技,</使命技>
+    <技能动画>skillAnimation: #技能动画,</技能动画>
+    <主公技>zhuSkill: #主公技,</主公技>
+    <转换技>zhuanhuanji: #转换技,</转换技>
+    <隐匿技>hiddenSkill: #隐匿技,</隐匿技>
+    <宗族技>clanSkill: #宗族技,</宗族技>
+    <昂扬技>sunbenSkill: #昂扬技,</昂扬技>
+    <蓄力技>chargeSkill: #蓄力技,</蓄力技>
+    <阵法技>zhenfa: #阵法技,</阵法技>
+    <主将技>mainSkill: #主将技,</主将技>
+    <副将技>viceSkill: #副将技,</副将技>
+    <技能预亮>preHidden: #技能预亮,</技能预亮>
+    <不失去牌>lose: #不失去牌,</不失去牌>
+    <不弃置牌>discard: #不弃置牌,</不弃置牌>
+    <延时>delay: #延时,</延时>
+    <复合选卡牌>complexCard: #复合选卡牌,</复合选卡牌>
+    <标记持续显示>mark: #标记持续显示,</标记持续显示>
+    <多指示线>multiline: #多指示线,</多指示线>
+    <最先触发>firstDo: #最先触发,</最先触发>
+    <最后触发>lastDo: #最后触发,</最后触发>
+    <次数>usable: #次数,</次数>
+    <轮次>round: #轮次,</轮次>
+    <势力技>groupSkill: #势力技,</势力技>
+    <动画颜色>animationColor: #动画颜色,</动画颜色>
+    <初始化>
+      init(player: Player, skill) {
+        #初始化
+      },
+    </初始化>
+    mod: #规则,
+    <ai>ai: #ai,</ai>
+  }
+}
+
+// ═══════════════════════════════ 组合技 ═════════════════════════════════════
+// 本体只挂规则标记、真正效果在被引用的子技里（官方 wushuang / kongcheng 同形）。
+macro @组合技(
+  #技能: Ident?,
+  #名称: Str?,
+  #描述: Str?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #强制发动: Bool?,
+  #自动发动: Bool?,
+  #直接发动: Bool?,
+  #死亡可发动: Bool?,
+  #锁定技: Bool?,
+  #持恒技: Bool?,
+  #Charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #限定技: Bool?,
+  #觉醒技: Bool?,
+  #使命技: Bool?,
+  #技能动画: Bool?,
+  #主公技: Bool?,
+  #转换技: Bool?,
+  #隐匿技: Bool?,
+  #宗族技: Bool?,
+  #昂扬技: Bool?,
+  #蓄力技: Bool?,
+  #阵法技: Bool?,
+  #主将技: Bool?,
+  #副将技: Bool?,
+  #技能预亮: expr?,
+  #不失去牌: Bool?,
+  #不弃置牌: Bool?,
+  #延时: Bool?,
+  #复合选卡牌: Bool?,
+  #标记持续显示: Bool?,
+  #多指示线: Bool?,
+  #最先触发: Bool?,
+  #最后触发: Bool?,
+  #次数: Num?,
+  #轮次: Num?,
+  #势力技: Str?,
+  #动画颜色: Str?,
+  #初始化: stmt,
+  #技能组: expr,
+) {
+  #技能 = {
+    <名称>translation: #名称,</名称>
+    <描述>description: #描述,</描述>
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <强制发动>forced: #强制发动,</强制发动>
+    <自动发动>frequent: #自动发动,</自动发动>
+    <直接发动>direct: #直接发动,</直接发动>
+    <死亡可发动>forceDie: #死亡可发动,</死亡可发动>
+    <锁定技>locked: #锁定技,</锁定技>
+    <持恒技>persevereSkill: #持恒技,</持恒技>
+    <Charlotte>charlotte: #Charlotte,</Charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <限定技>limited: #限定技,</限定技>
+    <觉醒技>juexingji: #觉醒技,</觉醒技>
+    <使命技>dutySkill: #使命技,</使命技>
+    <技能动画>skillAnimation: #技能动画,</技能动画>
+    <主公技>zhuSkill: #主公技,</主公技>
+    <转换技>zhuanhuanji: #转换技,</转换技>
+    <隐匿技>hiddenSkill: #隐匿技,</隐匿技>
+    <宗族技>clanSkill: #宗族技,</宗族技>
+    <昂扬技>sunbenSkill: #昂扬技,</昂扬技>
+    <蓄力技>chargeSkill: #蓄力技,</蓄力技>
+    <阵法技>zhenfa: #阵法技,</阵法技>
+    <主将技>mainSkill: #主将技,</主将技>
+    <副将技>viceSkill: #副将技,</副将技>
+    <技能预亮>preHidden: #技能预亮,</技能预亮>
+    <不失去牌>lose: #不失去牌,</不失去牌>
+    <不弃置牌>discard: #不弃置牌,</不弃置牌>
+    <延时>delay: #延时,</延时>
+    <复合选卡牌>complexCard: #复合选卡牌,</复合选卡牌>
+    <标记持续显示>mark: #标记持续显示,</标记持续显示>
+    <多指示线>multiline: #多指示线,</多指示线>
+    <最先触发>firstDo: #最先触发,</最先触发>
+    <最后触发>lastDo: #最后触发,</最后触发>
+    <次数>usable: #次数,</次数>
+    <轮次>round: #轮次,</轮次>
+    <势力技>groupSkill: #势力技,</势力技>
+    <动画颜色>animationColor: #动画颜色,</动画颜色>
+    <初始化>
+      init(player: Player, skill) {
+        #初始化
+      },
+    </初始化>
+    group: #技能组,
+  }
+}
+
+// ══════════════════════════ 自由技能（兜底 / 逃生口） ═════════════════════════
+// 上面的宏没覆盖到的字段一律走这里：整个技能对象自己写。
+//   @自由技能 {
+//     #技能: my_skill
+//     #对象: {
+//       audio: "ext:我的包/audio/skill:2",
+//       trigger: { player: "phaseEnd" },
+//       forced: true,
+//       async content(event: GameEvent, trigger: GameEvent, player: Player) { player draw(1) },
+//     }
+//   }
+macro @自由技能(
+  #技能: Ident?,
+  #对象: ObjectLit?,
+  // ── 技能标签（旧版「技能标签」页 39 项；一律不过滤：任何标签都能写在任何宏上）──
+  //    槽名就是产物字段名；数据与映射在 module/editor/shya/tags.mjs；
+  //    编辑器的「标签」面板会把选中标签写进宏体里的 //#tags-begin … //#tags-end 托管区。
+  #强制发动: Bool?,
+  #自动发动: Bool?,
+  #直接发动: Bool?,
+  #死亡可发动: Bool?,
+  #锁定技: Bool?,
+  #持恒技: Bool?,
+  #Charlotte: Bool?,
+  #superCharlotte: Bool?,
+  #限定技: Bool?,
+  #觉醒技: Bool?,
+  #使命技: Bool?,
+  #技能动画: Bool?,
+  #主公技: Bool?,
+  #转换技: Bool?,
+  #隐匿技: Bool?,
+  #宗族技: Bool?,
+  #昂扬技: Bool?,
+  #蓄力技: Bool?,
+  #阵法技: Bool?,
+  #主将技: Bool?,
+  #副将技: Bool?,
+  #技能预亮: expr?,
+  #死亡角色可选: Bool?,
+  #离场角色可选: Bool?,
+  #多名角色: Bool?,
+  #复合选角色: Bool?,
+  #不失去牌: Bool?,
+  #不弃置牌: Bool?,
+  #延时: Bool?,
+  #复合选卡牌: Bool?,
+  #标记持续显示: Bool?,
+  #多指示线: Bool?,
+  #最先触发: Bool?,
+  #最后触发: Bool?,
+  #次数: Num?,
+  #轮次: Num?,
+  #势力技: Str?,
+  #动画颜色: Str?,
+  #初始化: stmt
+) {
+  <对象>
+  #技能 = #对象
+  // @自由技能 的对象来自 #对象 槽，标签并不进字面量，只能挂上去（省略时 Object.assign(x, {}) 是无害空操作）
+  Object assign(#技能, {
+    // ── 技能标签（省略的标签整条消失，顺序与 TAG_SLOTS 一致）──
+    <强制发动>forced: #强制发动,</强制发动>
+    <自动发动>frequent: #自动发动,</自动发动>
+    <直接发动>direct: #直接发动,</直接发动>
+    <死亡可发动>forceDie: #死亡可发动,</死亡可发动>
+    <锁定技>locked: #锁定技,</锁定技>
+    <持恒技>persevereSkill: #持恒技,</持恒技>
+    <Charlotte>charlotte: #Charlotte,</Charlotte>
+    <superCharlotte>superCharlotte: #superCharlotte,</superCharlotte>
+    <限定技>limited: #限定技,</限定技>
+    <觉醒技>juexingji: #觉醒技,</觉醒技>
+    <使命技>dutySkill: #使命技,</使命技>
+    <技能动画>skillAnimation: #技能动画,</技能动画>
+    <主公技>zhuSkill: #主公技,</主公技>
+    <转换技>zhuanhuanji: #转换技,</转换技>
+    <隐匿技>hiddenSkill: #隐匿技,</隐匿技>
+    <宗族技>clanSkill: #宗族技,</宗族技>
+    <昂扬技>sunbenSkill: #昂扬技,</昂扬技>
+    <蓄力技>chargeSkill: #蓄力技,</蓄力技>
+    <阵法技>zhenfa: #阵法技,</阵法技>
+    <主将技>mainSkill: #主将技,</主将技>
+    <副将技>viceSkill: #副将技,</副将技>
+    <技能预亮>preHidden: #技能预亮,</技能预亮>
+    <死亡角色可选>deadTarget: #死亡角色可选,</死亡角色可选>
+    <离场角色可选>includeOut: #离场角色可选,</离场角色可选>
+    <多名角色>multitarget: #多名角色,</多名角色>
+    <复合选角色>complexTarget: #复合选角色,</复合选角色>
+    <不失去牌>lose: #不失去牌,</不失去牌>
+    <不弃置牌>discard: #不弃置牌,</不弃置牌>
+    <延时>delay: #延时,</延时>
+    <复合选卡牌>complexCard: #复合选卡牌,</复合选卡牌>
+    <标记持续显示>mark: #标记持续显示,</标记持续显示>
+    <多指示线>multiline: #多指示线,</多指示线>
+    <最先触发>firstDo: #最先触发,</最先触发>
+    <最后触发>lastDo: #最后触发,</最后触发>
+    <次数>usable: #次数,</次数>
+    <轮次>round: #轮次,</轮次>
+    <势力技>groupSkill: #势力技,</势力技>
+    <动画颜色>animationColor: #动画颜色,</动画颜色>
+    <初始化>
+      init(player: Player, skill) {
+        #初始化
+      },
+    </初始化>
+  })
+  </对象>
+}

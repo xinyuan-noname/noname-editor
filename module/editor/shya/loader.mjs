@@ -5,7 +5,14 @@ let compilerPromise = null;
 // 宿主库：扩展自带的 .shya（host/*.shya）在编译前挂进 wasm 虚拟 FS 的 /work/host/，
 // 这样用户源码里的 `import "./host/skill-type.shya"` 才能解析到。
 // ⚠️ 新增 host 文件后要把文件名加进 HOST_FILES（网页端没有目录列举能力）。
-const HOST_FILES = ["index.shya", "skill-type.shya", "player.shya", "card.shya", "event.shya", "game.shya", "skill-content.shya"];
+const HOST_FILES = [
+    //英文（默认那份）
+    "index.shya", "skill-type.shya", "skill-content.shya",
+    //中文（由 _x19D6_backup/tools/gen-cn-host.mjs 从英文版生成）
+    "index-cn.shya", "skill-type-cn.shya", "skill-content-cn.shya",
+    //类型声明（两种语言共用）
+    "player.shya", "card.shya", "event.shya", "game.shya"
+];
 const EXTENSION_NAME = "魂氏编辑器";
 const HOST_RELATIVE = "module/editor/shya/host";
 

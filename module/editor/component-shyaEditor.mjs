@@ -23,19 +23,13 @@ import {
     tagSlotName,
     INLINE_REPLACEABLE_SLOTS
 } from "./shya/tags.mjs";
-import { SKILL_KINDS, getSkillKind } from "./shya/skillTemplates.mjs";
+import { templateKinds, getSkillKind, hostImportEntries, DEFAULT_TEMPLATE_LANG } from "./shya/skillTemplates.mjs";
+import { langOfSource, kindOfMacroName } from "./shya/slotLang.mjs";
 import { injectSkillRegistration } from "./ai/skills.mjs";
 import { getSkillRecord, setSkillRecord } from "./persist/skillLibrary.mjs";
 
-/** 技能类型宏库的 import：编译前自动注入，不写进文本框（见 prepareSource） */
-const HOST_IMPORT_TYPE = 'import "./host/skill-type.shya"';
-/** 技能内容宏库（摸/伤/回/判定/询问…，host/skill-content.shya）的 import：同上 */
-const HOST_IMPORT_CONTENT = 'import "./host/skill-content.shya"';
-/** [注入文本, 调用点是否已手写] —— 写过的那个不重复注入，诊断行号按实际注入行数回退 */
-const HOST_IMPORTS = [
-    [HOST_IMPORT_TYPE, /^\s*import\s+["'][^"']*host\/skill-type\.shya["']/m],
-    [HOST_IMPORT_CONTENT, /^\s*import\s+["'][^"']*host\/skill-content\.shya["']/m]
-];
+// 宏库 import 的「已写过」判定与两份清单在 shya/skillTemplates.mjs:hostImportEntries()——
+// 放模块里是为了让标签面板自检能把 prepareSource 抽出来跑（见 _x19D6_backup/tools）。
 const EXAMPLE_SOURCE = [
     "// 示例：给「你」写一个结束阶段回血的触发技",
     "// @skill_* 宏来自 shya/host/skill-type.shya；@draw/@recover/@judge_color 等内容宏来自 shya/host/skill-content.shya",
@@ -296,9 +290,10 @@ shadow.innerHTML=`
      */
     panelKind() {
         if (this.currentKind) return this.currentKind;
-        const matched = /@skill_([A-Za-z_]\w*)/.exec(this.sourceArea ? this.sourceArea.value : "");
-        if (!matched) return "";
-        return SKILL_KINDS.some(kind => kind.key === matched[1]) ? matched[1] : "";
+        const source = this.sourceArea ? this.sourceArea.value : "";
+        const matched = /@([^\s{(]+)/.exec(source);
+        //宏名与种类 key 同名（@skill_trigger ↔ trigger）；中文库是 @触发技，靠 slotLang 反查
+        return matched ? kindOfMacroName(matched[1]) : "";
     }
     /** 页签：按技能种类过滤（「选角色」只给主动技与自由技能，见 tags.mjs 的 TARGET_PAGE_KINDS） */
     renderTagPages() {
@@ -571,6 +566,20 @@ shadow.innerHTML=`
     disconnectedCallback() {
         this.closeSpecialPopup();
     }
+    /** 设置里的模板语言（默认中文；认不出源码语言时用它） */
+    templateLang() {
+        const saved = this.configQuery("get", { member: "x19D6_editor.settings.templateLang" });
+        return saved === "en" ? "en" : DEFAULT_TEMPLATE_LANG;
+    }
+    /**
+     * 这份源码用的是哪套插槽：源码认得出就按源码（改设置不会破坏已有草稿），
+     * 空源码 / 认不出（比如只写了注释）才用设置里的默认语言。
+     * @param {string} [source]
+     * @returns {"cn"|"en"}
+     */
+    sourceLang(source = this.sourceArea ? this.sourceArea.value : "") {
+        return langOfSource(source) || this.templateLang();
+    }
     /**
      * 技能 id：**以编译产物为准**（产物恒为 `const <id> = { … }`，与模板语言无关），
      * 编译没过时退回源码里的 `#skill` / `#技能` 槽，再退回 setSource 带进来的 hint。
@@ -598,7 +607,9 @@ shadow.innerHTML=`
             this.setDiagnostics('<span class="warn">请先在上面选标签</span>');
             return;
         }
+        const lang = this.sourceLang();
         const lines = linesFromTags(this.chosenTags, {
+            lang,
             skillId: this.currentSkillId(),
             main: this.chosenTags.has("mainSkill"),
             vice: this.chosenTags.has("viceSkill"),
@@ -624,7 +635,7 @@ shadow.innerHTML=`
         //宏体里手写的值型槽：就地改那一行（一次改一处，改完重新取文本，位置不会串）
         let replaced = 0;
         for (const [slot, slotLines] of inlineLines) {
-            const result = replaceInlineSlot(this.sourceArea.value, slot, slotLines);
+            const result = replaceInlineSlot(this.sourceArea.value, slot, slotLines, lang);
             if (!result.ok) {
                 regionLines.push(...slotLines);
                 continue;
@@ -679,7 +690,7 @@ shadow.innerHTML=`
         const root = this.shadowRoot.querySelector(".kind-buttons");
         if (!root) return;
         root.replaceChildren();
-        SKILL_KINDS.forEach(kind => {
+        templateKinds(this.sourceLang()).forEach(kind => {
             const button = document.createElement("button");
             button.type = "button";
             button.className = "kind-button";
@@ -698,7 +709,7 @@ shadow.innerHTML=`
      * @param {string} key SKILL_KINDS 里的 key
      */
     chooseKind(key) {
-        if (!getSkillKind(key)) return;
+        if (!getSkillKind(key, this.sourceLang())) return;
         const switched = this.currentKind !== key;
         const overwrite = this.canReplaceSource();
         this.currentKind = key;
@@ -725,7 +736,7 @@ shadow.innerHTML=`
      * @param {{ overwrite?: boolean }} [options] overwrite=true 强制整块覆盖（换种类时由 chooseKind 传）
      */
     insertTemplate(key, options = {}) {
-        const kind = getSkillKind(key);
+        const kind = getSkillKind(key, this.sourceLang());
         if (!kind || !this.sourceArea) return;
         const text = kind.template;
         const node = this.sourceArea;
@@ -973,7 +984,9 @@ shadow.innerHTML=`
      * @returns {{ source: string, injected: number }} 注入后的源码与注入行数
      */
     prepareSource(source) {
-        const missing = HOST_IMPORTS.filter(([, pattern]) => !pattern.test(source)).map(([text]) => text);
+        const missing = hostImportEntries(this.sourceLang(source))
+            .filter(([, pattern]) => !pattern.test(source))
+            .map(([text]) => text);
         if (!missing.length) return { source, injected: 0 };
         return { source: missing.join("\n") + "\n" + source, injected: missing.length };
     }
