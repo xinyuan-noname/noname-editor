@@ -839,7 +839,8 @@ shadow.innerHTML=`
         //清掉上一次恢复时挂的 onerror 兜底：否则新图加载失败会被旧路径顶掉
         img.onerror = null;
         //同名文件换图后地址不变 → 显示地址补 `?t=`，否则浏览器吃缓存、画面还是旧图
-        const displayUrl = this.displayAvatarUrl(url);
+        //进 CSS 变量前再兜一次「根绝对」（相对地址会被 --data-avatar 按样式表目录解析，见 rootUrl()）
+        const displayUrl = this.displayAvatarUrl(this.rootUrl(url));
         img.src = displayUrl;
         avatar.classList.add("done");
         this.changeData("avatar", displayUrl);
@@ -2258,6 +2259,23 @@ shadow.innerHTML=`
         return `${this.stripUrlQuery(text)}?t=${Date.now()}`;
     }
     /**
+     * 把「页面相对」的地址补成「根绝对」地址（`extension/a.png` → `/extension/a.png`）。
+     * ⚠️ 立绘地址会被写进 CSS 变量（`changeData("avatar")` 的 `--data-avatar`），而
+     * **自定义属性里的相对 URL 是按声明它的样式表 `character-editor.css` 的目录解析的**：
+     * 实测请求变成 `/extension/魂氏编辑器/module/editor/style/extension/<工作区>/image/character/x.png` → 404
+     * （同一个字符串给 `<img src>` 却按文档根解析、能正常显示 —— 所以只有控制台报 404、画面看着没毛病）。
+     * 引擎本体的 `lib.assetURL` 就是空串（`noname/util/index.js:2`），这个 `/` 只能自己补。
+     * @param {string} value
+     * @returns {string}
+     */
+    rootUrl(value) {
+        const text = String(value || "").trim();
+        if (!text || text.startsWith("/")) return text;
+        //blob:/data:/http:/file:/ext:/img:/db: 自带基址，原样返回
+        if (/^[a-z][a-z0-9+.-]*:/i.test(text)) return text;
+        return `/${text}`;
+    }
+    /**
      * `ext:<工作区相对路径>` / `/extension/…` / `<工作区相对路径>` → `<工作区相对路径>`
      * @param {string} reference
      * @returns {string}
@@ -2280,8 +2298,12 @@ shadow.innerHTML=`
         if (/^(blob|data|https?|file):/i.test(text)) return text;
         const relative = this.referenceRelative(text);
         if (!relative) return "";
-        //lib.assetURL 可能是 file:///… 也可能是空串：拼出来才是 <img> 能加载的地址
-        return this.displayAvatarUrl(`${lib.assetURL || ""}extension/${relative}`);
+        //⚠️ assetURL 为空串时**必须**补根路径 `/`：这个地址会被写进 CSS 变量（`--data-avatar`），
+        //而 CSS 变量里的相对 URL 按 character-editor.css 的目录解析 → 请求 `…/style/extension/…` 404
+        //（详见 rootUrl()）。assetURL 非空（file:///…）时只需保证它自带结尾的 `/`。
+        const base = String(lib.assetURL || "");
+        const prefix = base ? (base.endsWith("/") ? base : `${base}/`) : "/";
+        return this.displayAvatarUrl(`${prefix}extension/${relative}`);
     }
     /**
      * 归一成草稿 `trashBin` 里该写的 `ext:` 路径。
