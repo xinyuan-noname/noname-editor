@@ -25,8 +25,9 @@ import {
 } from "./shya/tags.mjs";
 import { templateKinds, getSkillKind, hostImportEntries, DEFAULT_TEMPLATE_LANG } from "./shya/skillTemplates.mjs";
 import { langOfSource, kindOfMacroName } from "./shya/slotLang.mjs";
+import { checkSkillId } from "./shya/skillIdentity.mjs";
 import { injectSkillRegistration } from "./ai/skills.mjs";
-import { createSkillDraft, getSkillDraft, saveSkillDraft } from "./persist/skillLibrary.mjs";
+import { createSkillDraft, getSkillDraft, readSkillDrafts, saveSkillDraft } from "./persist/skillLibrary.mjs";
 
 // 宏库 import 的「已写过」判定与两份清单在 shya/skillTemplates.mjs:hostImportEntries()——
 // 放模块里是为了让标签面板自检能把 prepareSource 抽出来跑（见 _x19D6_backup/tools）。
@@ -208,15 +209,19 @@ shadow.innerHTML=`
             const result = compiler.compile(prepared.source);
             this.generatedCode = result && result.ok ? result.code : "";
             const list = (result && result.diagnostics) || [];
-            if (!list.length) {
-                this.setDiagnostics(`<span class="ok">编译通过 ✓${result && result.ok ? "" : "（但未产出代码）"}</span>`);
+            //技能 id 的冲突（与游戏本体/其它扩展重名、或与另一份草稿撞 id）：编译时就报，不必等到「生成」
+            //只在编译成功时跑：语法错时再叠一条「没有 id」只会刷屏
+            const conflicts = result && result.ok ? this.checkIdConflicts() : [];
+            if (!list.length && !conflicts.length) {
+                this.setDiagnostics(`<span class="ok">编译通过 ✓${result && result.ok ? `（技能 id：${this.escape(this.currentSkillId())}）` : "（但未产出代码）"}</span>`);
             } else {
-                this.setDiagnostics(list.map(d => {
+                const rows = list.map(d => {
                     const cls = d.severity === "error" ? "err" : d.severity === "warning" ? "warn" : "";
                     const sev = d.severity === "error" ? "错误" : d.severity === "warning" ? "警告" : "提示";
                     const line = Math.max(1, d.line - prepared.injected);
                     return `<span class="${cls}">${line}:${d.col} ${sev} [${this.escape(d.code)}] ${this.escape(d.message)}</span>`;
-                }).join("\n"));
+                }).concat(conflicts.map(item => `<span class="err">${this.escape(item.message)}</span>`));
+                this.setDiagnostics(rows.join("\n"));
             }
             if (output) output.textContent = this.generatedCode;
         } catch (err) {
@@ -236,9 +241,10 @@ shadow.innerHTML=`
             return;
         }
         const id = this.currentSkillId();
-        //安全线：与游戏或其它扩展已有的技能重名就拒绝，绝不覆盖别人的技能（与 AI 区域同款）
-        if (id && lib.skill[id] && !getSkillRecord(this, id)) {
-            this.setDiagnostics(`<span class="err">技能 id「${this.escape(id)}」在游戏或其它扩展里已经存在，换个 id 再生成</span>`);
+        //安全线：与游戏本体 / 其它扩展重名、或与另一份草稿撞 id 都拒绝，绝不覆盖别人的技能（与 AI 区域同款）
+        const conflicts = this.checkIdConflicts();
+        if (conflicts.length) {
+            this.setDiagnostics(conflicts.map(item => `<span class="err">${this.escape(item.message)}</span>`).join("\n"));
             return;
         }
         const injected = injectSkillRegistration(this.generatedCode, id);
@@ -651,7 +657,20 @@ shadow.innerHTML=`
         if (!this.draftKey) return;
         saveSkillDraft(this, this.draftKey, { workspace: this.workspaceName() });
     }
-    /** 设置里的模板语言（默认中文；认不出源码语言时用它） */    /** 设置里的模板语言（默认中文；认不出源码语言时用它） */
+    /**
+     * 技能 id 的冲突检测（编译时显示、「生成」时拦人；判据在 shya/skillIdentity.mjs）。
+     * 「自己这份草稿」用同一个 id 不算冲突（改完再编译的常态）。
+     * @returns {Array<{code: string, severity: string, message: string}>}
+     */
+    checkIdConflicts() {
+        return checkSkillId({
+            id: this.currentSkillId(),
+            draftKey: this.draftKey,
+            skillTable: lib.skill,
+            drafts: readSkillDrafts(this)
+        });
+    }
+    /** 设置里的模板语言（默认中文；认不出源码语言时用它） */
     templateLang() {
         const saved = this.configQuery("get", { member: "x19D6_editor.settings.templateLang" });
         return saved === "en" ? "en" : DEFAULT_TEMPLATE_LANG;

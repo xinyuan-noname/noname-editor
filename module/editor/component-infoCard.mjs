@@ -121,7 +121,7 @@ class HTMLNonameInfoCardElement extends HTMLNonameFocusUIElement {
         const shadow = this.attachShadow({ mode: "open" });
         shadow.append(nonameCardFragment.cloneNode(true));
     }
-    static observedAttributes = ["removable", "usable", "usefor", "markwords"];
+    static observedAttributes = ["removable", "usable", "usefor", "markwords", "drag-skill"];
     connectedCallback() {
         this.shadowRoot.addEventListener("pointerup", (e) => {
             const node = e.target;
@@ -194,6 +194,30 @@ class HTMLNonameInfoCardElement extends HTMLNonameFocusUIElement {
                         use.onpointerdown = null;
                     }
                     this.useForNode = null;
+                }
+            }; break;
+            case "drag-skill": {
+                //把卡片做成「可拖到武将技能区」：沿用 usefor 那套拖拽约定（拖动时自己临时挂
+                //id="chosen-card"、载荷里写 "chosen-card"），另加一个自定义类型带来源标记，
+                //技能区据此「复制一张」而不是「把这张卡搬走」；⬅️ 的语义保持不动。
+                const mainContentDiv = this.shadowRoot.querySelector(".main-content");
+                if (!mainContentDiv) break;
+                if (newValue) {
+                    mainContentDiv.setAttribute("draggable", "true");
+                    mainContentDiv.ondragstart = (e) => {
+                        this.setAttribute("id", "chosen-card");
+                        e.dataTransfer.setData("text", "chosen-card");
+                        try {
+                            e.dataTransfer.setData("application/x19d6-skill-source", String(newValue));
+                        } catch (err) { /* 某些环境不支持自定义类型，忽略 */ }
+                        mainContentDiv.ondragend = () => {
+                            this.removeAttribute("id");
+                            mainContentDiv.ondragend = null;
+                        };
+                    };
+                } else {
+                    mainContentDiv.removeAttribute("draggable");
+                    mainContentDiv.ondragstart = null;
                 }
             }; break;
             case "markwords": {

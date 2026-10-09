@@ -1694,6 +1694,13 @@ shadow.innerHTML=`
              */
             const node = document.getElementById(id);
             if (!node) return;
+            //侧栏技能草稿卡带了来源标记 → **复制一份**进技能栏：把草稿列表那一行搬走的话侧栏就少一条，
+            //而且那一行还要继续用来打开/删除草稿。搜索页的技能卡没有标记，照旧把卡搬进来。
+            if (e.dataTransfer.getData("application/x19d6-skill-source")) {
+                const skillId = node.getAttribute?.("skill-id");
+                if (skillId) this.addSkill(skillId);
+                return;
+            }
             this.addSkill(node);
         });
         skillsDataArea.addEventListener("removeCard", (e) => {

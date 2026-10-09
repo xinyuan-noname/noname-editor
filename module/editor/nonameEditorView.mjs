@@ -5,6 +5,7 @@ import "./component-ai.mjs";
 import { UniqueChoiceManager, DragManager, toggleMultiClass } from "./encapsulated.mjs";
 import { syncWorkspaceFiles } from "./persist/workspace.mjs";
 import { readSkillDrafts, removeSkillDraft, skillSourcesById } from "./persist/skillLibrary.mjs";
+import { isDraggableSkill } from "./shya/skillIdentity.mjs";
 
 /**
  * @typedef {import("./nonameEditor.mjs").NonameEditor NonameEditor}
@@ -1212,6 +1213,9 @@ mainPage.innerHTML=`
             card.setAttribute("draft-key", key);
             card.setAttribute("removable", "true");
             card.setAttribute("usable", "true");
+            //只有**已经「生成」过**的技能才给拖拽（lib.skill 里真有它）——否则拖进技能栏只是一张空卡
+            const draggable = isDraggableSkill(record, lib.skill);
+            if (draggable) card.setAttribute("drag-skill", `draft:${key}`);
             card.skillInfo = {
                 id: record.id || "",
                 name: record.name || record.id || "未命名技能",
@@ -1220,7 +1224,8 @@ mainPage.innerHTML=`
             };
             const seq = (key.match(/^draft-(\d+)$/) || [])[1];
             const savedAt = record.at ? `｜最后保存：${new Date(record.at).toLocaleString()}` : "";
-            card.title = `${seq ? `编号 #${seq}` : `草稿：${key}`}${record.id ? `｜技能 id：${record.id}` : ""}${savedAt}`;
+            const dragHint = draggable ? "｜可拖进武将技能区" : "｜先生成才能拖进技能区";
+            card.title = `${seq ? `编号 #${seq}` : `草稿：${key}`}${record.id ? `｜技能 id：${record.id}` : ""}${dragHint}${savedAt}`;
             ul.appendChild(card);
         });
         if (counter) counter.textContent = keys.length ? `已保存 ${keys.length} 个（使用→编辑，删除→丢弃）` : "";
