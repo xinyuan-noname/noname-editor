@@ -9,7 +9,6 @@ import {
     describeLocal,
     describeProgress,
     formatTimestamp,
-    githubUrl,
     installUpdate,
     mirrorOptions,
     readCache,
@@ -20,6 +19,7 @@ import {
     stateLabel,
     writeUpdateConfig
 } from "./update/panel.mjs";
+import { githubUrl } from "./update/mirrors.mjs";
 /**
  * 基本设置面板（侧边栏「设置」页）。
  * 所有设置项都写入 lib.config.x19D6_editor.settings.*，随引擎配置一起落到 IndexedDB。
@@ -325,11 +325,11 @@ shadow.innerHTML=`
                     : "已关闭自动检查，可随时点「检查更新」。");
             });
         }
-        query("updateCheck") && query("updateCheck").addEventListener("pointerup", () => this.checkUpdate());
-        query("updateInstall") && query("updateInstall").addEventListener("pointerup", () => this.installLatest());
-        query("updateVersions") && query("updateVersions").addEventListener("pointerup", () => this.pickUpdateVersion());
-        query("updateHome") && query("updateHome").addEventListener("pointerup", () => this.openInBrowser(githubUrl.repoPage()));
-        query("updateReleases") && query("updateReleases").addEventListener("pointerup", () => this.openInBrowser(githubUrl.releasesPage()));
+        query("updateCheck")?.addEventListener?.("pointerup", () => this.checkUpdate());
+        query("updateInstall")?.addEventListener?.("pointerup", () => this.installLatest());
+        query("updateVersions")?.addEventListener?.("pointerup", () => this.pickUpdateVersion());
+        query("updateHome")?.addEventListener?.("pointerup", () => this.openInBrowser(githubUrl.repoPage()));
+        query("updateReleases")?.addEventListener?.("pointerup", () => this.openInBrowser(githubUrl.releasesPage()));
         this.refreshUpdateInfo();
     }
     /** @param {string} text */

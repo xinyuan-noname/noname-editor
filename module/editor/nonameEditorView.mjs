@@ -612,7 +612,7 @@ mainPage.innerHTML=`
         const emptyTitle = emptyCard && emptyCard.querySelector("div");
         const emptyText = filtered ? "该武将包/分包下暂无草稿" : "暂未创建过武将!";
         if (emptyTitle && emptyTitle.textContent !== emptyText) emptyTitle.textContent = emptyText;
-        if (counter) counter.textContent = ids.length ? `已保存 ${ids.length} 位${filtered ? "（已过滤）" : ""}（使用→编辑，删除→丢弃）` : "";
+        if (counter) counter.textContent = ids.length ? `已保存 ${ids.length} 位${filtered ? "（已过滤）" : ""}` : "";
         if (emptyCard) emptyCard.classList.toggle("xy-ED-hidden", ids.length > 0);
         if (showBox) showBox.classList.toggle("xy-ED-hidden", ids.length === 0);
         return ids.length;
@@ -1148,7 +1148,6 @@ mainPage.innerHTML=`
     }
     /**
      * 侧栏「技」= **技能草稿列表**（与「武将」页同构）：点导航只切页并刷新列表，不再直接开编辑器；
-     * 列表项用 <skill-info-card>（使用→打开该草稿、🗑️→丢弃草稿）。
      * 「新建」按「技能编辑器版本」偏好分流：旧版编辑器没有草稿概念，直接开浮层。
      */
     listenSideBarSkill() {
@@ -1228,7 +1227,7 @@ mainPage.innerHTML=`
             card.title = `${seq ? `编号 #${seq}` : `草稿：${key}`}${record.id ? `｜技能 id：${record.id}` : ""}${dragHint}${savedAt}`;
             ul.appendChild(card);
         });
-        if (counter) counter.textContent = keys.length ? `已保存 ${keys.length} 个（使用→编辑，删除→丢弃）` : "";
+        if (counter) counter.textContent = keys.length ? `已保存 ${keys.length} 个` : "";
         if (emptyCard) emptyCard.classList.toggle("xy-ED-hidden", keys.length > 0);
         if (showBox) showBox.classList.toggle("xy-ED-hidden", keys.length === 0);
         return keys.length;

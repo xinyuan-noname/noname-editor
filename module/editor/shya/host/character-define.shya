@@ -1,0 +1,52 @@
+macro @character_define(
+  #name:Ident,
+  #sex,#group,
+  #hp:Num,
+  #maxHp:Num?,
+  #hujia:Num?,
+  #title:Str?,
+  #skills:ArrayLit?,
+  #clans:ArrayLit?,
+  #isZhugong: Bool?,
+  #hasHiddenSkill: Bool?,
+  #isAiForbidden: Bool?,
+  #isBoss: Bool?,
+  #isChessBoss: Bool?,
+  #isUnseen: Bool?,
+  #isJiangeBoss: Bool?,
+  #isJiangeMech: Bool?,
+  #isFellowInStoneMode: Bool?,
+  #isSpecialInStoneMode: Bool?,
+  #isHiddenInStoneMode: Bool?,
+  #imagePath:Str?
+) {
+  #name = {
+    sex:#sex,
+    group: #group,
+    hp: #hp,
+    skills: #skills,
+    <clans>clans: #clans,</clans>
+    <maxHp>maxHp: #maxHp,</maxHp>
+    <hujia>hujia: #hujia,</hujia>
+    <title>title: #title,</title>
+    <isZhugong>isZhugong: #isZhugong,</isZhugong>
+    <hasHiddenSkill>hasHiddenSkill: #hasHiddenSkill,</hasHiddenSkill>
+    <isAiForbidden>isAiForbidden: #isAiForbidden,</isAiForbidden>
+    <isBoss>isBoss: #isBoss,</isBoss>
+    <isChessBoss>isChessBoss: #isChessBoss,</isChessBoss>
+    <isUnseen>isUnseen: #isUnseen,</isUnseen>
+    <isJiangeBoss>isJiangeBoss: #isJiangeBoss,</isJiangeBoss>
+    <isJiangeMech>isJiangeMech: #isJiangeMech,</isJiangeMech>
+    <isFellowInStoneMode>isFellowInStoneMode: #isFellowInStoneMode,</isFellowInStoneMode>
+    <isSpecialInStoneMode>isSpecialInStoneMode: #isSpecialInStoneMode,</isSpecialInStoneMode>
+    <isHiddenInStoneMode>isHiddenInStoneMode: #isHiddenInStoneMode,</isHiddenInStoneMode>
+    trashBin:[
+      <imagePath>#imagePath</imagePath>
+    ]
+  }
+}
+caocao @character_define{
+    #sex: "male"
+    #group: "wei"
+    #hp: 4
+}

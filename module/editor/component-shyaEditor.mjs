@@ -829,14 +829,6 @@ shadow.innerHTML=`
             this.renderKindBar();
             return;
         }
-        if (!this.sourceIsPristine() && this.confirmOverwriteEnabled()) {
-            const yes = await this.askDialog({
-                type: "confirm",
-                headline: `写入「${kind.name}」模板`,
-                message: "会整块覆盖源码框里的内容（一个技能草稿只放一个技能）。可以在设置页「写入模板前确认」里关掉这个提示。"
-            });
-            if (yes !== true) return;
-        }
         this.currentKind = key;
         this.renderKindBar();
         //换种类 = 直接清除覆盖：上一种的标签勾选归零（源码里的托管区随整块覆盖一起没了）
@@ -848,12 +840,6 @@ shadow.innerHTML=`
         const node = this.sourceArea;
         if (!node) return true;
         return !this.sourceTouched || !node.value.trim() || node.value === this.lastTemplateText;
-    }
-    /** 覆盖源码前是否要问一句（设置页「写入模板前确认」，默认开） */
-    confirmOverwriteEnabled() {
-        if (typeof this.configQuery !== "function") return true;
-        const saved = this.configQuery("get", { member: "x19D6_editor.settings.confirmTemplateOverwrite" });
-        return saved !== false;
     }
     /**
      * 把某类技能的最简模板**整块**写进源码（一个技能草稿只放一个技能，不再插到光标处）。
