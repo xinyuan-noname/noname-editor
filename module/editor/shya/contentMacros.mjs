@@ -73,7 +73,7 @@ export const CONTENT_MACROS = [
         source: "标准包 英姿 / 闭月 / 连营 / 苦肉",
         slots: [
             { slot: "who", cn: "摸牌的角色", type: "player", required: true },
-            { slot: "num", cn: "张数", type: "number", required: true }
+            { slot: "num", cn: "张数", type: "number", required: false, default: 1 }
         ]
     },
     {
@@ -84,7 +84,7 @@ export const CONTENT_MACROS = [
         source: "标准包 骁果 / 刚烈 / 反间",
         slots: [
             { slot: "who", cn: "受到伤害的角色", type: "player", required: true },
-            { slot: "num", cn: "伤害点数", type: "number", required: true }
+            { slot: "num", cn: "伤害点数", type: "number", required: false, default: 1 }
         ]
     },
     {
@@ -95,7 +95,7 @@ export const CONTENT_MACROS = [
         source: "标准包 结姻 / 青囊 / 苦肉",
         slots: [
             { slot: "who", cn: "回复的角色", type: "player", required: true },
-            { slot: "num", cn: "点数", type: "number", required: true }
+            { slot: "num", cn: "点数", type: "number", required: false, default: 1 }
         ]
     },
     {
@@ -106,7 +106,7 @@ export const CONTENT_MACROS = [
         source: "标准包 苦肉 / 裸衣 / 战神",
         slots: [
             { slot: "who", cn: "失去体力的角色", type: "player", required: true },
-            { slot: "num", cn: "点数", type: "number", required: true }
+            { slot: "num", cn: "点数", type: "number", required: false, default: 1 }
         ]
     },
     {
@@ -117,7 +117,7 @@ export const CONTENT_MACROS = [
         source: "标准包 战神",
         slots: [
             { slot: "who", cn: "角色", type: "player", required: true },
-            { slot: "num", cn: "点数", type: "number", required: true }
+            { slot: "num", cn: "点数", type: "number", required: false, default: 1 }
         ]
     },
     {
@@ -140,7 +140,7 @@ export const CONTENT_MACROS = [
         slots: [
             { slot: "who", cn: "获得牌的角色", type: "player", required: true },
             { slot: "cards", cn: "获得的牌", type: "cards", required: true },
-            { slot: "anim", cn: "动画名", type: "string", required: true }
+            { slot: "anim", cn: "动画名", type: "string", required: false, default: "gain2" }
         ]
     },
     {
@@ -164,8 +164,8 @@ export const CONTENT_MACROS = [
         slots: [
             { slot: "who", cn: "获得牌的角色", type: "player", required: true },
             { slot: "from", cn: "被拿牌的角色", type: "player", required: true },
-            { slot: "position", cn: "牌区记号（he / e / h …）", type: "string", required: true },
-            { slot: "forced", cn: "是否必须选择", type: "expr", required: true }
+            { slot: "position", cn: "牌区记号（he / e / h …）", type: "string", required: false, default: "he" },
+            { slot: "forced", cn: "是否必须选择", type: "expr", required: false, default: false }
         ]
     },
     {
@@ -177,8 +177,8 @@ export const CONTENT_MACROS = [
         slots: [
             { slot: "who", cn: "弃牌的角色", type: "player", required: true },
             { slot: "from", cn: "被弃牌的角色", type: "player", required: true },
-            { slot: "position", cn: "牌区记号", type: "string", required: true },
-            { slot: "forced", cn: "是否必须选择", type: "expr", required: true }
+            { slot: "position", cn: "牌区记号", type: "string", required: false, default: "he" },
+            { slot: "forced", cn: "是否必须选择", type: "expr", required: false, default: false }
         ]
     },
     {
@@ -201,7 +201,7 @@ export const CONTENT_MACROS = [
         slots: [
             { slot: "who", cn: "角色", type: "player", required: true },
             { slot: "cards", cn: "置于武将牌上的牌", type: "cards", required: true },
-            { slot: "anim", cn: "动画名", type: "string", required: true },
+            { slot: "anim", cn: "动画名", type: "string", required: false, default: "give" },
             { slot: "tag", cn: "牌的记号（一般同技能 id）", type: "string", required: true }
         ]
     },
@@ -226,7 +226,7 @@ export const CONTENT_MACROS = [
         source: "标准包 骁果 / 刚烈 / 同疾",
         slots: [
             { slot: "who", cn: "弃牌的角色", type: "player", required: true },
-            { slot: "num", cn: "张数", type: "number", required: true },
+            { slot: "num", cn: "张数", type: "number", required: false, default: 1 },
             { slot: "prompt", cn: "询问文字", type: "string", required: true },
             { slot: "yes", cn: "弃置成功时", type: "stmt" },
             { slot: "no", cn: "未弃置时（后果写这里）", type: "stmt" }
@@ -320,7 +320,7 @@ export const CONTENT_MACROS = [
         slots: [
             { slot: "who", cn: "角色", type: "player", required: true },
             { slot: "id", cn: "标记名（一般同技能 id）", type: "string", required: true },
-            { slot: "num", cn: "数量", type: "number", required: true }
+            { slot: "num", cn: "数量", type: "number", required: false, default: 1 }
         ]
     },
     {
@@ -332,7 +332,7 @@ export const CONTENT_MACROS = [
         slots: [
             { slot: "who", cn: "角色", type: "player", required: true },
             { slot: "id", cn: "标记名", type: "string", required: true },
-            { slot: "num", cn: "数量", type: "number", required: true }
+            { slot: "num", cn: "数量", type: "number", required: false, default: 1 }
         ]
     },
     {
@@ -352,7 +352,7 @@ export const CONTENT_MACROS = [
         group: "事件修正",
         doc: "trigger.num += n（摸牌数、伤害数…）",
         source: "标准包 英姿 / 罗衣2 / 忠义2",
-        slots: [{ slot: "num", cn: "增加量", type: "number", required: true }]
+        slots: [{ slot: "num", cn: "增加量", type: "number", required: false, default: 1 }]
     },
     {
         name: "num_down",
@@ -360,7 +360,7 @@ export const CONTENT_MACROS = [
         group: "事件修正",
         doc: "trigger.num -= n",
         source: "标准包 裸衣",
-        slots: [{ slot: "num", cn: "减少量", type: "number", required: true }]
+        slots: [{ slot: "num", cn: "减少量", type: "number", required: false, default: 1 }]
     },
     {
         name: "base_damage_up",
@@ -368,7 +368,7 @@ export const CONTENT_MACROS = [
         group: "事件修正",
         doc: "trigger.baseDamage += n（桃的回复基数、此【杀】伤害+1）",
         source: "标准包 救援 / 忠义2",
-        slots: [{ slot: "num", cn: "增加量", type: "number", required: true }]
+        slots: [{ slot: "num", cn: "增加量", type: "number", required: false, default: 1 }]
     },
     {
         name: "cancel",
@@ -406,7 +406,7 @@ export const CONTENT_MACROS = [
         slots: [
             { slot: "who", cn: "起点角色", type: "player", required: true },
             { slot: "target", cn: "终点角色", type: "player", required: true },
-            { slot: "color", cn: "颜色", type: "string", required: true }
+            { slot: "color", cn: "颜色", type: "string", required: false, default: "green" }
         ]
     },
     {
@@ -418,7 +418,7 @@ export const CONTENT_MACROS = [
         slots: [
             { slot: "who", cn: "获得牌的角色", type: "player", required: true },
             { slot: "targets", cn: "被拿牌的角色们", type: "expr", required: true },
-            { slot: "position", cn: "牌区记号", type: "string", required: true }
+            { slot: "position", cn: "牌区记号", type: "string", required: false, default: "h" }
         ]
     }
 ];
