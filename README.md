@@ -166,6 +166,29 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
 
 
 
+## AI 区域（侧栏「AI」页）
+
+顶部标签栏四页：**生成设计稿** / **生成技能** / **生成原画** / **生成历史**（当前页记在 `x19D6_editor.ai.ui.lastTab`；
+窄侧栏放不下时标签自动换行，不压省略号）。「⚙ 配置」「❓ 引导」是整页替换的浮层，不做绝对定位覆盖层。
+
+- **生成设计稿**：一句话 → 2 个候选武将（属性 + 每个技能一份 shya 源码）。技能卡上「编译校验」看诊断，
+  「一键应用」= 编译 → 局内生效 → 新建武将草稿 → 逐个补技能卡（技能定义随武将一起落盘）。
+  「优化提示」把随口一写改写成明确的设计需求。
+- **生成技能**：只产**单个技能**。输入一句话 + 「技能种类」下拉（留空 = 让模型自己挑骨架）+ 生成数量 1~2 +
+  「给谁写」（当前设计稿 / 主区打开的武将草稿，选中后把该武将的名字·势力·体力·已有技能写进需求）。
+  AI 出 N 份 shya 源码后**当场自动编译一次**，卡片上显示诊断；「生成」= 编译 → 局内生效 →
+  写进技能草稿库（侧栏「技」立刻可见、可拖进武将的技能区），另有「编译校验 / 打开技能编辑器 / 复制源码」。
+  id 与源码 `#skill` 槽由 `ai/prompts.mjs:alignSkillSlot` 对齐，避免「编译过但注入找不到 `const <id>`」。
+- **生成原画**：据武将资料出竖版立绘，先落成候选图；点「用作立绘」才走武将编辑器自己的 `saveLocalAsset`
+  （目录配置、`<武将id>.<ext>` 命名、与草稿同生共死都在那里）。
+- **AI 技能书**（`ai/skill.md`，面板里可改可关）与 token 用量条：技能书作用于「生成设计稿」与「生成技能」；
+  用量条只统计对话调用（生图按张计费、不计 token）。
+
+配置按「服务商列表 → 配置页」两级，预设见 `ai/profiles.mjs`；网络层 `ai/client.mjs`、提示词 `ai/prompts.mjs`、
+技能源码编译前后处理 `ai/skills.mjs`、持久化 `ai/store.mjs`。
+⚠️ 编译前**两个宿主宏库都要注入**（`ai/skills.mjs:ensureHostImports`）：`skill-type.shya` 是技能骨架宏
+（`@skill_trigger` 等），`skill-content.shya` 是内容宏（`@draw` / `@damage` / `@judge_color` …）——
+少注入后者时，模型按提示词写的内容宏会以「宏未定义」编译失败。
 ## 目录结构
 
 ```
@@ -180,6 +203,8 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
     component-setting.mjs      <setting-panel> 基本设置
     component-dialog.mjs       <noname-dialog> 对话框
     component-infoCard.mjs     技能/武将/皮肤/语音信息卡
+    component-ai.mjs           <ai-panel> 侧栏 AI 页（生成设计稿 / 生成技能 / 生成原画 / 生成历史）
+    ai/                        AI 区：profiles 预设 / client 网络 / prompts 提示词 / skills 编译前后 / store 持久化
     component-base.mjs         组件基类（查询门面 + manager 原语）
     encapsulated.mjs           UniqueChoiceManager / DragManager / loadCss 等
     data-noname.mjs            NonameData：文件、配置、搜索、多媒体、AST
