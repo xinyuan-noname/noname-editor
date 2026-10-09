@@ -109,30 +109,18 @@ function collectNewGroups(records, packageId, groupList) {
 }
 
 /**
- * 草稿里引用到的全部技能 id（写 shya 源码时用）
- * @param {object} records
- * @returns {string[]}
- */
-function collectReferencedSkills(records) {
-    const ids = new Set();
-    Object.values(records || {}).forEach(record => {
-        (record && record.skills ? record.skills : []).forEach(id => id && ids.add(id));
-    });
-    return Array.from(ids);
-}
-
-/**
  * 写 shya 源码：`extension/<源码目录>/<技能id>.shya`
  * 只写技能库里**存过源码**的技能；技能被移出草稿时不删文件（可能是用户自己在用的）。
+ * @param {{data: object, skillSourcePath: string, skillSources: Object<string, string>, onWarn: Function}} options
  */
-async function writeSkillSources({ data, skillSourcePath, skillIds, skillRecords, onWarn }) {
-    for (const id of skillIds) {
-        const record = skillRecords[id];
-        const source = record && typeof record.source === "string" ? record.source.trim() : "";
-        if (!source) continue;
+async function writeSkillSources({ data, skillSourcePath, skillSources, onWarn }) {
+    for (const [id, source] of Object.entries(skillSources || {})) {
+        const text = String(source || "").trim();
+        if (!text) continue;
         const path = `extension/${skillSourcePath}/${id}.shya`;
         try {
-            await data.writeTextFile(path, `${source}\n`);
+            //两端空白去掉再补一个换行：草稿里多敲的空行不该写进磁盘文件（也保证重复落盘 0 变更）
+            await data.writeTextFile(path, `${text}\n`);
         } catch (err) {
             onWarn(`写入技能源码失败：${path}`, err);
         }
@@ -177,10 +165,7 @@ async function syncEntryImports({ data, entryPath, entry, packageIds, isModule, 
  * @param {string} options.workspace 工作区（= 扩展名）
  * @param {{packages?: object, sorts?: object}} [options.meta] 武将包 / 分包登记表
  * @param {object} [options.records] x19D6_editor.characters
- * @param {object} [options.skillRecords] x19D6_editor.skills（技能库）
- * @param {{characterPack?: object, imported?: object, skill?: object, translate?: object, group?: string[]}} [options.libRef]
- * @param {object} [options.groups] x19D6_editor.groups（自建势力中文名）
- * @param {string} [options.skillSourcePath] 技能源码目录（相对 extension/，如 `工作区/src/shya`）
+ * @param {object} [options.skillSources] 技能 id → shya 源码（`skillLibrary:skillSourcesById`）
  * @param {(message: string, detail?: any) => void} [options.onWarn]
  * @returns {Promise<boolean>}
  */
@@ -190,7 +175,7 @@ export async function syncWorkspaceFiles(options = {}) {
         workspace,
         meta = {},
         records = {},
-        skillRecords = {},
+        skillSources = {},
         libRef = {},
         groups = {},
         skillSourcePath = "",
@@ -241,13 +226,7 @@ export async function syncWorkspaceFiles(options = {}) {
     }
 
     if (skillSourcePath) {
-        await writeSkillSources({
-            data,
-            skillSourcePath,
-            skillIds: collectReferencedSkills(records),
-            skillRecords,
-            onWarn
-        });
+        await writeSkillSources({ data, skillSourcePath, skillSources, onWarn });
     }
     return syncEntryImports({ data, entryPath, entry, packageIds, isModule, onWarn });
 }

@@ -130,7 +130,8 @@ async function resolveSkillEditorVersion() {
 }
 /**
  * 新版 shya 技能编辑器
- * @param {{ parent?: HTMLElement, source?: string, skillId?: string }} [options]
+ * @param {{ parent?: HTMLElement, source?: string, skillId?: string, draftKey?: string }} [options]
+ *   draftKey：打开某份已有草稿（侧栏技能列表用）；不给就是新建
  *   source / skillId：带一份源码打开（AI 区域的「打开技能编辑器」用）；
  *   组件实现了 setSource 才生效，没实现就只是打开编辑器。
  */
@@ -139,14 +140,8 @@ async function openShyaSkillEditor(options = {}) {
     instance.view.toggleNav("skill");
     //组件定义按需载入（WASM 在组件内首次编译时才拉，避免拖慢启动）
     await import("./component-shyaEditor.mjs");
-    let node = instance.view.mainArea.querySelector("shya-editor");
-    if (node) {
-        //主区是标签页形式：已经开着就切到它的标签，不能「已存在就直接返回」（那样看不出反应）
-        instance.view.activateMainPane(node);
-    } else {
-        node = document.createElement("shya-editor");
-        instance.view.mainArea.appendChild(node);
-    }
+    //同一份草稿只留一个编辑器实例（视图里按 draft-key 去重并切标签）
+    const node = instance.view.createSkillEditor(options.draftKey);
     if (typeof node.setSource === "function" && (options.source || options.skillId)) {
         node.setSource(options.source, options.skillId);
     }

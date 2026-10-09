@@ -4,7 +4,7 @@ import "./component-setting.mjs";
 import "./component-ai.mjs";
 import { UniqueChoiceManager, DragManager, toggleMultiClass } from "./encapsulated.mjs";
 import { syncWorkspaceFiles } from "./persist/workspace.mjs";
-import { readSkillRecords } from "./persist/skillLibrary.mjs";
+import { readSkillDrafts, removeSkillDraft, skillSourcesById } from "./persist/skillLibrary.mjs";
 
 /**
  * @typedef {import("./nonameEditor.mjs").NonameEditor NonameEditor}
@@ -179,6 +179,7 @@ export class NonameEditorView {
             this.syncTitleWorkspace();
             this.renderCharacterFilter();
             this.loadSideBarCharacter();
+            this.loadSideBarSkill();
             this.mainPanes.forEach(pane => pane.syncWorkspace?.());
         });
     }
@@ -206,7 +207,16 @@ mainPage.innerHTML=`
             <hr>
             <div class="xy-ED-sideBar-content">
                 <div class="xy-ED-sideBar-setting" data-by="setting"><setting-panel></setting-panel></div>
-                <div class="xy-ED-sideBar-skill" data-by="skill"></div>
+                <div class="xy-ED-sideBar-skill" data-by="skill">
+                    <div class="xy-ED-nocharacterCard">
+                        <div>暂未创建过技能!</div>
+                        <button>点击创建</button>
+                    </div>
+                    <div class="xy-ED-characte-show">
+                        <header><span class="xy-ED-characte-count"></span><span class="xy-ED-create-button" title="新建一个技能（按「技能编辑器版本」偏好分流）">＋ 新建技能</span><span class="xy-ED-refresh-button" title="刷新已保存技能列表">⟳ 刷新</span></header>
+                        <ul></ul>
+                    </div>
+                </div>
                 <div class="xy-ED-sideBar-character" data-by="character">
                     <div class="xy-ED-characterFilter">
                         <label class="xy-ED-filter-row"><span>武将包</span><select data-character-filter="packageId"></select><button class="xy-ED-filter-add" type="button" data-character-add="packageId" title="在本扩展下新建武将包">＋</button></label>
@@ -384,7 +394,11 @@ mainPage.innerHTML=`
      */
     listenMainAreaChange() {
         //草稿保存（组件派发的 draftSaved）→ 防抖把武将也落盘
-        this.mainArea.addEventListener("draftSaved", () => this.scheduleWorkspaceSync());
+        //草稿保存（组件派发的 draftSaved）→ 防抖把武将/技能源码也落盘，并刷新侧栏草稿列表
+        this.mainArea.addEventListener("draftSaved", () => {
+            this.scheduleWorkspaceSync();
+            this.loadSideBarSkill();
+        });
         const observer = new MutationObserver(() => this.syncMainTabs());
         observer.observe(this.mainArea, { attributes: false, childList: true, subtree: false });
         //组件内改了 id/名字 → 冒泡 tabTitleChange → 只刷那一个标签
@@ -539,18 +553,9 @@ mainPage.innerHTML=`
         return characterEditor;
     }
     /**
-     * 渲染「历史武将」：数据源是已持久化的草稿 x19D6_editor.characters
-     * @returns {number} 已保存的武将数量
-     */
-    /**
      * 渲染「历史武将」：数据源是已持久化的草稿 x19D6_editor.characters。
-     * 使用既有组件 <character-info-card>（component-infoCard.mjs 定义），
-     * 而不是自己拼列表项——它自带武将名/包/分包/体力/技能等展示与「使用/删除」操作条。
-     * @returns {number} 已保存的武将数量
-     */
-    /**
-     * 渲染「历史武将」：数据源是已持久化的草稿 x19D6_editor.characters。
-     * 使用既有组件 <character-info-card>（component-infoCard.mjs 定义）。
+     * 使用既有组件 <character-info-card>（component-infoCard.mjs 定义）——它自带武将名/包/分包/
+     * 体力/技能等展示与「使用/删除」操作条，不必自己拼列表项。
      * @returns {number} 已保存的武将数量
      */
     loadSideBarCharacter() {
@@ -770,7 +775,7 @@ mainPage.innerHTML=`
             workspace,
             meta,
             records: data.getConfig("x19D6_editor.characters") || {},
-            skillRecords: readSkillRecords(data),
+            skillSources: skillSourcesById(data, workspace),
             libRef: {
                 characterPack: lib.characterPack,
                 imported: lib.imported,
@@ -1140,12 +1145,108 @@ mainPage.innerHTML=`
         const remember = data.getConfig("x19D6_editor.settings.rememberPage");
         if (lastNav && remember !== false) this.toggleNav(lastNav);
     }
+    /**
+     * 侧栏「技」= **技能草稿列表**（与「武将」页同构）：点导航只切页并刷新列表，不再直接开编辑器；
+     * 列表项用 <skill-info-card>（使用→打开该草稿、🗑️→丢弃草稿）。
+     * 「新建」按「技能编辑器版本」偏好分流：旧版编辑器没有草稿概念，直接开浮层。
+     */
     listenSideBarSkill() {
-        //技能编辑入口：走 openSkillEditor 的「新/旧」偏好分流，不要直接调旧版
-        //（偏好存在 x19D6_editor.settings.skillEditorVersion，首次弹一次，之后在设置页改）
-        this.navSkill.addEventListener("pointerup", () => {
+        const { sideBarSkill } = this;
+        if (!sideBarSkill) return;
+        const createSkill = () => {
             if (typeof game.x19D6_openSkillEditor === "function") game.x19D6_openSkillEditor();
+        };
+        //空态卡里的按钮（侧栏顶部没有其它 button，但仍按武将页的写法限定容器）
+        sideBarSkill.querySelector(".xy-ED-nocharacterCard>button")?.addEventListener("pointerup", createSkill);
+        sideBarSkill.querySelector(".xy-ED-create-button")?.addEventListener("pointerup", createSkill);
+        sideBarSkill.querySelector(".xy-ED-refresh-button")?.addEventListener("pointerup", () => this.loadSideBarSkill());
+        this.navSkill.addEventListener("pointerup", () => this.loadSideBarSkill());
+        const ul = sideBarSkill.querySelector("ul");
+        //「使用」：打开该草稿（草稿只有 shya 编辑器认，所以这里不走偏好分流）
+        ul.addEventListener("useCardData", e => {
+            const node = e.detail && e.detail.from;
+            const draftKey = node && node.getAttribute && node.getAttribute("draft-key");
+            if (!draftKey) return;
+            if (typeof game.x19D6_openShyaSkillEditor === "function") game.x19D6_openShyaSkillEditor({ draftKey });
         });
+        //🗑️：丢弃草稿（写回配置；落盘层下次同步时不会再写它的 .shya）
+        ul.addEventListener("removeCard", e => {
+            const node = e.detail && e.detail.from;
+            const draftKey = node && node.getAttribute && node.getAttribute("draft-key");
+            if (!draftKey) return;
+            removeSkillDraft(this.serveFor.data, draftKey);
+            this.loadSideBarSkill();
+            this.scheduleWorkspaceSync();
+        });
+        this.loadSideBarSkill();
+    }
+
+    /**
+     * 渲染侧栏「技能」的草稿列表（数据源 `x19D6_editor.skills`，键是草稿编号）。
+     * 与武将列表同构：工作区过滤（未归属照常显示）、卡片自带使用/删除、空态提示。
+     * @returns {number} 草稿数量
+     */
+    loadSideBarSkill() {
+        const sideBarSkill = this.sideBarSkill;
+        if (!sideBarSkill) return 0;
+        const workspace = this.serveFor.data.getConfig("x19D6_editor.settings.workspace") || "";
+        const drafts = readSkillDrafts(this.serveFor.data);
+        const keys = Object.keys(drafts)
+            .filter(key => {
+                const record = drafts[key] || {};
+                return !workspace || !record.workspace || record.workspace === workspace;
+            })
+            //新草稿排前面（编号大的在前）
+            .sort((a, b) => Number((b.match(/\d+$/) || [0])[0]) - Number((a.match(/\d+$/) || [0])[0]));
+        const emptyCard = sideBarSkill.querySelector(".xy-ED-nocharacterCard");
+        const showBox = sideBarSkill.querySelector(".xy-ED-characte-show");
+        const counter = showBox && showBox.querySelector(".xy-ED-characte-count");
+        const ul = showBox && showBox.querySelector("ul");
+        if (!ul) return 0;
+        ul.replaceChildren();
+        keys.forEach(key => {
+            const record = drafts[key] || {};
+            const card = document.createElement("skill-info-card");
+            //skill-id 只用于展示（没有 id 的新草稿显示编号），draft-key 才是草稿的唯一标识
+            card.setAttribute("skill-id", record.id || key);
+            card.setAttribute("draft-key", key);
+            card.setAttribute("removable", "true");
+            card.setAttribute("usable", "true");
+            card.skillInfo = {
+                id: record.id || "",
+                name: record.name || record.id || "未命名技能",
+                description: record.description || "",
+                audios: []
+            };
+            const seq = (key.match(/^draft-(\d+)$/) || [])[1];
+            const savedAt = record.at ? `｜最后保存：${new Date(record.at).toLocaleString()}` : "";
+            card.title = `${seq ? `编号 #${seq}` : `草稿：${key}`}${record.id ? `｜技能 id：${record.id}` : ""}${savedAt}`;
+            ul.appendChild(card);
+        });
+        if (counter) counter.textContent = keys.length ? `已保存 ${keys.length} 个（使用→编辑，删除→丢弃）` : "";
+        if (emptyCard) emptyCard.classList.toggle("xy-ED-hidden", keys.length > 0);
+        if (showBox) showBox.classList.toggle("xy-ED-hidden", keys.length === 0);
+        return keys.length;
+    }
+    /**
+     * 新建 / 复用 <shya-editor>（与 createCharacterEditor 同款）：
+     * 带草稿编号时同一份草稿只留一个实例（两个实例会互相覆盖对方的自动保存）；不带就新建一个。
+     * ⚠️ 调用前必须先 import 组件定义（api.mjs 里做）。
+     * @param {string} [draftKey]
+     * @returns {HTMLElement}
+     */
+    createSkillEditor(draftKey = "") {
+        const existing = Array.from(this.mainArea.querySelectorAll("shya-editor"));
+        const opened = draftKey ? existing.find(node => node.draftKey === draftKey) : null;
+        if (opened) {
+            this.activateMainPane(opened);
+            return opened;
+        }
+        const node = document.createElement("shya-editor");
+        //必须在挂载前设置：组件的 connectedCallback 会按 draft-key 载入草稿
+        if (draftKey) node.setAttribute("draft-key", draftKey);
+        this.mainArea.appendChild(node);
+        return node;
     }
     /**
      * 侧栏 AI 页：把外壳交给面板（它要用主区的武将编辑器：建草稿、设立绘、读当前草稿）。

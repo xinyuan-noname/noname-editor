@@ -26,7 +26,7 @@ import {
 import { templateKinds, getSkillKind, hostImportEntries, DEFAULT_TEMPLATE_LANG } from "./shya/skillTemplates.mjs";
 import { langOfSource, kindOfMacroName } from "./shya/slotLang.mjs";
 import { injectSkillRegistration } from "./ai/skills.mjs";
-import { getSkillRecord, setSkillRecord } from "./persist/skillLibrary.mjs";
+import { createSkillDraft, getSkillDraft, saveSkillDraft } from "./persist/skillLibrary.mjs";
 
 // 宏库 import 的「已写过」判定与两份清单在 shya/skillTemplates.mjs:hostImportEntries()——
 // 放模块里是为了让标签面板自检能把 prepareSource 抽出来跑（见 _x19D6_backup/tools）。
@@ -65,6 +65,10 @@ class HTMLNonameShyaEditorElement extends HTMLNonameFocusUIElement {
     generatedCode = "";
     /** setSource 带进来的技能 id（编译产物出来之前先用它） */
     sourceSkillId = "";
+    /** 草稿编号（`draft-<n>`；空 = 还没落库） */
+    draftKeyValue = "";
+    /** 自动保存的防抖计时器 */
+    draftSaveTimer = null;
     /** 已选标签（内部键） */
     chosenTags = new Set();
     /** 标签面板当前页（TAG_PAGES 的 key；换种类后归零，由面板退回第一页） */
@@ -146,6 +150,7 @@ shadow.innerHTML=`
                     if (output) output.textContent = "";
                 }
                 this.triggerEvent("tabTitleChange");
+                this.scheduleDraftSave();
             });
             //源码框内的按键增强（Tab 缩进、Enter 缩进、复制/删除行），详见 handleSourceKeydown
             this.sourceArea.addEventListener("keydown", e => this.handleSourceKeydown(e));
@@ -163,6 +168,8 @@ shadow.innerHTML=`
         if (tagClear) tagClear.addEventListener("pointerup", () => this.clearTags());
         //技能种类：一排按钮（形态照旧版编辑器的「技能种类」，不用下拉框）
         this.renderKindBar();
+        //草稿：视图在挂载前设好 draft-key，这里按它回填源码
+        this.loadDraft();
         //标签面板按源码回填（模板/草稿里已有的标签槽一眼可见）
         this.syncTagsFromSource();
     }
@@ -244,12 +251,12 @@ shadow.innerHTML=`
             run(_status, lib, game, ui, get, ai);
             const skill = lib.skill[id];
             if (!skill) throw new Error("注册后 lib.skill 里仍然没有这个技能");
-            setSkillRecord(this, id, {
+            this.writeDraft({
+                id,
                 source: this.sourceArea ? this.sourceArea.value : "",
                 code: this.generatedCode,
                 name: skill.translation || lib.translate[id] || "",
-                description: skill.description || lib.translate[id + "_info"] || "",
-                workspace: this.configQuery("get", { member: "x19D6_editor.settings.workspace" }) || ""
+                description: skill.description || lib.translate[id + "_info"] || ""
             });
             this.setDiagnostics(`<span class="ok">已生成并在本局生效 ✓（技能 id：${this.escape(id)}；武将编辑器的技能列表里就能选到它，保存武将时会一起落盘）</span>`);
         } catch (err) {
@@ -565,8 +572,86 @@ shadow.innerHTML=`
     /** 组件被移除时把齿轮小面板一起收掉（它是挂在 shadowRoot 上的 fixed 节点） */
     disconnectedCallback() {
         this.closeSpecialPopup();
+        //关掉编辑器前把还没落盘的源码存掉（400ms 防抖可能还没到点）
+        if (this.draftSaveTimer) {
+            clearTimeout(this.draftSaveTimer);
+            this.draftSaveTimer = null;
+            this.saveDraft();
+        }
     }
-    /** 设置里的模板语言（默认中文；认不出源码语言时用它） */
+    /** 草稿编号：视图挂载前用 draft-key 属性传进来（与武将编辑器同一套） */
+    get draftKey() {
+        return this.draftKeyValue || this.getAttribute("draft-key") || "";
+    }
+    set draftKey(value) {
+        this.draftKeyValue = value || "";
+        if (value) this.setAttribute("draft-key", value);
+        else this.removeAttribute("draft-key");
+    }
+    /** 当前工作区（草稿归属） */
+    workspaceName() {
+        return this.configQuery("get", { member: "x19D6_editor.settings.workspace" }) || "";
+    }
+    /** 按 draft-key 载入草稿源码（挂载时调用；没有草稿就保持示例源码） */
+    loadDraft() {
+        const key = this.getAttribute("draft-key") || "";
+        if (!key) return false;
+        const record = getSkillDraft(this, key);
+        if (!record) return false;
+        this.draftKeyValue = key;
+        if (this.sourceArea && record.source) {
+            this.sourceArea.value = record.source;
+            this.sourceTouched = true;
+            this.lastTemplateText = "";
+        }
+        this.syncTagsFromSource();
+        this.triggerEvent("tabTitleChange");
+        return true;
+    }
+    /**
+     * 源码变动后 400ms 防抖存草稿（与武将编辑器的自动保存同一条节奏）。
+     * 空草稿（没源码、没 id、没名字）不落库。
+     */
+    scheduleDraftSave() {
+        if (this.draftSaveTimer) clearTimeout(this.draftSaveTimer);
+        this.draftSaveTimer = setTimeout(() => {
+            this.draftSaveTimer = null;
+            this.saveDraft();
+        }, 400);
+    }
+    /** 存草稿：把编号/源码/产物写进技能库；返回草稿编号（没落库时返回 ""） */
+    saveDraft() {
+        const source = this.sourceArea ? this.sourceArea.value : "";
+        const id = this.currentSkillId();
+        const patch = { source };
+        if (id) patch.id = id;
+        if (this.generatedCode) patch.code = this.generatedCode;
+        if (!this.draftKey && !source.trim() && !id) return "";
+        const saved = this.writeDraft(patch);
+        return saved ? saved.draftKey : "";
+    }
+    /**
+     * 把补丁写进当前草稿（还没有编号就新建一份并记下编号）。
+     * 「生成」也走这里：id / 名称 / 描述 / 产物一次写全，侧栏列表立刻能看到。
+     * @param {object} patch
+     * @returns {{draftKey: string, record: object}|null}
+     */
+    writeDraft(patch) {
+        const filled = { ...patch, workspace: this.workspaceName() };
+        const saved = this.draftKey
+            ? saveSkillDraft(this, this.draftKey, filled)
+            : createSkillDraft(this, filled);
+        if (saved) this.draftKey = saved.draftKey;
+        //外壳据此刷新侧栏列表 + 防抖落盘
+        this.triggerEvent("draftSaved");
+        return saved;
+    }
+    /** 工作区换了：把草稿归属写到新工作区（与武将编辑器一致） */
+    syncWorkspace() {
+        if (!this.draftKey) return;
+        saveSkillDraft(this, this.draftKey, { workspace: this.workspaceName() });
+    }
+    /** 设置里的模板语言（默认中文；认不出源码语言时用它） */    /** 设置里的模板语言（默认中文；认不出源码语言时用它） */
     templateLang() {
         const saved = this.configQuery("get", { member: "x19D6_editor.settings.templateLang" });
         return saved === "en" ? "en" : DEFAULT_TEMPLATE_LANG;
@@ -1013,6 +1098,8 @@ shadow.innerHTML=`
         this.sourceSkillId = skillId || fromSource || "";
         this.syncTagsFromSource();
         this.triggerEvent("tabTitleChange");
+        //AI 区域塞进来的源码同样进草稿库（防抖 400ms）
+        this.scheduleDraftSave();
         return this;
     }
 }

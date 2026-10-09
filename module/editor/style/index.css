@@ -537,7 +537,7 @@ body.xy-ED-col-resizing * {
     box-sizing: border-box;
 }
 
-.xy-ED-sideBar-character .xy-ED-nocharacterCard {
+:is(.xy-ED-sideBar-character, .xy-ED-sideBar-skill) .xy-ED-nocharacterCard {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -546,21 +546,21 @@ body.xy-ED-col-resizing * {
     height: 100%;
 }
 
-.xy-ED-sideBar-character .xy-ED-characte-show {
+:is(.xy-ED-sideBar-character, .xy-ED-sideBar-skill) .xy-ED-characte-show {
     display: flex;
     flex-direction: column;
     height: 100%;
     overflow: hidden;
 }
 
-.xy-ED-sideBar-character .xy-ED-characte-show>header {
+:is(.xy-ED-sideBar-character, .xy-ED-sideBar-skill) .xy-ED-characte-show>header {
     font-size: 0.85em;
     opacity: 0.85;
     margin-bottom: 6px;
     flex: 0 0 auto;
 }
 
-.xy-ED-sideBar-character .xy-ED-characte-show>ul {
+:is(.xy-ED-sideBar-character, .xy-ED-sideBar-skill) .xy-ED-characte-show>ul {
     flex: 1;
     overflow: auto;
     margin: 0;
@@ -568,7 +568,29 @@ body.xy-ED-col-resizing * {
 }
 
 /* 卡片由 <character-info-card> 自带样式，这里只控制容器间距 */
-.xy-ED-sideBar-character .xy-ED-characte-show>ul>character-info-card {
+:is(.xy-ED-sideBar-character, .xy-ED-sideBar-skill) .xy-ED-characte-show>ul>character-info-card {
+    display: block;
+    margin-bottom: 6px;
+}
+
+/* 技能侧栏：容器内边距与卡片间距（卡片由 <skill-info-card> 自带样式） */
+.xy-ED-sideBar-skill {
+    padding: 6px;
+    box-sizing: border-box;
+}
+
+.xy-ED-sideBar-skill .xy-ED-characte-show>ul>skill-info-card {
+    display: block;
+    margin-bottom: 6px;
+}
+
+/* 技能侧栏：容器内边距与卡片间距（卡片由 <skill-info-card> 自带样式） */
+.xy-ED-sideBar-skill {
+    padding: 6px;
+    box-sizing: border-box;
+}
+
+.xy-ED-sideBar-skill .xy-ED-characte-show>ul>skill-info-card {
     display: block;
     margin-bottom: 6px;
 }
@@ -621,14 +643,14 @@ body.xy-ED-col-resizing * {
 }
 
 /* 武将页头的计数、新建与刷新键 */
-.xy-ED-sideBar-character .xy-ED-characte-show>header {
+:is(.xy-ED-sideBar-character, .xy-ED-sideBar-skill) .xy-ED-characte-show>header {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 6px;
 }
 
-.xy-ED-sideBar-character .xy-ED-characte-count {
+:is(.xy-ED-sideBar-character, .xy-ED-sideBar-skill) .xy-ED-characte-count {
     flex: 1 1 auto;
     opacity: 0.85;
     font-size: 0.85em;
@@ -638,8 +660,8 @@ body.xy-ED-col-resizing * {
 }
 
 /* 列表非空时空态卡是隐藏的，所以页头常驻一个创建入口；两个键都放大（原先太小点不准） */
-.xy-ED-sideBar-character .xy-ED-refresh-button,
-.xy-ED-sideBar-character .xy-ED-create-button {
+:is(.xy-ED-sideBar-character, .xy-ED-sideBar-skill) .xy-ED-refresh-button,
+:is(.xy-ED-sideBar-character, .xy-ED-sideBar-skill) .xy-ED-create-button {
     flex: 0 0 auto;
     padding: 3px 10px;
     border-radius: 4px;
@@ -651,16 +673,16 @@ body.xy-ED-col-resizing * {
     white-space: nowrap;
 }
 
-.xy-ED-sideBar-character .xy-ED-create-button {
+:is(.xy-ED-sideBar-character, .xy-ED-sideBar-skill) .xy-ED-create-button {
     background: #cfe3c2;
     font-weight: 600;
 }
 
-.xy-ED-sideBar-character .xy-ED-refresh-button:hover {
+:is(.xy-ED-sideBar-character, .xy-ED-sideBar-skill) .xy-ED-refresh-button:hover {
     background: #f3e6c9;
 }
 
-.xy-ED-sideBar-character .xy-ED-create-button:hover {
+:is(.xy-ED-sideBar-character, .xy-ED-sideBar-skill) .xy-ED-create-button:hover {
     background: #e2f0d6;
 }
 

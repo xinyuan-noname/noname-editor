@@ -18,7 +18,16 @@
             <hr>
             <div class="xy-ED-sideBar-content">
                 <div class="xy-ED-sideBar-setting" data-by="setting"><setting-panel></setting-panel></div>
-                <div class="xy-ED-sideBar-skill" data-by="skill"></div>
+                <div class="xy-ED-sideBar-skill" data-by="skill">
+                    <div class="xy-ED-nocharacterCard">
+                        <div>暂未创建过技能!</div>
+                        <button>点击创建</button>
+                    </div>
+                    <div class="xy-ED-characte-show">
+                        <header><span class="xy-ED-characte-count"></span><span class="xy-ED-create-button" title="新建一个技能（按「技能编辑器版本」偏好分流）">＋ 新建技能</span><span class="xy-ED-refresh-button" title="刷新已保存技能列表">⟳ 刷新</span></header>
+                        <ul></ul>
+                    </div>
+                </div>
                 <div class="xy-ED-sideBar-character" data-by="character">
                     <div class="xy-ED-characterFilter">
                         <label class="xy-ED-filter-row"><span>武将包</span><select data-character-filter="packageId"></select><button class="xy-ED-filter-add" type="button" data-character-add="packageId" title="在本扩展下新建武将包">＋</button></label>
