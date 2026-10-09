@@ -3,7 +3,8 @@
 //
 //   import "./host/index.shya"        // 声明 + 全部 @skill_* 宏
 //
-// 只想要宏（编辑器默认会自动注入这一条）：import "./host/skill-type.shya"
+// 只想要类型宏（编辑器默认会自动注入这一条）：import "./host/skill-type.shya"
+// 只想要内容宏（摸/伤/判定/询问…）：import "./host/skill-content.shya"
 // 只想要类型声明（自己写宏/函数时）：import "./host/player.shya" 等单个文件。
 // ═══════════════════════════════════════════════════════════════════════════
 import "./player.shya"
@@ -11,3 +12,4 @@ import "./card.shya"
 import "./event.shya"
 import "./game.shya"
 import "./skill-type.shya"
+import "./skill-content.shya"

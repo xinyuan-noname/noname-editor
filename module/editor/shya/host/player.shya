@@ -26,6 +26,7 @@ declare Player {
   sex: string
   group: string
   identity: string
+  isZhu: boolean
   playerid: string
   hp: number
   maxHp: number
@@ -90,35 +91,64 @@ declare Player {
   canRespond(event: any = void, card: any = void, type: any = void): boolean
 
   // ── 动作（返回可 await 的事件）──
-  draw(params: any = void): void
-  recover(params: any = void): void
-  loseHp(num: number = 1): void
-  damage(params: any = void): void
+  // ⚠️ 这些方法的实参是**变长**的：引擎里都是 `const args = [...arguments]` 后按类型分派
+  //    （player.js:7613 draw / 8615 damage / 8729 recover / 8268 gain / 7792 discard /
+  //     7386 useCard / 7988 respond / 9482 judge）。声明成定长（`params: any = void`）会让
+  //    `player.draw(2, "nodelay")`、`player.gain(cards, "gain2")` 这类**合法**写法误报 TC006
+  //    ——报的是 error 不是 warning，所以多形态方法一律写 `...args`。
+  draw(...args: any[]): void
+  recover(...args: any[]): void
+  loseHp(num: any = 1): void
+  damage(...args: any[]): void
   die(reason: any = void): void
   dying(reason: any = void): void
   changeHp(num: number, popup: boolean = false): void
-  discard(params: any = void): void
-  gain(params: any = void): void
-  lose(params: any = void): void
+  discard(...args: any[]): void
+  gain(...args: any[]): void
+  lose(...args: any[]): void
   equip(card: Card, draw: boolean = false): void
-  useCard(params: any = void): void
-  respond(params: any = void): void
-  judge(params: any = void): void
+  useCard(...args: any[]): void
+  respond(...args: any[]): void
+  judge(...args: any[]): void
   turnOver(bool: boolean = true): void
   link(bool: boolean = true): void
   skip(name: string): void
 
-  // ── 交互（参数形态多，一律 any）──
-  chooseToUse(params: any = void): void
-  chooseToRespond(params: any = void): void
-  chooseToDiscard(params: any = void): void
-  chooseCard(params: any = void): void
-  chooseTarget(params: any = void): void
+  // ── 交互（参数形态多，一律变长 any；证据：player.js:5634 chooseToUse / 5698 chooseToRespond /
+  //    5858 chooseToDiscard / 6343 chooseCard / 6501 chooseTarget / 6716 chooseBool /
+  //    6676 chooseControl / 6110 chooseCardButton / 6557 chooseCardTarget /
+  //    6934 discardPlayerCard / 7017 gainPlayerCard）──
+  chooseToUse(...args: any[]): void
+  chooseToRespond(...args: any[]): void
+  chooseToDiscard(...args: any[]): void
+  chooseCard(...args: any[]): void
+  chooseTarget(...args: any[]): void
+  chooseBool(...args: any[]): void
+  chooseControl(...args: any[]): void
+  chooseCardButton(...args: any[]): void
+  chooseCardTarget(...args: any[]): void
+  chooseToGuanxing(...args: any[]): void
+  discardPlayerCard(...args: any[]): void
+  gainPlayerCard(...args: any[]): void
+
+  // ── 牌区搬运 / 查询（证据：player.js:8505 give、7947 loseToDiscardpile、
+  //    8389 addToExpansion、8253 gainMultiple、10049 getExpansions、5370 countGainableCards）──
+  give(...args: any[]): void
+  loseToDiscardpile(...args: any[]): void
+  addToExpansion(...args: any[]): void
+  gainMultiple(...args: any[]): void
+  getExpansions(...args: any[]): array<Card>
+  countGainableCards(...args: any[]): number
+
+  // ── 体力上限（证据：player.js:8841 loseMaxHp、8866 gainMaxHp）──
+  loseMaxHp(...args: any[]): void
+  gainMaxHp(...args: any[]): void
 
   // ── 技能 / 标记 ──
   getSkills(skillMode: any = void, includeEquipSkills: any = void, applySkillFilter: any = void): array<string>
   addSkill(skill: string, checkConflict: boolean = false): void
   addTempSkill(skill: string, expire: string, checkConflict: boolean = false): void
+  addSkills(...args: any[]): void
   addAdditionalSkill(skill: string, skillsToAdd: string, keep: boolean = false): void
   removeSkill(skill: string): void
   awakenSkill(skill: string, nounmark: boolean = false): void
@@ -132,4 +162,11 @@ declare Player {
   getStorage(name: string, defaultValue: any = void): any
   getNext(): Player
   getPrevious(): Player
+
+  // ── 指示线 / 常用查询（证据：player.js:4824 line、13325 hasZhuSkill、13503 hasSha、
+  //    13238 needsToDiscard）──
+  line(...args: any[]): void
+  hasZhuSkill(...args: any[]): boolean
+  hasSha(...args: any[]): boolean
+  needsToDiscard(...args: any[]): boolean
 }

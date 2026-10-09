@@ -7,6 +7,20 @@
 // **事件流程动态赋值**的，这里声明只用于类型检查，不产出任何代码。
 // 刻意不声明：event.trigger（不存在，用 getTrigger()）、event.forResult()、
 // event.getg()/getd()（动态挂载，声明会误导）。
+//
+// 补声明的一批（都是标准包 content/cost 里真实用到的，缺了就是一片 TC014 警告）：
+//   trigger.num / numFixed       摸牌数（英姿/裸衣 filter、罗衣2 content）
+//   trigger.baseDamage           +伤害基数（救援/忠义2）
+//   trigger.cancel()             取消事件（克己/激将）
+//   trigger.changeToZero()       数值归零（突袭）
+//   trigger.triggeredTargets2    被取消的目标集合（同疾/流离 转移目标）
+//   trigger.directHit            不可闪避集合（铁骑 add/includes）
+//   event.cost_data              技能 cost 塞进结果的代价数据（骁果/同疾）
+//   event.judgeResult            判定回调里的判定结果（洛神/鬼才）
+//   event.current / responded    逐座询问的游标与应答标记（护驾/激将）
+//   event.orderingCards          判定牌排序区（鬼才/洛神回调）
+//   event.notLink()              伤害是否「不触发连环」（罗衣2）
+//   event.getl(player)           某角色本事件里失去的牌（连营/枭姬）
 // ═══════════════════════════════════════════════════════════════════════════
 declare GameEvent {
   name: string
@@ -17,15 +31,29 @@ declare GameEvent {
   card: Card
   cards: array<Card>
   num: number
+  numFixed: boolean
+  baseDamage: number
+  bool: boolean
   result: any
   skill: string
   position: string
   type: string
   custom: any
   reason: any
+  cost_data: any
+  judgeResult: any
+  current: Player
+  responded: boolean
+  triggeredTargets2: any
+  directHit: any
+  orderingCards: array<Card>
 
   getParent(level: number = 1, forced: boolean = false, includeSelf: boolean = false): GameEvent
   getTrigger(): GameEvent
   set(key: string, value: any): GameEvent
   setContent(content: any): void
+  cancel(): void
+  changeToZero(): void
+  notLink(): boolean
+  getl(player: Player): any
 }

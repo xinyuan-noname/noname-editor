@@ -19,10 +19,18 @@ import {
 import { SKILL_KINDS, getSkillKind } from "./shya/skillTemplates.mjs";
 
 /** 技能类型宏库的 import：编译前自动注入，不写进文本框（见 prepareSource） */
-const HOST_IMPORT = 'import "./host/skill-type.shya"';
+const HOST_IMPORT_TYPE = 'import "./host/skill-type.shya"';
+/** 技能内容宏库（摸/伤/回/判定/询问…，host/skill-content.shya）的 import：同上 */
+const HOST_IMPORT_CONTENT = 'import "./host/skill-content.shya"';
+/** [注入文本, 调用点是否已手写] —— 写过的那个不重复注入，诊断行号按实际注入行数回退 */
+const HOST_IMPORTS = [
+    [HOST_IMPORT_TYPE, /^\s*import\s+["'][^"']*host\/skill-type\.shya["']/m],
+    [HOST_IMPORT_CONTENT, /^\s*import\s+["'][^"']*host\/skill-content\.shya["']/m]
+];
 const EXAMPLE_SOURCE = [
     "// 示例：给「你」写一个结束阶段回血的触发技",
-    "// @skill_* 宏来自 shya/host/skill-type.shya —— 编辑器编译前会自动注入它的 import，不用手写",
+    "// @skill_* 宏来自 shya/host/skill-type.shya；@draw/@recover/@judge_color 等内容宏来自 shya/host/skill-content.shya",
+    "// 两个宏库的 import 编辑器都会自动注入（诊断行号已按注入行数回退），不用手写",
     "// 下面这行只导入宿主声明（Player / Card / GameEvent 的成员签名），可省略",
     'import "./host/index.shya"',
     "",
@@ -34,7 +42,10 @@ const EXAMPLE_SOURCE = [
     "  #filter:",
     "    return player hp < player maxHp",
     "  #content:",
-    "    player recover(1)",
+    "    @recover {",
+    "      #who: player",
+    "      #num: 1",
+    "    }",
     "}",
     ""
 ].join("\n");
@@ -702,14 +713,16 @@ shadow.innerHTML=`
         }
     }
     /**
-     * 编译前注入宿主宏库的 import（HOST_IMPORT 不进文本框，行号按注入行数回退）。
-     * 用户源码里已经手写了同一个 import 时不重复注入。
+     * 编译前注入宿主宏库的 import（类型宏库 + 内容宏库，都按需注入、不进文本框；
+     * 诊断行号按实际注入行数回退）。
+     * 用户源码里已经手写了同一个 import 时不重复注入（两个宏库各自判断）。
      * @param {string} source 用户源码
      * @returns {{ source: string, injected: number }} 注入后的源码与注入行数
      */
     prepareSource(source) {
-        if (/^\s*import\s+["'][^"']*host\/skill-type\.shya["']/m.test(source)) return { source, injected: 0 };
-        return { source: HOST_IMPORT + "\n" + source, injected: 1 };
+        const missing = HOST_IMPORTS.filter(([, pattern]) => !pattern.test(source)).map(([text]) => text);
+        if (!missing.length) return { source, injected: 0 };
+        return { source: missing.join("\n") + "\n" + source, injected: missing.length };
     }
     /**
      * 外部塞一份源码进来（AI 区域「打开技能编辑器」用）。
