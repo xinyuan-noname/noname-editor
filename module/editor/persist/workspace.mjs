@@ -7,6 +7,9 @@
 import { buildCharacterPackageFile } from "./packageFile.mjs";
 import { getCoreSkills } from "./skills.mjs";
 
+/** 正则转义：包 id 里可能有 `.` 之类的字符（入口 import 归并时按 id 精确匹配） */
+const escapeRegExp = text => String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /**
  * 某包里、且确实有 id 的草稿
  * @param {object} records
@@ -129,24 +132,32 @@ async function writeSkillSources({ data, skillSourcePath, skillSources, onWarn }
 
 /**
  * 维护扩展入口里的 import 区块（只有几行，替代老版本那一大段 lib 注入）。
- * 入口不是 ESM（老式 game.import）时就不写 import——那种包要用
- * `lib.init.js("extension/<工作区>/character", "<包id>")` 引入。
+ *
+ * ⚠️ **两种入口都要写 import**（不能只给 ESM 入口写）：引擎加载扩展入口一律走
+ * `await import("/extension/<名>/extension.js")`（`noname/init/import.js:23`）——**是 ES 模块语义**，
+ * 所以 `game.import("extension", …)` 形态的入口里写 `import "./character/x.js"` 完全合法；
+ * 而生成的武将包文件**本身就是 ESM**（顶部 import noname.js），只有被入口 import 才会执行。
+ * 用户 2026-10-10 手写了一行 import 之后武将包才加载出来，就是这条的证据
+ * （老代码按 `isModule` 跳过老式入口，那些包文件等于永远没人引）。
+ *
+ * 顺带把「标记区块之外、指向本次要写的那些包」的散装 import 行归并进区块（同一行不留两份）；
+ * **只归并 packageIds 里的 id** —— 用户手写的其它包文件 import 一个字都不动。
  */
-async function syncEntryImports({ data, entryPath, entry, packageIds, isModule, onWarn }) {
+async function syncEntryImports({ data, entryPath, entry, packageIds, onWarn }) {
     const eol = entry.includes("\r\n") ? "\r\n" : "\n";
     const legacyRx = /\/\/#noname-editor-workspace-begin[\s\S]*?\/\/#noname-editor-workspace-end[^\r\n]*\r?\n?/;
     const regionRx = /\/\/#noname-editor-imports-begin[\s\S]*?\/\/#noname-editor-imports-end[^\r\n]*\r?\n?/;
-    let next = entry.replace(legacyRx, "");
-    if (isModule) {
-        const region = [
-            "//#noname-editor-imports-begin 由《魂氏编辑器》生成：武将包引入（整块覆盖，勿手改）",
-            ...packageIds.map(id => `import "./character/${id}.js";`),
-            "//#noname-editor-imports-end"
-        ].join(eol) + eol;
-        next = regionRx.test(next) ? next.replace(regionRx, region) : region + next;
-    } else if (regionRx.test(next)) {
-        next = next.replace(regionRx, "");
+    let next = entry.replace(legacyRx, "").replace(regionRx, "");
+    for (const id of packageIds) {
+        const strayRx = new RegExp(`^[ \\t]*import[ \\t]+["']\\./character/${escapeRegExp(id)}\\.js["'];?[ \\t]*\\r?\\n?`, "gm");
+        next = next.replace(strayRx, "");
     }
+    const region = [
+        "//#noname-editor-imports-begin 由《魂氏编辑器》生成：武将包引入（整块覆盖，勿手改）",
+        ...packageIds.map(id => `import "./character/${id}.js";`),
+        "//#noname-editor-imports-end"
+    ].join(eol) + eol;
+    next = region + next;
     if (next === entry) return true;
     try {
         await data.writeTextFile(entryPath, next);
@@ -193,7 +204,6 @@ export async function syncWorkspaceFiles(options = {}) {
     }
     if (typeof entry !== "string") return false;
 
-    const isModule = /^\s*(import|export)\s/m.test(entry);
     const translate = libRef.translate || {};
     const coreSkills = await getCoreSkills(data, libRef);
     const packageIds = collectPackageIds(workspace, meta, records);
@@ -228,5 +238,5 @@ export async function syncWorkspaceFiles(options = {}) {
     if (skillSourcePath) {
         await writeSkillSources({ data, skillSourcePath, skillSources, onWarn });
     }
-    return syncEntryImports({ data, entryPath, entry, packageIds, isModule, onWarn });
+    return syncEntryImports({ data, entryPath, entry, packageIds, onWarn });
 }

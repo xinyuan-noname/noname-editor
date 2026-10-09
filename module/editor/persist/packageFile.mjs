@@ -188,6 +188,11 @@ export function buildCharacterPackageFile(options = {}) {
     //③ 自定义势力 / 宗族：游戏 lib.translate 里没有的话界面只会显示原 id
     Object.entries(translateExtra).forEach(([key, value]) => addTranslate(key, value));
 
+    //④ 武将包中文名：引擎按 `<包id>_character_config` 取包名（ui/create/index.js:1586 少了这个键
+    //连整个包都进不了武将包列表），而扩展侧惯例就是直接写这个键——game/index.js:5634/5668 与
+    //3D精选 / 英雄杀 / 玩点论杀 的 precontent 都是这么写的。包名与包 id 相同时也照写，保证键一定存在。
+    addTranslate(`${packageId}_character_config`, packageName || packageId);
+
     const sortLines = Object.entries(sortMembers)
         .map(([sortId, ids]) => `    ${JSON.stringify(sortId)}: [${ids.map(id => JSON.stringify(id)).join(", ")}]`);
     //分包名走另一个对象：与 translates 撞键时让 translates 赢（不同命名空间，撞上属异常）
@@ -195,7 +200,7 @@ export function buildCharacterPackageFile(options = {}) {
         .filter(([sortId]) => !usedTranslateKeys.has(sortId))
         .map(([sortId, sortName]) => memberLine(sortId, sortName));
 
-    //④ 段声明：13 段恒定全出，顺序与 standard.js 一致（空段也是单行 `{}`）
+    //⑤ 段声明：13 段恒定全出，顺序与 standard.js 一致（空段也是单行 `{}`）
     const declarations = [
         declaration("characters", characterLines),
         declaration("cards", []),
@@ -212,7 +217,7 @@ export function buildCharacterPackageFile(options = {}) {
         declaration("characterSortTranslate", sortTranslateLines)
     ];
 
-    //⑤ 返回对象：13 个键，键名与顺序照抄 standard.js
+    //⑥ 返回对象：13 个键，键名与顺序照抄 standard.js
     const returns = [
         `name: ${JSON.stringify(packageId)}`,
         "connect: true",
