@@ -32,15 +32,6 @@
     font-weight: 900;
 }
 
-.skill-id {
-    font: inherit;
-    padding: 2px 6px;
-    border-radius: 4px;
-    border: 1px solid #6b6b6b;
-    flex: 1 1 120px;
-    min-width: 0;
-}
-
 .buttons {
     display: flex;
     gap: 6px;

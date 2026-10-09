@@ -67,8 +67,10 @@ const EXAMPLE_SOURCE = [
 class HTMLNonameShyaEditorElement extends HTMLNonameFocusUIElement {
     /** 编译器（首编译时惰性载入） */
     compiler = null;
-    /** 上一次成功编译出的 JS */
+    /** 上一次成功编译出的 JS（源码一改就清空） */
     generatedCode = "";
+    /** setSource 带进来的技能 id（编译产物出来之前先用它） */
+    sourceSkillId = "";
     /** 已选标签（内部键） */
     chosenTags = new Set();
     /** 标签面板当前页（TAG_PAGES 的 key；换种类后归零，由面板退回第一页） */
@@ -93,7 +95,6 @@ shadow.innerHTML=`
 <section class="main">
     <div class="toolbar">
         <span class="title">shya 技能编辑器</span>
-        <input class="skill-id" type="text" placeholder="技能 id（如 my_skill）" spellcheck="false">
         <span class="buttons">
             <button class="compile" type="button">编译</button>
             <button class="generate" type="button">生成</button>
@@ -141,12 +142,20 @@ shadow.innerHTML=`
         if (this.sourceArea && !this.sourceArea.value) this.sourceArea.value = EXAMPLE_SOURCE;
         if (this.sourceArea) {
             //一动源码就记成「已编辑」：此后插模板只插到光标处，不再整块替换
-            this.sourceArea.addEventListener("input", () => { this.sourceTouched = true; });
+            this.sourceArea.addEventListener("input", () => {
+                this.sourceTouched = true;
+                //源码改过 → 上一次的产物已经过期：清掉，免得「生成」把旧代码注册进 lib.skill。
+                //（id 也从产物取，清了就自动退回源码里的槽）
+                if (this.generatedCode) {
+                    this.generatedCode = "";
+                    const output = this.shadowRoot.querySelector(".output");
+                    if (output) output.textContent = "";
+                }
+                this.triggerEvent("tabTitleChange");
+            });
             //源码框内的按键增强（Tab 缩进、Enter 缩进、复制/删除行），详见 handleSourceKeydown
             this.sourceArea.addEventListener("keydown", e => this.handleSourceKeydown(e));
         }
-        const idInput = q(".skill-id");
-        if (idInput) idInput.addEventListener("input", () => this.triggerEvent("tabTitleChange"));
         q(".compile").addEventListener("pointerup", () => this.compile());
         q(".generate").addEventListener("pointerup", () => this.generate());
         q(".copy").addEventListener("pointerup", () => this.copyCode());
@@ -168,8 +177,7 @@ shadow.innerHTML=`
      * @returns {string}
      */
     getTabTitle() {
-        const input = this.shadowRoot.querySelector(".skill-id");
-        const id = input && input.value ? input.value.trim() : "";
+        const id = this.currentSkillId();
         return id ? `技能：${id}` : "技能：未命名";
     }
     escape(text) {
@@ -563,12 +571,19 @@ shadow.innerHTML=`
     disconnectedCallback() {
         this.closeSpecialPopup();
     }
-    /** 技能 id：优先工具栏输入框，其次源码的 #skill 槽（特殊标签 mainVice-remove1 要写进 init 里） */
+    /**
+     * 技能 id：**以编译产物为准**（产物恒为 `const <id> = { … }`，与模板语言无关），
+     * 编译没过时退回源码里的 `#skill` / `#技能` 槽，再退回 setSource 带进来的 hint。
+     * 输入框已按需求去掉——id 是「从代码里读出来的」，不是填出来的。
+     * @returns {string}
+     */
     currentSkillId() {
-        const input = this.shadowRoot.querySelector(".skill-id");
-        if (input && input.value.trim()) return input.value.trim();
-        const matched = /#skill:\s*([A-Za-z_$][\w$]*)/.exec(this.sourceArea ? this.sourceArea.value : "");
-        return matched ? matched[1] : "";
+        const compiled = /(?:^|[\s;])(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\{/.exec(this.generatedCode || "");
+        if (compiled) return compiled[1];
+        const source = this.sourceArea ? this.sourceArea.value : "";
+        const slot = /#(?:skill|技能)\s*:\s*([A-Za-z_$][\w$]*)/.exec(source);
+        if (slot) return slot[1];
+        return this.sourceSkillId || "";
     }
     /**
      * 把已选标签写进源码：
@@ -727,15 +742,8 @@ shadow.innerHTML=`
             const end = node.selectionEnd ?? start;
             this.replaceRange(start, end, text);
         }
-        //技能 id 输入框空着就顺手填上模板里的 id（只影响标签栏标题）
-        const idInput = this.shadowRoot.querySelector(".skill-id");
-        if (idInput && !idInput.value) {
-            const matched = /#skill:\s*([A-Za-z_$][\w$]*)/.exec(text);
-            if (matched) {
-                idInput.value = matched[1];
-                this.triggerEvent("tabTitleChange");
-            }
-        }
+        //模板一写进去，标题就从源码的 #技能 / #skill 槽里读（不再有 id 输入框）
+        this.triggerEvent("tabTitleChange");
         this.setDiagnostics(`<span class="ok">已写入「${kind.name}」模板：${this.escape(kind.hint || "")}</span>`);
         //换模板后按新源码回填标签面板（模板里本来就有的标签槽会亮起来）
         this.syncTagsFromSource();
@@ -987,11 +995,9 @@ shadow.innerHTML=`
             if (output) output.textContent = "";
             this.setDiagnostics('<span class="warn">已从 AI 区域载入源码：点「编译」检查，再点「生成」在局内生效</span>');
         }
-        const id = skillId || (/^\s*#skill:\s*([A-Za-z_$][\w$]*)/m.exec(String(code || "")) || [])[1] || "";
-        if (id) {
-            const input = this.shadowRoot.querySelector(".skill-id");
-            if (input) input.value = id;
-        }
+        //id 现在由「编译产物」决定，这里只留一个 hint（还没编译时给标题与生成用）
+        const fromSource = (/#(?:skill|技能)\s*:\s*([A-Za-z_$][\w$]*)/.exec(String(code || "")) || [])[1] || "";
+        this.sourceSkillId = skillId || fromSource || "";
         this.syncTagsFromSource();
         this.triggerEvent("tabTitleChange");
         return this;
