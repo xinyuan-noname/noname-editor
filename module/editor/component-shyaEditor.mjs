@@ -646,7 +646,7 @@ shadow.innerHTML=`
             button.className = "kind-button";
             button.dataset.kind = kind.key;
             button.textContent = kind.name;
-            button.title = `${kind.name}：${kind.hint || ""}\n点击即把该类模板写进源码（源码还是初始示例时整块替换，否则插到光标处）`;
+            button.title = `${kind.name}：${kind.hint || ""}\n点击即把该类模板写进源码（源码还是初始示例时整块替换，否则插到光标处）；换种类会清空标签勾选与 //#tags-begin…end 托管区`;
             if (this.currentKind === kind.key) button.classList.add("chosen");
             button.addEventListener("pointerup", () => this.chooseKind(kind.key));
             root.appendChild(button);
