@@ -739,7 +739,7 @@ mainPage.innerHTML=`
      * @param {boolean} isModule 扩展入口是不是 ESM（决定写不写 import 行、以及 game.import 回调的参数）
      * @returns {string}
      */
-    buildPackageFileContent(packageId, meta, records, isModule) {
+    buildPackageFileContent(packageId, meta, records) {
         const packageName = ((meta && meta.packages) || {})[packageId] || packageId;
         const sortNames = ((meta && meta.sorts) || {})[packageId] || {};
         const characterLines = [];
@@ -779,26 +779,6 @@ mainPage.innerHTML=`
                 sortMembers[record.characterSort].push(record.id);
             }
         });
-        //自定义势力 / 宗族要补 translate：游戏 lib.translate 里没有的话，界面只会显示原 id
-        //势力还必须是 lib.group 的成员（新将包 character/XJB/index.mjs 就是这么做的），否则游戏不认这个势力
-        const groupNames = this.serveFor.data.getConfig("x19D6_editor.groups") || {};
-        const groupRegisterLines = [];
-        Object.values(records || {}).forEach(record => {
-            if (!record || !record.id) return;
-            if ((record.packageId || "") !== packageId) return;
-            const groups = [record.group, ...(Array.isArray(record.doubleGroup) ? record.doubleGroup : [])].filter(Boolean);
-            groups.forEach(groupId => {
-                if (!Array.isArray(lib.group) || !lib.group.includes(groupId)) {
-                    groupRegisterLines.push(`    if (lib.group && !lib.group.includes(${JSON.stringify(groupId)})) lib.group.push(${JSON.stringify(groupId)});`);
-                }
-                if (lib.translate[groupId]) return;
-                translateLines.push(`    ${JSON.stringify(groupId)}: ${JSON.stringify(groupNames[groupId] || groupId)}`);
-            });
-            (Array.isArray(record.clans) ? record.clans : []).forEach(clan => {
-                if (!clan || lib.translate[clan]) return;
-                translateLines.push(`    ${JSON.stringify(clan)}: ${JSON.stringify(clan)}`);
-            });
-        });
         const sortLines = Object.entries(sortMembers).map(([sortId, ids]) => `    ${JSON.stringify(sortId)}: [${ids.map(id => JSON.stringify(id)).join(", ")}]`);
         const sortTranslateLines = Object.entries(sortNames).map(([sortId, sortName]) => `    ${JSON.stringify(sortId)}: ${JSON.stringify(sortName)}`);
         const eol = "\n";
@@ -817,24 +797,44 @@ mainPage.innerHTML=`
         ];
         if (introLines.length) returns.push("        characterIntro: { ...characterIntro }");
         if (pinyinLines.length) returns.push("        pinyins: { ...pinyins }");
-        const callbackParams = isModule ? "() " : "(lib, game, ui, get, ai, _status) ";
-        const indent = text => text.split("\n").map(line => (line ? "    " + line : line)).join("\n");
         const importStatement = 'import { lib, game, ui, get, ai, _status } from "../../../noname.js";';
-        const groupRegisterBlock = groupRegisterLines.length
-            ? `//自定义势力：注册进 lib.group\n${groupRegisterLines.join("\n")}`
-            : "";
         const declarations = [];
-        if (groupRegisterLines.length) declarations.push(groupRegisterBlock);
         declarations.push(charactersBlock, sortBlock, translatesBlock, sortTranslateBlock);
         if (introLines.length) declarations.push(introBlock);
         if (pinyinLines.length) declarations.push(pinyinBlock);
-        const importStatementBlock = `game.import("character", function ${callbackParams}{\n    return {\n${returns.join(",\n")}\n    };\n});`;
-        const blocks = [];
-        //经典（script）形态下同一扩展的多个包文件共享顶层作用域，const 会重名 → 包一层 IIFE
-        if (isModule) blocks.push(importStatement, ...declarations, importStatementBlock);
-        else blocks.push(";(function () {", ...declarations.map(text => indent(text)), indent(importStatementBlock), "})();");
+        const importFuncStmt = [];
+        //自定义势力 / 宗族要补 translate：游戏 lib.translate 里没有的话，界面只会显示原 id
+        //势力还必须是 lib.group 的成员（新将包 character/XJB/index.mjs 就是这么做的），否则游戏不认这个势力
+        const groupNames = this.serveFor.data.getConfig("x19D6_editor.groups") || {};
+        const groupRegisterLines = [];
+        Object.values(records || {}).forEach(record => {
+            if (!record || !record.id) return;
+            if ((record.packageId || "") !== packageId) return;
+            const groups = [record.group, ...(Array.isArray(record.doubleGroup) ? record.doubleGroup : [])].filter(Boolean);
+            groups.forEach(groupId => {
+                if (!Array.isArray(lib.group) || !lib.group.includes(groupId)) {
+                    groupRegisterLines.push(`    lib.group.push(${JSON.stringify(groupId)});`);
+                }
+                if (lib.translate[groupId]) return;
+                translateLines.push(`    ${JSON.stringify(groupId)}: ${JSON.stringify(groupNames[groupId] || groupId)}`);
+            });
+            (Array.isArray(record.clans) ? record.clans : []).forEach(clan => {
+                if (!clan || lib.translate[clan]) return;
+                translateLines.push(`    ${JSON.stringify(clan)}: ${JSON.stringify(clan)}`);
+            });
+        });
+        if (groupRegisterLines.length) importFuncStmt.push(groupRegisterLines.join(eol));
+
+        const importStatementBlock = [
+            `game.import("character", ()=>{`,
+            `   ${importFuncStmt.join(`;${eol}`)}`,
+            `   return {`,
+            returns.join(`,${eol}`),
+            `   };`,
+            `});`
+        ].join(eol);
         const header = `//本文件由《魂氏编辑器》生成：武将包「${packageName}」（整文件覆盖，勿手改）`;
-        return [header].concat(blocks).join(eol + eol) + eol;
+        return [header, importStatement, ...declarations, importStatementBlock].join(eol + eol) + eol;
     }
     /**
      * 把登记表同步进 live lib（幂等）。扩展入口里的落盘区块同理，这里只是让本会话立刻一致。

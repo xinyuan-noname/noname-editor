@@ -383,7 +383,7 @@ shadow.innerHTML=`
     <div class="menu-icon">🔧</div>
     <div class="gen-code">生成代码</div>
     <div class="return-setting">返回设置</div>
-    <div class="gen-card" title="一键转化为武将卡"></div>
+    <div class="gen-card" title="一键转化为武将卡">生成卡牌</div>
 </section>`
 //#: shadow , html/character-editor.html//
         this.storeFragment("code", "<section class='code-section'><div class='title'><span class='copy'>复制</span></div><pre><code></code></pre></section>");
