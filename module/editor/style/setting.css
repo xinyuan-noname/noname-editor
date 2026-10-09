@@ -104,3 +104,29 @@ input[type="text"] {
     padding: 2px 7px;
     line-height: 1.2;
 }
+
+/* 「版本与更新」段的更新状态行（tone 由 checker.mjs 的 stateLabel 给：ok/new/warn/muted/error） */
+.update-state {
+    text-align: right;
+}
+
+.update-state-ok {
+    color: #b6e39a;
+}
+
+.update-state-new {
+    color: #ffd479;
+    font-weight: 900;
+}
+
+.update-state-warn {
+    color: #ffbf80;
+}
+
+.update-state-error {
+    color: #ff9c9c;
+}
+
+.update-state-muted {
+    opacity: 0.85;
+}

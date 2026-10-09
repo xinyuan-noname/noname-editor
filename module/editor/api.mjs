@@ -1,6 +1,7 @@
 import { lib, game, ui, get, ai, _status } from "../../../../noname.js";
 import loadEditor from "./index.mjs";
 import url from "./url.mjs";
+import { autoCheckOnOpen } from "./update/panel.mjs";
 
 
 /**
@@ -71,7 +72,21 @@ function ensureMounted(parent) {
     } else if (page.parentNode !== target) {
         target.appendChild(page);
     }
+    scheduleUpdateCheck(instance);
     return instance;
+}
+
+/**
+ * 打开编辑器时自动检查更新（顺序：先挂版本徽标 → 静默检查 → 有新版本提示一次）。
+ * 同一游戏会话内 60 秒只真查一次；失败只写控制台，绝不打扰使用。
+ * @param {import("./nonameEditor.mjs").NonameEditor} instance
+ */
+function scheduleUpdateCheck(instance) {
+    try {
+        Promise.resolve(autoCheckOnOpen(instance.view)).catch(err => console.warn("[魂氏编辑器] 自动检查更新失败", err));
+    } catch (err) {
+        console.warn("[魂氏编辑器] 自动检查更新失败", err);
+    }
 }
 
 function closeEditor() {

@@ -743,6 +743,46 @@ body.xy-ED-col-resizing * {
     cursor: pointer;
 }
 
+/* 标题栏版本徽标（由 module/editor/update/panel.mjs 运行时插入） */
+.xy-ED-operationPage>header .xy-ED-title-version {
+    margin-left: 6px;
+    font-size: 12px;
+    font-weight: 400;
+    opacity: 0.75;
+    white-space: nowrap;
+}
+
+/* 有新版本：加深 + 一个红点 */
+.xy-ED-operationPage>header .xy-ED-title-version-new {
+    color: #a32222;
+    opacity: 1;
+    font-weight: 900;
+}
+
+.xy-ED-operationPage>header .xy-ED-title-version-new::after {
+    content: "●";
+    margin-left: 4px;
+    font-size: 10px;
+}
+
+/* 已是最新（默认态）：与标题同色、略压暗，不抢标题 */
+.xy-ED-operationPage>header .xy-ED-title-version-ok {
+    opacity: 0.7;
+}
+
+.xy-ED-operationPage>header .xy-ED-title-version-muted {
+    opacity: 0.55;
+}
+
+/* 本地领先 / 分叉 与 检查失败 */
+.xy-ED-operationPage>header .xy-ED-title-version-warn {
+    color: #6b4b00;
+}
+
+.xy-ED-operationPage>header .xy-ED-title-version-error {
+    color: #8c1f1f;
+}
+
 /* AI 导航项（字形，与「技」同款，无需额外图片资源） */
 .xy-ED-viewArea>.xy-ED-sideBar>nav>.xy-ED-nav-ai::before {
     content: "AI";

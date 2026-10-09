@@ -2,6 +2,24 @@
 import { HTMLNonameFocusUIElement } from "./component-base.mjs";
 import url from "./url.mjs";
 import "./component-dialog.mjs";
+import {
+    AUTO_MIRROR,
+    UPDATE_STATE,
+    chooseAndInstallVersion,
+    describeLocal,
+    describeProgress,
+    formatTimestamp,
+    githubUrl,
+    installUpdate,
+    mirrorOptions,
+    readCache,
+    readLocal,
+    readUpdateConfig,
+    reportInstall,
+    runCheck,
+    stateLabel,
+    writeUpdateConfig
+} from "./update/panel.mjs";
 /**
  * 基本设置面板（侧边栏「设置」页）。
  * 所有设置项都写入 lib.config.x19D6_editor.settings.*，随引擎配置一起落到 IndexedDB。
@@ -135,6 +153,17 @@ shadow.innerHTML=`
         <div class="row"><button id="resetRatio">重置侧栏宽度</button><button id="resetNav">重置导航顺序</button></div>
     </section>
     <section>
+        <h3>版本与更新</h3>
+        <div class="row"><span>当前版本</span><span class="muted" id="versionLocal">读取中…</span></div>
+        <div class="row"><span>远端版本</span><span class="muted" id="versionRemote">尚未检查</span></div>
+        <div class="row"><span>更新状态</span><span class="muted update-state" id="versionState">尚未检查</span></div>
+        <label class="row"><span>镜像源</span><select id="updateMirror"></select></label>
+        <label class="row"><span>打开编辑器时自动检查</span><input type="checkbox" id="updateAutoCheck"></label>
+        <div class="row"><button id="updateCheck">检查更新</button><button id="updateInstall">一键更新</button><button id="updateVersions">选择版本</button></div>
+        <div class="row"><button id="updateHome">项目主页</button><button id="updateReleases">下载页</button></div>
+        <div class="row muted" id="updateHint">尚未检查；打开编辑器时会自动检查一次，也可以点「检查更新」。</div>
+    </section>
+    <section>
         <h3>数据</h3>
         <div class="row"><button id="exportAll">导出全部编辑器数据</button></div>
         <div class="row"><button id="clearCache">清除扩展扫描缓存</button></div>
@@ -251,6 +280,188 @@ shadow.innerHTML=`
         });
         this.renderWorkspace();
         this.refreshWorkspaceFiles(this.workspace);
+        //版本与更新（版本行 / 镜像源 / 自动检查开关 / 检查与更新按钮）
+        this.renderUpdateSection();
+    }
+    /* ---------------- 版本与更新 ---------------- */
+    /**
+     * 设置页「版本与更新」段：填充镜像下拉与开关，接上四个按钮，然后刷新版本信息
+     */
+    renderUpdateSection() {
+        const query = id => this.shadowRoot.getElementById(id);
+        const mirror = query("updateMirror");
+        if (mirror) {
+            mirror.innerHTML = "";
+            mirrorOptions().forEach(({ id, label }) => {
+                const option = document.createElement("option");
+                option.value = id;
+                option.textContent = label;
+                mirror.appendChild(option);
+            });
+            const saved = readUpdateConfig("mirror", AUTO_MIRROR);
+            mirror.value = saved;
+            //配置里可能留着已经不存在的镜像 id：回落到「自动」
+            if (mirror.value !== saved) {
+                mirror.value = AUTO_MIRROR;
+                writeUpdateConfig("mirror", AUTO_MIRROR);
+            }
+            mirror.addEventListener("change", e => {
+                const picked = e.target.selectedOptions && e.target.selectedOptions[0];
+                writeUpdateConfig("mirror", e.target.value);
+                this.setUpdateHint(`镜像源已切换为「${picked ? picked.textContent : e.target.value}」，下次检查/更新生效。`);
+            });
+        }
+        const auto = query("updateAutoCheck");
+        if (auto) {
+            auto.checked = Boolean(readUpdateConfig("autoCheck", true));
+            auto.addEventListener("change", e => {
+                writeUpdateConfig("autoCheck", e.target.checked);
+                this.setUpdateHint(e.target.checked
+                    ? "已开启：每次打开编辑器都会检查一次更新。"
+                    : "已关闭自动检查，可随时点「检查更新」。");
+            });
+        }
+        query("updateCheck") && query("updateCheck").addEventListener("pointerup", () => this.checkUpdate());
+        query("updateInstall") && query("updateInstall").addEventListener("pointerup", () => this.installLatest());
+        query("updateVersions") && query("updateVersions").addEventListener("pointerup", () => this.pickUpdateVersion());
+        query("updateHome") && query("updateHome").addEventListener("pointerup", () => this.openInBrowser(githubUrl.repoPage()));
+        query("updateReleases") && query("updateReleases").addEventListener("pointerup", () => this.openInBrowser(githubUrl.releasesPage()));
+        this.refreshUpdateInfo();
+    }
+    /** @param {string} text */
+    setUpdateHint(text) {
+        const node = this.shadowRoot.getElementById("updateHint");
+        if (node) node.textContent = text || "";
+    }
+    /**
+     * 按「本地版本 + 上次检查缓存」刷新这三行
+     */
+    async refreshUpdateInfo() {
+        try {
+            const local = await readLocal();
+            const node = this.shadowRoot.getElementById("versionLocal");
+            if (node) node.textContent = describeLocal(local);
+        } catch (err) {
+            this.setUpdateHint(`读取本地版本失败：${(err && err.message) || err}`);
+        }
+        const cache = readCache();
+        if (cache) this.renderUpdateState(cache);
+        else this.setUpdateHint("尚未检查；打开编辑器时会自动检查一次，也可以点「检查更新」。");
+    }
+    /**
+     * @param {{state?:string,reason?:string,remote?:object,release?:object,at?:string,mirrorLabel?:string,error?:string}|null} info
+     */
+    renderUpdateState(info) {
+        const remoteNode = this.shadowRoot.getElementById("versionRemote");
+        const stateNode = this.shadowRoot.getElementById("versionState");
+        const remote = info && info.remote;
+        const release = info && info.release;
+        if (remoteNode) {
+            let text = "无可用信息";
+            if (remote && remote.sha) {
+                text = `${remote.short || String(remote.sha).slice(0, 7)}${remote.date ? " · " + formatTimestamp(remote.date) : ""}${remote.message ? " · " + remote.message : ""}`;
+            } else if (release && release.tag) {
+                text = `发布版 ${release.tag}`;
+            }
+            remoteNode.textContent = text;
+        }
+        const label = stateLabel(info && info.state);
+        if (stateNode) {
+            stateNode.textContent = `${label.text}${info && info.reason ? "：" + info.reason : ""}`;
+            stateNode.className = `update-state update-state-${label.tone}`;
+        }
+        const tips = [];
+        if (info && info.at) tips.push(`上次检查 ${formatTimestamp(info.at)}`);
+        if (info && info.mirrorLabel) tips.push(`镜像 ${info.mirrorLabel}`);
+        if (info && info.error) tips.push(info.error);
+        this.setUpdateHint(tips.join(" · ") || (info && info.reason) || "—");
+    }
+    /**
+     * 手动检查更新
+     * @returns {Promise<object|null>}
+     */
+    async checkUpdate() {
+        this.setUpdateHint("检查中…");
+        try {
+            const result = await runCheck({
+                onProgress: (stage, detail) => this.setUpdateHint(`${detail || stage}…`)
+            });
+            this.renderUpdateState(result);
+            if (result.state === UPDATE_STATE.AVAILABLE) {
+                this.setUpdateHint(`发现新版本：${(result.target && result.target.label) || ""}（点「一键更新」安装）`);
+            }
+            return result;
+        } catch (err) {
+            this.setUpdateHint(`检查失败：${(err && err.message) || err}`);
+            return null;
+        }
+    }
+    /**
+     * 「一键更新」：有缓存目标就直接装，没有就先查一次
+     */
+    async installLatest() {
+        const cache = readCache();
+        let target = cache && cache.target ? cache.target : null;
+        let release = cache && cache.release ? cache.release : null;
+        if (!target) {
+            const result = await this.checkUpdate();
+            if (result && result.state === UPDATE_STATE.AVAILABLE) {
+                target = result.target;
+                release = result.release || null;
+            }
+        }
+        if (!target) {
+            this.setUpdateHint("当前没有可安装的新版本；想回退或安装指定版本请用「选择版本」。");
+            return;
+        }
+        this.setUpdateHint("准备下载…");
+        const summary = await installUpdate({
+            target,
+            release,
+            onProgress: info => this.setUpdateHint(describeProgress(info))
+        });
+        await reportInstall(summary);
+        if (summary.cancelled) this.setUpdateHint("已取消更新。");
+        else if (summary.ok) this.setUpdateHint("更新完成，请重启游戏让新代码生效。");
+        else this.setUpdateHint(`更新失败：${summary.error || "未知原因"}`);
+        this.refreshUpdateInfo();
+    }
+    /**
+     * 「选择版本」：列 Release 标签 + 最近提交，可用来回退
+     */
+    async pickUpdateVersion() {
+        this.setUpdateHint("拉取版本列表…");
+        const summary = await chooseAndInstallVersion({
+            onProgress: info => this.setUpdateHint(describeProgress(info))
+        });
+        if (summary && summary.ok) this.setUpdateHint("安装完成，请重启游戏让新代码生效。");
+        else if (summary && summary.cancelled) this.setUpdateHint("已取消。");
+        else if (summary) this.setUpdateHint(`安装失败：${summary.error || "未知原因"}`);
+        else this.setUpdateHint("未选择版本。");
+        this.refreshUpdateInfo();
+    }
+    /**
+     * 用系统默认浏览器打开外部链接（拿不到 electron.shell 就退 window.open）
+     * @param {string} target
+     */
+    openInBrowser(target) {
+        if (!target) return false;
+        const req = typeof window.require === "function" ? window.require : null;
+        if (req) {
+            try {
+                const electron = req("electron");
+                if (electron && electron.shell && typeof electron.shell.openExternal === "function") {
+                    electron.shell.openExternal(target);
+                    return true;
+                }
+            } catch (err) { /* 退 window.open */ }
+        }
+        try {
+            window.open(target, "_blank");
+            return true;
+        } catch (err) { /* 最后给路径让用户自己开 */ }
+        alert(`请手动在浏览器里打开：\n${target}`);
+        return false;
     }
     /* ---------------- 工作区（= 扩展） ---------------- */
     /**

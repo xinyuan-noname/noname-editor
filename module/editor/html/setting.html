@@ -53,6 +53,17 @@
         <div class="row"><button id="resetRatio">重置侧栏宽度</button><button id="resetNav">重置导航顺序</button></div>
     </section>
     <section>
+        <h3>版本与更新</h3>
+        <div class="row"><span>当前版本</span><span class="muted" id="versionLocal">读取中…</span></div>
+        <div class="row"><span>远端版本</span><span class="muted" id="versionRemote">尚未检查</span></div>
+        <div class="row"><span>更新状态</span><span class="muted update-state" id="versionState">尚未检查</span></div>
+        <label class="row"><span>镜像源</span><select id="updateMirror"></select></label>
+        <label class="row"><span>打开编辑器时自动检查</span><input type="checkbox" id="updateAutoCheck"></label>
+        <div class="row"><button id="updateCheck">检查更新</button><button id="updateInstall">一键更新</button><button id="updateVersions">选择版本</button></div>
+        <div class="row"><button id="updateHome">项目主页</button><button id="updateReleases">下载页</button></div>
+        <div class="row muted" id="updateHint">尚未检查；打开编辑器时会自动检查一次，也可以点「检查更新」。</div>
+    </section>
+    <section>
         <h3>数据</h3>
         <div class="row"><button id="exportAll">导出全部编辑器数据</button></div>
         <div class="row"><button id="clearCache">清除扩展扫描缓存</button></div>

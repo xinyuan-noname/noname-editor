@@ -56,7 +56,7 @@ export default function () {
             author: "<a href=https://b23.tv/RHn9COW>新元noname</a>",
             diskURL: "",
             forumURL: "",
-            version: "1.0.0"
+            version: "1.1.0"
         }
     };
 }
