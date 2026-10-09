@@ -281,8 +281,3 @@ export function getCoreSkills(data, libRef) {
     }
     return coreSkillPromise;
 }
-
-/** 丢掉本体技能表缓存（新增/删除本体武将包后要重算） */
-export function resetCoreSkills() {
-    coreSkillPromise = null;
-}
