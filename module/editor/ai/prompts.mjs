@@ -408,7 +408,7 @@ function contentMacroLines() {
 }
 
 /**
- * 骨架宏模板：指定种类就只给那一个，没指定就把九种全给（让模型自己挑）。
+ * 骨架宏模板：指定种类就只给那一个，没指定就把全部骨架都给（让模型自己挑）。
  * 全给的理由：模板是从编辑器内置宏库抄下来的，一定编得过；少给一种它就可能自己发明槽名。
  * @param {string} [kind] SKILL_KINDS 的 key；空 = 全给
  * @returns {string}
@@ -445,7 +445,7 @@ const SKILL_SCHEMA_TEXT = [
 ].join("\n");
 
 /**
- * 技能设计的系统提示词。`kind` 指定技能种类时只给那一个骨架模板，没指定就九种全给。
+ * 技能设计的系统提示词。`kind` 指定技能种类时只给那一个骨架模板，没指定就全部骨架都给。
  * @param {string} [kind] SKILL_KINDS 的 key
  * @returns {string}
  */
@@ -496,7 +496,7 @@ function skillSystem(kind = "") {
     ].join("\n");
 }
 
-/** 默认的技能系统提示词（未指定种类：九种骨架全给） */
+/** 默认的技能系统提示词（未指定种类：全部骨架都给） */
 export const SKILL_SYSTEM = skillSystem("");
 
 /**
@@ -519,7 +519,7 @@ export function buildSkillMessages(input = {}) {
     ];
     lines.push(kind
         ? `技能种类：必须是「${kind.name}」，源码里用 @${MACRO_BY_KIND[kind.key] || `skill_${kind.key}`} 宏`
-        : "技能种类：不限，从上面九种骨架里挑最合适的一种");
+        : "技能种类：不限，从上面这些骨架里挑最合适的一种");
     const subject = input.subject;
     if (subject && (subject.name || subject.id)) {
         lines.push("", "这个技能是写给下面这位武将的（要与他配合，不要与他已有的技能重复）：");

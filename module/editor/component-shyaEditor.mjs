@@ -26,6 +26,7 @@ import {
 import { templateKinds, getSkillKind, hostImportEntries, DEFAULT_TEMPLATE_LANG } from "./shya/skillTemplates.mjs";
 import { langOfSource, kindOfMacroName } from "./shya/slotLang.mjs";
 import { checkSkillId } from "./shya/skillIdentity.mjs";
+import { comboCandidates, comboChoiceMap, suggestComboId, isValidSkillId, buildComboSource, COMBO_MIN_CHILDREN } from "./shya/comboSkill.mjs";
 import { injectSkillRegistration } from "./ai/skills.mjs";
 import { createSkillDraft, getSkillDraft, readSkillDrafts, saveSkillDraft } from "./persist/skillLibrary.mjs";
 
@@ -81,9 +82,9 @@ class HTMLNonameShyaEditorElement extends HTMLNonameFocusUIElement {
     specialPopupCloser = null;
     /** 当前选中的技能种类（SKILL_KINDS 的 key） */
     currentKind = "";
-    /** 源码是否已被动过：没动过时插模板直接整块替换，避免与初始示例叠在一起 */
+    /** 源码是否已被动过（没动过 = 空 / 初始示例 → 写模板与生成组合技都直接整块覆盖，不用确认） */
     sourceTouched = false;
-    /** 上一次写入的模板原文：源码还等于它时再点别的种类直接替换，不会越堆越多 */
+    /** 上一次整块写进去的内容（种类模板 / 组合技源码）：源码还等于它就算「没动过」 */
     lastTemplateText = "";
     sourceArea = null;
     constructor() {
@@ -98,6 +99,7 @@ shadow.innerHTML=`
             <button class="compile" type="button">编译</button>
             <button class="generate" type="button">生成</button>
             <button class="copy" type="button">复制代码</button>
+            <button class="combine" type="button" title="把多个技能引用成一个组合技（原技能仍是独立技能，只被引用）">组合</button>
         </span>
     </div>
     <div class="kind-bar">
@@ -140,7 +142,7 @@ shadow.innerHTML=`
         this.sourceArea = q(".source");
         if (this.sourceArea && !this.sourceArea.value) this.sourceArea.value = EXAMPLE_SOURCE;
         if (this.sourceArea) {
-            //一动源码就记成「已编辑」：此后插模板只插到光标处，不再整块替换
+            //一动源码就记成「已编辑」：此后写模板 / 生成组合技都会先弹一次确认
             this.sourceArea.addEventListener("input", () => {
                 this.sourceTouched = true;
                 //源码改过 → 上一次的产物已经过期：清掉，免得「生成」把旧代码注册进 lib.skill。
@@ -159,6 +161,9 @@ shadow.innerHTML=`
         q(".compile").addEventListener("pointerup", () => this.compile());
         q(".generate").addEventListener("pointerup", () => this.generate());
         q(".copy").addEventListener("pointerup", () => this.copyCode());
+        //「组合」：把多个技能草稿引用成一个组合技（原先的「组合技」种类模板已下线）
+        const combineButton = q(".combine");
+        if (combineButton) combineButton.addEventListener("pointerup", () => this.combineSkills());
         const closeButton = q(".close");
         if (closeButton) closeButton.addEventListener("pointerup", () => this.remove());
         //标签工具：选中标签后写进源码里的 //#tags-begin … //#tags-end 托管区
@@ -800,69 +805,191 @@ shadow.innerHTML=`
             button.className = "kind-button";
             button.dataset.kind = kind.key;
             button.textContent = kind.name;
-            button.title = `${kind.name}：${kind.hint || ""}\n点击即把该类模板写进源码（源码还是初始示例时整块替换，否则插到光标处）；换种类会清空标签勾选与 //#tags-begin…end 托管区`;
+            button.title = `${kind.name}：${kind.hint || ""}\n点击即把该类模板整块写进源码（一个技能草稿只放一个技能；源码手改过时会先弹确认）；换种类会清空标签勾选`;
             if (this.currentKind === kind.key) button.classList.add("chosen");
             button.addEventListener("pointerup", () => this.chooseKind(kind.key));
             root.appendChild(button);
         });
     }
     /**
-     * 选中某个技能种类：更新选中态、**把标签面板归零**，再写入该类模板。
+     * 选中某个技能种类：更新选中态、**把标签面板归零**，再把该类模板**整块**写进源码。
+     * 一个技能草稿 = 一个技能文件：点种类不再往光标处插模板（那样一份草稿里会堆出好几个技能）；
+     * 源码已被手改过时先弹确认（设置页「写入模板前确认」可关）；
+     * 点**已经选中**的那个种类不做任何事（否则整块重写会把面板里已选好的标签一起清掉）。
      * 换种类 = 直接清除覆盖：上一种的标签勾选与源码里的托管区一起清掉，只留新模板自带的标签槽——
      * 不这样做，面板会像标签页一样把上一种的标签一直留着。
-     * @param {string} key SKILL_KINDS 里的 key
+     * @param {string} key 技能种类的 key
      */
-    chooseKind(key) {
-        if (!getSkillKind(key, this.sourceLang())) return;
+    async chooseKind(key) {
+        const kind = getSkillKind(key, this.sourceLang());
+        if (!kind) return;
         const switched = this.currentKind !== key;
-        const overwrite = this.canReplaceSource();
+        //点已经选中的那个种类 = 什么都不做（点同一个种类不该清掉面板里已选好的标签）
+        if (!switched) {
+            this.renderKindBar();
+            return;
+        }
+        if (!this.sourceIsPristine() && this.confirmOverwriteEnabled()) {
+            const yes = await this.askDialog({
+                type: "confirm",
+                headline: `写入「${kind.name}」模板`,
+                message: "会整块覆盖源码框里的内容（一个技能草稿只放一个技能）。可以在设置页「写入模板前确认」里关掉这个提示。"
+            });
+            if (yes !== true) return;
+        }
         this.currentKind = key;
         this.renderKindBar();
-        if (switched) {
-            this.resetTagState();
-            //整块覆盖时托管区随旧源码一起去掉；插到光标处时才需要单独清掉它
-            if (!overwrite) {
-                const removed = this.sourceArea ? clearTagRegion(this.sourceArea.value) : { ok: false };
-                if (removed.ok) this.replaceRange(removed.start, removed.end, removed.text);
-            }
-        }
-        this.insertTemplate(key, { overwrite });
+        //换种类 = 直接清除覆盖：上一种的标签勾选归零（源码里的托管区随整块覆盖一起没了）
+        this.resetTagState();
+        this.insertTemplate(key);
     }
-    /** 源码没动过 / 是空的 / 还等于上一次写进去的模板 → 换种类时整块覆盖（否则只插到光标处） */
-    canReplaceSource() {
+    /** 源码是不是「没被动过」：初始示例 / 空 / 上一次整块写进去的内容 */
+    sourceIsPristine() {
         const node = this.sourceArea;
-        if (!node) return false;
+        if (!node) return true;
         return !this.sourceTouched || !node.value.trim() || node.value === this.lastTemplateText;
     }
+    /** 覆盖源码前是否要问一句（设置页「写入模板前确认」，默认开） */
+    confirmOverwriteEnabled() {
+        if (typeof this.configQuery !== "function") return true;
+        const saved = this.configQuery("get", { member: "x19D6_editor.settings.confirmTemplateOverwrite" });
+        return saved !== false;
+    }
     /**
-     * 把某类技能的最简模板写进源码：源码为空或还是初始示例时整块替换，否则插到光标处
-     * @param {string} key SKILL_KINDS 里的 key
-     * @param {{ overwrite?: boolean }} [options] overwrite=true 强制整块覆盖（换种类时由 chooseKind 传）
+     * 把某类技能的最简模板**整块**写进源码（一个技能草稿只放一个技能，不再插到光标处）。
+     * @param {string} key 技能种类的 key
      */
-    insertTemplate(key, options = {}) {
+    insertTemplate(key) {
         const kind = getSkillKind(key, this.sourceLang());
         if (!kind || !this.sourceArea) return;
-        const text = kind.template;
-        const node = this.sourceArea;
-        //没动过 / 空 / 还是上一次写进去的模板（或调用方明确要求覆盖）→ 整块替换，点着换种类不会越堆越多
-        if (options.overwrite === true || this.canReplaceSource()) {
-            this.replaceRange(0, node.value.length, text);
-            //整块替换后光标回到开头、视野回顶部（否则停在模板末尾，看不到开头）
-            node.setSelectionRange(0, 0);
-            node.scrollTop = 0;
-            this.lastTemplateText = text;
-        } else {
-            this.lastTemplateText = "";
-            const start = node.selectionStart ?? node.value.length;
-            const end = node.selectionEnd ?? start;
-            this.replaceRange(start, end, text);
-        }
-        //模板一写进去，标题就从源码的 #技能 / #skill 槽里读（不再有 id 输入框）
-        this.triggerEvent("tabTitleChange");
+        this.applySource(kind.template);
         this.setDiagnostics(`<span class="ok">已写入「${kind.name}」模板：${this.escape(kind.hint || "")}</span>`);
-        //换模板后按新源码回填标签面板（模板里本来就有的标签槽会亮起来）
-        this.syncTagsFromSource();
     }
+    /**
+     * 整块写入源码（种类模板 / 组合技共用）：光标回开头、视野回顶部，并按新源码回填标签面板与草稿标题。
+     * @param {string} text
+     */
+    applySource(text) {
+        const node = this.sourceArea;
+        if (!node) return;
+        this.replaceRange(0, node.value.length, text);
+        node.setSelectionRange(0, 0);
+        node.scrollTop = 0;
+        this.lastTemplateText = text;
+        this.triggerEvent("tabTitleChange");
+        this.syncTagsFromSource();
+        this.scheduleDraftSave();
+    }
+    /**
+     * 弹一次 <noname-dialog> 并等结果。
+     * ⚠️ 属性顺序必须是 payload → type → headline/message（type 分支当场读 payload，又会清空 headline/message）。
+     * @param {{ type?: string, payload?: any, headline?: string, message?: string, single?: boolean }} config
+     * @returns {Promise<any>}
+     */
+    async askDialog(config = {}) {
+        const { type, payload, headline, message, single = false } = config;
+        const dialog = document.createElement("noname-dialog");
+        if (payload !== undefined && payload !== null) {
+            dialog.setAttribute("payload", typeof payload === "string" ? payload : JSON.stringify(payload));
+        }
+        if (type) dialog.setAttribute("type", type);
+        if (single) dialog.setAttribute("single", "true");
+        if (headline) dialog.setAttribute("headline", headline);
+        if (message) dialog.setAttribute("message", message);
+        (ui.window || document.body).appendChild(dialog);
+        try {
+            return await dialog.wait();
+        } catch (err) {
+            return null;
+        } finally {
+            dialog.remove();
+        }
+    }
+    /**
+     * 工具栏「组合」：把**多个技能草稿**引用成一个组合技（原技能仍是独立草稿 / 独立文件，只被引用）。
+     * 流程：多选技能 → 填 id / 名称 → 整块写进当前草稿；
+     * 当前草稿已经有别的内容时**另开一份新草稿**并打开它（绝不覆盖别的技能）。
+     */
+    async combineSkills() {
+        const drafts = readSkillDrafts(this);
+        const candidates = comboCandidates({
+            drafts,
+            skillTable: lib.skill,
+            workspace: this.workspaceName(),
+            excludeId: this.currentSkillId()
+        });
+        if (candidates.length < COMBO_MIN_CHILDREN) {
+            await this.askDialog({
+                type: "alert",
+                headline: "组合技",
+                message: `至少要两份「有技能 id」的草稿才能组合（当前 ${candidates.length} 份，不含本草稿自己）。`
+            });
+            return;
+        }
+        const picked = await this.askDialog({
+            type: "search-select",
+            payload: comboChoiceMap(candidates),
+            headline: "组合技：选择要引用的技能",
+            message: `可多选（至少 ${COMBO_MIN_CHILDREN} 个）；带「未生成」的子技先单独生成一次，组合技才引用得到`
+        });
+        const children = (Array.isArray(picked) ? picked : []).filter(Boolean);
+        if (!children.length) return;
+        if (children.length < COMBO_MIN_CHILDREN) {
+            await this.askDialog({ type: "alert", headline: "组合技", message: `至少要选 ${COMBO_MIN_CHILDREN} 个技能。` });
+            return;
+        }
+        const usedIds = [
+            ...Object.keys(lib.skill || {}),
+            ...Object.values(drafts).map(record => (record && record.id) || "").filter(Boolean)
+        ];
+        const fields = await this.askDialog({
+            type: "multi-input",
+            payload: [
+                { label: "组合技 id", value: suggestComboId(children, usedIds) },
+                { label: "技能名称", value: "组合技" }
+            ],
+            headline: "组合技：命名"
+        });
+        if (!Array.isArray(fields)) return;
+        const id = String(fields[0] || "").trim();
+        const name = String(fields[1] || "").trim();
+        if (!isValidSkillId(id)) {
+            await this.askDialog({
+                type: "alert",
+                headline: "组合技",
+                message: `技能 id 只能由字母、数字、下划线组成，且不能以数字开头：「${id}」不行。`
+            });
+            return;
+        }
+        //就地改写当前草稿时，同 id 的「自己」不算冲突；另开新草稿时就得按新草稿判
+        const reuseCurrent = this.sourceIsPristine();
+        const conflicts = checkSkillId({ id, draftKey: reuseCurrent ? this.draftKey : "", skillTable: lib.skill, drafts });
+        if (conflicts.length) {
+            await this.askDialog({
+                type: "alert",
+                headline: "组合技 id 冲突",
+                message: conflicts.map(item => item.message).join("\n")
+            });
+            return;
+        }
+        const source = buildComboSource({ id, name, children, lang: this.sourceLang() });
+        if (reuseCurrent) {
+            this.currentKind = "";
+            this.renderKindBar();
+            this.resetTagState();
+            this.applySource(source);
+            this.setDiagnostics(`<span class="ok">已生成组合技「${this.escape(name || id)}」，引用：${this.escape(children.join("、"))}</span>`);
+            this.saveDraft();
+            return;
+        }
+        const saved = createSkillDraft(this, { id, name, source, workspace: this.workspaceName() });
+        if (!saved) {
+            await this.askDialog({ type: "alert", headline: "组合技", message: "新建技能草稿失败，请重试。" });
+            return;
+        }
+        if (typeof game.x19D6_openShyaSkillEditor === "function") game.x19D6_openShyaSkillEditor({ draftKey: saved.draftKey });
+    }
+
     // ================= 源码输入增强（同步旧版编辑器的合理快捷键） =================
     /**
      * 用 execCommand("insertText") 替换一段文本：浏览器原生编辑，Ctrl+Z 撤销栈仍然有效；

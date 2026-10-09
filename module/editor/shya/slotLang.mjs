@@ -248,7 +248,7 @@ export function macroForKind(kind, lang) {
     return macroName(MACRO_BY_KIND[kind] || "", lang);
 }
 
-/** 九类技能宏的两种写法（标签托管区定位、种类推断都用它） */
+/** 技能宏的两种写法（标签托管区定位、种类推断都用它） */
 export const SKILL_MACRO_NAMES = Object.values(MACRO_BY_KIND).flatMap(en => [en, MACRO_CN[en]]);
 
 /**

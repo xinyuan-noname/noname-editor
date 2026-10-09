@@ -148,6 +148,7 @@ shadow.innerHTML=`
                 <option value="en">English（插槽为英文名）</option>
             </select>
         </label>
+        <label class="row"><span>写入模板前确认</span><input type="checkbox" id="confirmTemplateOverwrite"></label>
         <label class="row"><span>记住上次所在页</span><input type="checkbox" id="rememberPage"></label>
         <div class="row"><span>当前侧栏宽度比</span><span class="muted" id="ratioText">未记录</span></div>
         <div class="row"><button id="resetRatio">重置侧栏宽度</button><button id="resetNav">重置导航顺序</button></div>
@@ -194,6 +195,7 @@ shadow.innerHTML=`
         const rememberPage = this.read("rememberPage", true);
         const skillEditorVersion = this.read("skillEditorVersion", "shya");
         const templateLang = this.read("templateLang", "cn");
+        const confirmTemplateOverwrite = this.read("confirmTemplateOverwrite", true);
         const ratio = this.configQuery("get", { member: "x19D6_editor.ui.widthRatio" });
         const root = this.editorRoot;
         const query = id => this.shadowRoot.getElementById(id);
@@ -205,6 +207,7 @@ shadow.innerHTML=`
         if (versionSelect) versionSelect.value = skillEditorVersion;
         const templateSelect = query("templateLang");
         if (templateSelect) templateSelect.value = templateLang === "en" ? "en" : "cn";
+        query("confirmTemplateOverwrite").checked = confirmTemplateOverwrite !== false;
         if (root) {
             root.style.setProperty("--xy-ED-font-scale", String(fontScale));
             if (!animation) root.classList.add("xy-ED-no-animation");
@@ -223,6 +226,7 @@ shadow.innerHTML=`
         query("defaultParent").addEventListener("change", e => this.write("defaultParent", e.target.value));
         if (versionSelect) versionSelect.addEventListener("change", e => this.write("skillEditorVersion", e.target.value));
         if (templateSelect) templateSelect.addEventListener("change", e => this.write("templateLang", e.target.value));
+        query("confirmTemplateOverwrite").addEventListener("change", e => this.write("confirmTemplateOverwrite", e.target.checked));
         query("rememberPage").addEventListener("change", e => this.write("rememberPage", e.target.checked));
         query("resetRatio").addEventListener("pointerup", () => {
             this.configQuery("write", { member: "x19D6_editor.ui.widthRatio", value: 0.5 });

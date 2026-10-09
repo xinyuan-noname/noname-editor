@@ -1,7 +1,9 @@
 /**
  * 新版 shya 技能编辑器的「技能类别 → 最简模板」纯数据模块（中英双语）。
  *
- * - 类别名与旧版编辑器「技能种类」一致（module/editor/skill/editor.mjs:922-928 的 skillCategories）；
+ * - 类别名与旧版编辑器「技能种类」一致（module/editor/skill/editor.mjs:922-928 的 skillCategories），
+ *   但**「组合技」已下线**（2026-10）：一个草稿只放一个技能，组合改由工具栏「组合」按钮
+ *   引用多个已有技能生成（`shya/comboSkill.mjs`）；
  * - 宏本体：英文版 `shya/host/skill-type.shya`、中文版 `shya/host/skill-type-cn.shya`
  *   （中文版由 `_x19D6_backup/tools/gen-cn-host.mjs` 从英文版生成，改名表 `shya/slotLang.mjs`）；
  *   模板只写到「能编译、能在局内生效」为止，字段含义看宏库头部的说明；
@@ -145,21 +147,6 @@ export const SKILL_KINDS = [
       return distance - 1
     },
   }
-  #locked: true
-}
-`,
-  },
-  {
-    key: "group",
-    name: "组合技",
-    hint: "本体只挂标记，真实效果在被引用的子技里",
-    template: `
-@skill_group {
-  #skill: my_group
-  #translation: "技能名"
-  #group: ["my_group1", "my_group2"]
-  #preHidden: ["my_group1", "my_group2"]
-  #forced: true
   #locked: true
 }
 `,
@@ -313,21 +300,6 @@ export const SKILL_KINDS_CN = [
       return distance - 1
     },
   }
-  #锁定技: true
-}
-`,
-  },
-  {
-    key: "group",
-    name: "组合技",
-    hint: "本体只挂标记，真实效果在被引用的子技里",
-    template: `
-@组合技 {
-  #技能: my_group
-  #名称: "技能名"
-  #技能组: ["my_group1", "my_group2"]
-  #技能预亮: ["my_group1", "my_group2"]
-  #强制发动: true
   #锁定技: true
 }
 `,

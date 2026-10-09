@@ -16,6 +16,7 @@
 //   视为技（正交）        @skill_viewAs           enable + viewAs
 //   mod技                 @skill_mod              mod:{ … }
 //   组合技                @skill_group            group:[ … ]
+//     ↑ 已不是编辑器「技能种类」按钮：组合技由工具栏「组合」按钮选好技能后生成（module/editor/shya/comboSkill.mjs）
 //   自由技能（兜底）      @skill_raw              #object 原样展开
 //
 // 通用插槽（所有技能宏都有）：
