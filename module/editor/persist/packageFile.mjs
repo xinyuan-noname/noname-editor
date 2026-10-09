@@ -1,10 +1,16 @@
 /**
  * 生成武将包文件文本（纯函数：不读配置、不碰 lib、不用 this）。
  *
- * 形态对齐游戏本体 `character/standard/index.js`：
- *   const characters / skills / characterSort / translates … + game.import("character", …)
- * 其中 `skill` 段就是技能定义（引擎 loadCharacter 会写进 lib.skill），
- * 技能的显示名与描述拆进 translate —— 见 persist/skills.mjs 的 readSkillText。
+ * 形态**严格对齐游戏本体 `character/standard.js`**：
+ *   ① 13 个 `const` 段声明**恒定全出**，顺序与 standard.js 一致：
+ *      characters / cards / pinyins / skills / translates / characterTitles /
+ *      characterIntro / characterFilters / dynamicTranslates / perfectPairs /
+ *      voices / characterSort / characterSortTranslate。
+ *      没有内容的段也给单行 `{}`（standard.js 的 cards / characterFilters /
+ *      dynamicTranslates / perfectPairs 就是这么写的），**不按空省略**。
+ *   ② 返回对象 13 个键，键名与顺序照抄 standard.js。
+ *   ③ `skill` 段就是技能定义（引擎 loadCharacter 会写进 lib.skill），
+ *      技能的显示名与描述拆进 translate —— 见 persist/skills.mjs 的 readSkillText。
  *
  * 生成的文件是**整文件覆盖**的：改动这里等于改动所有工作区里的 `character/<包id>.js`，
  * 所以字段顺序、缩进、空行都固定下来，重复落盘不会产生无意义的 diff。
@@ -14,21 +20,25 @@ import { readSkillText, serializeSkill } from "./skills.mjs";
 const EOL = "\n";
 const INDENT = "    ";
 
-/** 草稿里只属于编辑器、不写进武将本体的字段 */
+/**
+ * 不写进**武将本体**的草稿字段（各自另有去处，见行内注释）。
+ * 注意这里是「不进本体」，不是「不落盘」——title 落进 characterTitles 段。
+ */
 const EDITOR_ONLY_FIELDS = new Set([
-    "id",
-    "extension",
-    "packageId",
-    "characterSort",
-    "characterSortName",
-    "name",
-    "intro",
-    "pinyin",
-    "dieAudioText",
-    "perfectPair",
-    "avatar",
-    "dieAudios",
-    "savedAt"
+    "id",                 // → characterSort 的成员、character 的对象键
+    "extension",          // 编辑器元数据（工作区）
+    "packageId",          // → characterSort 外层键
+    "characterSort",      // → characterSort 的成员归属
+    "characterSortName",  // → characterSortTranslate
+    "name",               // → translates
+    "intro",              // → characterIntro
+    "pinyin",             // → pinyins
+    "title",              // → characterTitles（引擎 get.characterTitle 只读 lib.characterTitle）
+    "dieAudioText",       // 编辑器里的配音文本，不进本体
+    "perfectPair",        // 编辑器字段，本次不接线（段与键仍在，见下）
+    "avatar",             // → trashBin
+    "dieAudios",          // 扩展侧阵亡语音走 audio/die/<id>N.mp3 约定，不进本体
+    "savedAt"             // 编辑器元数据（落盘时间）
 ]);
 
 /** 空值不写进武将本体（空串 / null / 空数组） */
@@ -73,7 +83,8 @@ function characterFieldLines(record) {
 }
 
 /**
- * `const <name> = { … };`（没有内容时给 `{}`，避免生成空荡荡的三行）
+ * `const <name> = { … };`
+ * 没有成员时给单行 `{}`——**不要退回空荡荡的三行**，standard.js 里空的段就是 `const cards = {};`。
  * @param {string} name
  * @param {string[]} lines 成员行
  * @returns {string}
@@ -82,8 +93,13 @@ function declaration(name, lines) {
     return lines.length ? `const ${name} = {\n${lines.join(",\n")}\n};` : `const ${name} = {};`;
 }
 
-/** `const` 声明里的 translate 成员行 */
-function translateLine(key, value) {
+/**
+ * 段里的普通成员行（键与值都是字符串字面量）
+ * @param {string} key
+ * @param {string} value
+ * @returns {string}
+ */
+function memberLine(key, value) {
     return `    ${JSON.stringify(key)}: ${JSON.stringify(value)}`;
 }
 
@@ -114,7 +130,9 @@ export function buildCharacterPackageFile(options = {}) {
     } = options;
     const warnings = [];
 
+    //① 分段成员行：武将本体 + 称号 / 简介 / 拼音 / 分包归属
     const characterLines = [];
+    const titleLines = [];
     const introLines = [];
     const pinyinLines = [];
     const sortMembers = {};
@@ -127,22 +145,26 @@ export function buildCharacterPackageFile(options = {}) {
         if (!key || value === undefined || value === null || value === "") return;
         if (usedTranslateKeys.has(key)) return;
         usedTranslateKeys.add(key);
-        translateEntries.push(translateLine(key, value));
+        translateEntries.push(memberLine(key, value));
     };
 
-    //① 武将本体 + 武将名 / 称号 / 拼音 / 分包归属
     for (const record of Object.values(records)) {
         if (!record || !record.id) continue;
         if ((record.packageId || "") !== packageId) continue;
         const fields = characterFieldLines(record);
-        characterLines.push(`    ${JSON.stringify(record.id)}: {\n${fields.join(",\n")}\n    }`);
+        //一个字段都没有的草稿给 `"id": {}`，别落成中间空一行的三行对象
+        characterLines.push(fields.length
+            ? `    ${JSON.stringify(record.id)}: {\n${fields.join(",\n")}\n    }`
+            : `    ${JSON.stringify(record.id)}: {}`);
         if (record.name) addTranslate(record.id, record.name);
-        if (record.intro) introLines.push(`    ${JSON.stringify(record.id)}: ${JSON.stringify(record.intro)}`);
+        //称号归 characterTitles 段：本体里没有 title 这个字段（standard.js 也不写）
+        if (record.title) titleLines.push(memberLine(record.id, record.title));
+        if (record.intro) introLines.push(memberLine(record.id, record.intro));
         //拼音要归一成字符串：草稿里可能是 [""] 或按字拆的数组，直接写进去游戏里会拿到脏值
         const pinyin = Array.isArray(record.pinyin)
             ? record.pinyin.filter(Boolean).join("")
             : String(record.pinyin || "").replace(/,/g, "");
-        if (pinyin) pinyinLines.push(`    ${JSON.stringify(record.id)}: ${JSON.stringify(pinyin)}`);
+        if (pinyin) pinyinLines.push(memberLine(record.id, pinyin));
         if (record.characterSort) {
             //草稿里只选了分包、但没在登记表里的（例如扫描到的包）也要收进来
             if (!sortMembers[record.characterSort]) sortMembers[record.characterSort] = [];
@@ -171,29 +193,41 @@ export function buildCharacterPackageFile(options = {}) {
     //分包名走另一个对象：与 translates 撞键时让 translates 赢（不同命名空间，撞上属异常）
     const sortTranslateLines = Object.entries(sorts)
         .filter(([sortId]) => !usedTranslateKeys.has(sortId))
-        .map(([sortId, sortName]) => translateLine(sortId, sortName));
+        .map(([sortId, sortName]) => memberLine(sortId, sortName));
 
+    //④ 段声明：13 段恒定全出，顺序与 standard.js 一致（空段也是单行 `{}`）
     const declarations = [
         declaration("characters", characterLines),
-        ...(skillLines.length ? [declaration("skills", skillLines)] : []),
-        declaration("characterSort", sortLines),
+        declaration("cards", []),
+        declaration("pinyins", pinyinLines),
+        declaration("skills", skillLines),
         declaration("translates", translateEntries),
+        declaration("characterTitles", titleLines),
+        declaration("characterIntro", introLines),
+        declaration("characterFilters", []),
+        declaration("dynamicTranslates", []),
+        declaration("perfectPairs", []),
+        declaration("voices", []),
+        declaration("characterSort", sortLines),
         declaration("characterSortTranslate", sortTranslateLines)
     ];
-    if (introLines.length) declarations.push(declaration("characterIntro", introLines));
-    if (pinyinLines.length) declarations.push(declaration("pinyins", pinyinLines));
 
-    //返回对象：字段顺序固定，落盘才会幂等
+    //⑤ 返回对象：13 个键，键名与顺序照抄 standard.js
     const returns = [
         `name: ${JSON.stringify(packageId)}`,
         "connect: true",
-        "character: { ...characters }"
+        "character: { ...characters }",
+        `characterSort: { ${JSON.stringify(packageId)}: characterSort }`,
+        "characterFilter: { ...characterFilters }",
+        "characterTitle: { ...characterTitles }",
+        "dynamicTranslate: { ...dynamicTranslates }",
+        "characterIntro: { ...characterIntro }",
+        "card: { ...cards }",
+        "skill: { ...skills }",
+        "perfectPair: { ...perfectPairs }",
+        "translate: { ...translates, ...voices, ...characterSortTranslate }",
+        "pinyins: { ...pinyins }"
     ];
-    if (skillLines.length) returns.push("skill: { ...skills }");
-    returns.push(`characterSort: { ${JSON.stringify(packageId)}: characterSort }`);
-    returns.push("translate: { ...translates, ...characterSortTranslate }");
-    if (introLines.length) returns.push("characterIntro: { ...characterIntro }");
-    if (pinyinLines.length) returns.push("pinyins: { ...pinyins }");
 
     const callbackLines = groups.map(id => `${INDENT}lib.group.push(${JSON.stringify(id)});`);
     callbackLines.push(`${INDENT}return {`);
