@@ -6,7 +6,7 @@ import {
     getTextConfig, saveTextConfig, getImageConfig, saveImageConfig,
     getHistory, pushHistory, clearHistory,
     getCandidates, getCandidateMap, addCandidate, removeCandidate as removeCandidateRecord,
-    setAppliedSkill, getAppliedSkill, isGuided, markGuided,
+    isGuided, markGuided,
     getSkillState, saveSkillState, getUsage, addUsage, resetUsage
 } from "./ai/store.mjs";
 import {
@@ -18,6 +18,7 @@ import {
 } from "./ai/prompts.mjs";
 import { ensureHostImport, injectSkillRegistration } from "./ai/skills.mjs";
 import { loadSkillDoc } from "./ai/skillDoc.mjs";
+import { getSkillRecord, setSkillRecord } from "./persist/skillLibrary.mjs";
 
 /**
  * <ai-panel>（侧栏 AI 页）—— 用 AI 生成武将设计稿与原画。
@@ -1360,7 +1361,7 @@ shadow.innerHTML=`
                 return;
             }
             //安全线：与游戏自带技能重名（且不是我们之前生成过的）就跳过，绝不覆盖别人的技能
-            if (lib.skill[skill.id] && !getAppliedSkill(this, skill.id)) {
+            if (lib.skill[skill.id] && !getSkillRecord(this, skill.id)) {
                 state.status = "fail";
                 state.message = `技能 id「${skill.id}」与游戏/其它扩展已有的技能重名，已跳过（换个 id 前缀重新生成即可）`;
                 failed.push(skill.name);
@@ -1371,7 +1372,7 @@ shadow.innerHTML=`
                 const run = new Function("_status", "lib", "game", "ui", "get", "ai", state.code);
                 run(_status, lib, game, ui, get, ai);
                 if (!lib.skill[skill.id]) throw new Error("注册后 lib.skill 里仍然没有这个技能");
-                setAppliedSkill(this, skill.id, { code: skill.shya, name: skill.name, description: skill.description });
+                setSkillRecord(this, skill.id, { source: skill.shya, code: state.code, name: skill.name, description: skill.description, workspace: this.workspace });
                 applied.push(skill.id);
             } catch (err) {
                 state.status = "fail";
@@ -1426,8 +1427,8 @@ shadow.innerHTML=`
 
     /** 把某份技能源码带进 shya 技能编辑器 */
     async openInSkillEditor(skill) {
-        const stored = getAppliedSkill(this, skill.id);
-        const source = skill.shya || (stored && stored.code) || "";
+        const stored = getSkillRecord(this, skill.id);
+        const source = skill.shya || (stored && stored.source) || "";
         if (typeof game.x19D6_openShyaSkillEditor !== "function") {
             this.#setProgress("draft", "当前版本没有开放 shya 技能编辑器入口。");
             return;

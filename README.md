@@ -75,6 +75,7 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
 | `x19D6_editor.skillEditor.*` | 技能编辑器的配置与缓存 |
 | `x19D6_editor.extensionFileConfig.*` | 各工作区（扩展）的资源目录：立绘 / 卡图 / 技能语音 / 阵亡语音 |
 | `x19D6_editor.extensionModuleConfig.*` | 扩展目录扫描缓存（可在基本设置里清除） |
+| `x19D6_editor.skills.<技能id>` | 编辑器里建立/编辑过的技能（shya 源码 + 编译产物 + 名称描述 + 归属工作区）；武将落盘时写技能源码文件用 |
 | `x19D6_editor.workspaceMeta.<工作区>` | 编辑器里新建的武将包 / 分包登记（id → 中文名）；同时会**落盘**到该扩展 `extension.js` 的标记区块 |
 ## 工作区（= 扩展）
 
@@ -118,17 +119,27 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
     侧栏 🗑️ 删草稿 → 连带删除该武将名下的媒体文件。（技能语音在旧版技能编辑器内核里，另行处理）
   - **武将 / 武将包 / 分包落盘成标准武将包文件**：每个武将包写一个 `extension/<工作区>/character/<包id>.js`，
     形态对齐游戏本体 `character/bingshi.js`（`game.import("character", …)` + `character` / `characterSort` /
-    `translate` / `characterIntro` / `pinyins`）。草稿保存后 1.5s 防抖重写，新建包/分包与删除草稿即时重写。
+    `skill` / `translate` / `characterIntro` / `pinyins`）。草稿保存后 1.5s 防抖重写，新建包/分包与删除草稿即时重写。
     - ESM 入口会自动维护一小段引入区块 `//#noname-editor-imports-begin … end`（`import "./character/<包id>.js";`）；
       老式 `game.import("extension", …)` 入口不写 import——那种扩展自己用 `lib.init.js("extension/<工作区>/character", "<包id>")` 引入。
     - 老版本塞在入口里的 `//#noname-editor-workspace-begin … end` 大段 lib 注入会被自动清掉。
     - 文件里会**补 translate**：自定义势力（`x19D6_editor.groups` 里记的中文名，编辑器选/建势力时自动记）与宗族，
       否则游戏里只会显示原 id（如 `bqzj_qi`）。拼音会归一成字符串（草稿里的 `[""]` / 按字数组都不再直接写进去）。
-    - 老式入口的包文件整体包一层 IIFE——同一扩展下多个包文件是经典脚本，顶层 `const` 会重名。
-    - **自建的势力 / 宗族会持久化**（`x19D6_editor.groups.<势力id>` = 中文名、`x19D6_editor.clans` = 名字数组），
+        - **自建的势力 / 宗族会持久化**（`x19D6_editor.groups.<势力id>` = 中文名、`x19D6_editor.clans` = 名字数组），
       打开编辑器时自动补回选项列表；自定义势力选项没有图片时不再写 `url(undefined)`（否则渲染成空白格）。
-    - ⚠️ 文件里只有**武将本体**（含 translate / intro / 拼音 / 分包）；技能定义（`lib.skill`）不在其中——技能要用技能编辑器导出/复制代码。
-    （`//#noname-editor-workspace-begin … //#noname-editor-workspace-end`，整块覆盖、幂等），重启游戏后可见。
+        - **技能定义跟着武将一起落盘**（`skill: { … }` 段）：武将 `skills` 里引用到的技能，只要**不是游戏本体技能**，
+      定义就写进所属武将包文件（同一个技能只写一次，归到包 id 排序最前的那个包）；**本体技能只引用、不写定义**
+      （写了会在重启时报 duplicated skill，甚至盖掉核心技能）。本体技能表 = `character/` 目录下的包
+      ∩ `lib.characterPack`（本体在 app 根、扩展在 `extension/` 下，边界就靠这个）。
+    - 技能定义里的 `translation` / `description`（shya 宏的产出）会**拆到 `translate`**
+      （`<技能id>` / `<技能id>_info`），不留在技能体里——引擎不认这两个字段，只认 `lib.translate`。
+    - 定义由**本局 `lib.skill` 序列化**得到（函数走 `toString`，方法简写会补成函数表达式），编辑器里新建的技能
+      因此不用重新编译；其他扩展的技能会被拷一份进来（若它引用了原扩展的模块级变量，拷来的副本可能跑不通）。
+    - shya 源码另存 `extension/<工作区>/src/shya/<技能id>.shya`（目录可在设置页「工作区」段改，默认 `src/shya`）：
+      源码来自技能库 `x19D6_editor.skills.<技能id>`（shya 编辑器「生成」与 AI「一键应用」都会写；
+      旧的 `x19D6_editor.ai.appliedSkills` 作只读兜底）。
+    - 生成逻辑在 `module/editor/persist/`：`packageFile.mjs`（纯函数生成文本）/ `skills.mjs`（序列化 + 本体技能表）/
+      `workspace.mjs`（IO 编排）/ `skillLibrary.mjs`（技能库）。整文件覆盖、幂等，自检 `_x19D6_backup/tools/package-file-check.mjs`。
 
 
 
@@ -170,8 +181,9 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
   数据本质是全局表 `lib.perfectPair`（`noname/library/index.js:11994` 初始化，由 `character/perfectPairs.js` 经 `noname/init/loading.js:459` 载入），**不是武将字段**——当前导出代码会剔除 `perfectPair`（见 `worker-ast.worker.js:genCharacterCode`），「把搭档关系写入 perfectPairs 表」的导出仍待设计。
 - **对话框并轨**：技能编辑器内核仍带着自己的一套对话框/UI 层（约 90KB，与 `<noname-dialog>` 重复）。
   计划先给 `component-dialog.mjs` 补齐 多行输入 / 数值滑条 / 开关列表 / 搜索选择 / 列表管理 五类，再切换内核约 30 处调用并删除重复实现。
-- **技能按工作区过滤**：技能目前只有一份全局缓存（`x19D6_editorSkillCache`，无 `extension` 归属），
-  要先有「带扩展归属的技能草稿列表」才能像武将那样过滤（下一轮）。
+- **技能草稿列表 / 按工作区过滤**：数据源已就位（`x19D6_editor.skills.<技能id>` 带 `workspace` 归属，
+  shya 编辑器与 AI 应用都会写），还差侧栏的技能列表 UI（下一轮）。旧版中文语句编辑器的全局缓存
+  `x19D6_editorSkillCache` 仍无归属，它生成的技能要先「生成」进 `lib.skill` 才会被武将落盘带走。
 - `module/editor/mindmap.mjs` 是无人引用的孤儿文件。
 
 已实现（本轮起）：武将**称号**（`component.mjs` 的 `characterAttributes` 含 `title`，纳入草稿持久化与导出数据）。

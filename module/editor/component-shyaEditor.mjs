@@ -24,6 +24,8 @@ import {
     INLINE_REPLACEABLE_SLOTS
 } from "./shya/tags.mjs";
 import { SKILL_KINDS, getSkillKind } from "./shya/skillTemplates.mjs";
+import { injectSkillRegistration } from "./ai/skills.mjs";
+import { getSkillRecord, setSkillRecord } from "./persist/skillLibrary.mjs";
 
 /** 技能类型宏库的 import：编译前自动注入，不写进文本框（见 prepareSource） */
 const HOST_IMPORT_TYPE = 'import "./host/skill-type.shya"';
@@ -213,19 +215,41 @@ shadow.innerHTML=`
         }
     }
     /**
-     * 生成：与旧编辑器「生成」同义——在游戏上下文里求值，局内立即生效
+     * 生成：与旧编辑器「生成」同义——在游戏上下文里求值，局内立即生效。
+     *
+     * ⚠️ 编译产物是**模块级常量**（`const <id> = { … }`），直接求值什么也不会注册，
+     * 要先过 ai/skills.mjs 的注入层（接到 lib.skill / lib.translate）。
+     * 生成成功的同时记进技能库：保存武将时会连技能定义一起落盘。
      */
     generate() {
         if (!this.generatedCode) {
             this.setDiagnostics('<span class="warn">请先成功编译一次</span>');
             return;
         }
+        const id = this.currentSkillId();
+        //安全线：与游戏或其它扩展已有的技能重名就拒绝，绝不覆盖别人的技能（与 AI 区域同款）
+        if (id && lib.skill[id] && !getSkillRecord(this, id)) {
+            this.setDiagnostics(`<span class="err">技能 id「${this.escape(id)}」在游戏或其它扩展里已经存在，换个 id 再生成</span>`);
+            return;
+        }
+        const injected = injectSkillRegistration(this.generatedCode, id);
+        if (!injected.ok) {
+            this.setDiagnostics(`<span class="err">生成失败：${this.escape(injected.reason)}</span>`);
+            return;
+        }
         try {
-            const run = new Function("_status", "lib", "game", "ui", "get", "ai", this.generatedCode);
+            const run = new Function("_status", "lib", "game", "ui", "get", "ai", injected.code);
             run(_status, lib, game, ui, get, ai);
-            const id = this.shadowRoot.querySelector(".skill-id");
-            const name = id && id.value ? id.value : "";
-            this.setDiagnostics(`<span class="ok">已生成并在本局生效 ✓${name ? "（技能 id：" + this.escape(name) + "）" : ""}</span>`);
+            const skill = lib.skill[id];
+            if (!skill) throw new Error("注册后 lib.skill 里仍然没有这个技能");
+            setSkillRecord(this, id, {
+                source: this.sourceArea ? this.sourceArea.value : "",
+                code: this.generatedCode,
+                name: skill.translation || lib.translate[id] || "",
+                description: skill.description || lib.translate[id + "_info"] || "",
+                workspace: this.configQuery("get", { member: "x19D6_editor.settings.workspace" }) || ""
+            });
+            this.setDiagnostics(`<span class="ok">已生成并在本局生效 ✓（技能 id：${this.escape(id)}；武将编辑器的技能列表里就能选到它，保存武将时会一起落盘）</span>`);
         } catch (err) {
             this.setDiagnostics(`<span class="err">生成失败：${this.escape(err && err.message ? err.message : err)}</span>`);
         }

@@ -1,8 +1,9 @@
 /**
  * AI 区域的持久化层（纯数据读写，落在 `lib.config.x19D6_editor.ai.*`）。
  *
- * 为什么单独一层：AI 区的状态有六种（文本接口 / 生图接口 / 历史 / 候选图 /
- * 已应用技能 / 引导标记），散在组件里会出现「有的存了有的没存」。
+ * 为什么单独一层：AI 区的状态有好几种（文本接口 / 生图接口 / 历史 / 候选图 /
+ * 技能书 / 用量 / 引导标记），散在组件里会出现「有的存了有的没存」。
+ * ⚠️「已应用的技能」已搬到 `x19D6_editor.skills`（persist/skillLibrary.mjs），这里不再管。
  * 这里统一走 `x19D6_editor.ai` 前缀，并且**整块读写**（map/list 一次写完），
  * 免掉按 id 拼路径时的转义问题。
  *
@@ -132,25 +133,6 @@ export function removeCandidate(host, characterId, path) {
     map[key] = map[key].filter(item => item.path !== path);
     if (!map[key].length) delete map[key];
     return write(host, "candidates", map);
-}
-
-/**
- * 已应用的技能（技能 id → { code, name, description, at }）
- * 技能只在本局生效，源码存在这里是为了：重开编辑器后还能打开当初那份源码去改。
- * @returns {Object<string, {code:string,name:string,description:string,at:number}>}
- */
-export function getAppliedSkillMap(host) {
-    const map = read(host, "appliedSkills");
-    return map && typeof map === "object" && !Array.isArray(map) ? map : {};
-}
-export function getAppliedSkill(host, skillId) {
-    return getAppliedSkillMap(host)[skillId] || null;
-}
-export function setAppliedSkill(host, skillId, record) {
-    if (!skillId) return null;
-    const map = getAppliedSkillMap(host);
-    map[skillId] = { name: "", description: "", code: "", at: Date.now(), ...record };
-    return write(host, "appliedSkills", map);
 }
 
 /** 引导是否看过（看过就不再自动弹） */

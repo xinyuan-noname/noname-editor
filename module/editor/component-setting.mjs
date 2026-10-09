@@ -15,7 +15,8 @@ const WORKSPACE_RESOURCE_INPUTS = {
     workspaceCharacterImage: "extension-character-image",
     workspaceCardImage: "extension-card-image",
     workspaceSkillAudio: "extension-skill-audio",
-    workspaceDieAudio: "extension-die-audio"
+    workspaceDieAudio: "extension-die-audio",
+    workspaceSkillSource: "extension-skill-source"
 };
 /**
  * 工作区默认资源目录（相对扩展根）：新建工作区时一并在磁盘上建立，并写进
@@ -25,7 +26,8 @@ const WORKSPACE_DEFAULT_DIRS = {
     "extension-character-image": "image/character",
     "extension-card-image": "image/card",
     "extension-skill-audio": "audio/skill",
-    "extension-die-audio": "audio/die"
+    "extension-die-audio": "audio/die",
+    "extension-skill-source": "src/shya"
 };
 /**
  * 老扩展可能已经在用的目录：存在就沿用，不硬塞默认目录
@@ -97,6 +99,9 @@ shadow.innerHTML=`
         </label>
         <label class="row"><span>阵亡语音目录</span>
             <span class="dir-field"><input id="workspaceDieAudio" list="workspaceFolderList" placeholder="audio/die"><button class="dir-pick" type="button" data-dir-for="workspaceDieAudio" title="选择文件夹">…</button></span>
+        </label>
+        <label class="row"><span>技能源码目录</span>
+            <span class="dir-field"><input id="workspaceSkillSource" list="workspaceFolderList" placeholder="src/shya"><button class="dir-pick" type="button" data-dir-for="workspaceSkillSource" title="选择文件夹">…</button></span>
         </label>
         <datalist id="workspaceFolderList"></datalist>
     </section>
