@@ -796,6 +796,36 @@ div[contenteditable="true"] {
     --url: url("../image/clan/门阀士族.png")
 }
 
+/* 自建势力 / 宗族的 ✕ 删除键（只有新增项才挂，内置项没有） */
+li > .diy-remove {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background-color: #FFF;
+    background-image: url("../image/icon/close.png");
+    background-size: 8px 8px;
+    background-position: center;
+    background-repeat: no-repeat;
+    box-shadow: 0 0 2px #000;
+    opacity: 0;
+    transition: 0.1s;
+    cursor: pointer;
+    pointer-events: none;
+    z-index: 1;
+}
+
+li:hover > .diy-remove {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+li > .diy-remove:hover {
+    transform: scale(1.25);
+}
+
 /* 体力相关 */
 /* 体力 */
 [data-hp] div.hp-operation {

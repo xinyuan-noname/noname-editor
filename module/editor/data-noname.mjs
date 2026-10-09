@@ -516,6 +516,24 @@ export class NonameData {
         }
         return currentObject;
     }
+    /**
+     * 删掉一个配置成员（**delete 语义**，不是写 null）。
+     * 置 null 会在 `lib.config` 里留下一个 null 键，`getConfig()` 读回来又是 null，
+     * 于是"删过的自建势力"下次打开仍会被渲染回选项列表（用户会认为删除没生效）。
+     * @param {string} member 点号路径，如 `x19D6_editor.groups.cs_test`
+     */
+    removeConfigMember(member) {
+        const properties = member.split(".");
+        const [name] = properties;
+        const last = properties.pop();
+        let currentObject = lib.config;
+        for (const property of properties) {
+            if (currentObject == null || typeof currentObject !== "object") return Promise.resolve();
+            currentObject = currentObject[property];
+        }
+        if (currentObject && typeof currentObject === "object") delete currentObject[last];
+        return game.promises.saveConfigValue(name);
+    }
     writeConfig(member, val) {
         const properties = member.split(".");
         const [name] = properties;
@@ -523,9 +541,12 @@ export class NonameData {
         for (let i = 0; i < properties.length; i++) {
             const property = properties[i];
             if (properties.length - 1 === i) {
+                if (currentObject == null || typeof currentObject !== "object") break;
                 currentObject[property] = val;
             } else {
-                if (!currentObject[property]) currentObject[property] = {};
+                //⚠️ 判 `== null` 而不是 `!`：置 null 过的路径段在 lib.config 里是真的 null，
+                //只判 `!` 会把 null 当成已存在，一路把 currentObject 走成 null，最后一行静默抛错（写不进去）
+                if (currentObject[property] == null || typeof currentObject[property] !== "object") currentObject[property] = {};
                 currentObject = currentObject[property];
             }
         }

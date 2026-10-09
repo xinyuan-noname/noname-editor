@@ -1186,13 +1186,216 @@ shadow.innerHTML=`
         if (!lib.translate[groupId]) lib.translate[groupId] = groupName;
     }
     createGroupOption({ id, name, textShadow, imageData } = {}) {
+        return this.createDiyOption({
+            dataset: { groupOption: id },
+            label: name || id || "",
+            style: { "--url": imageData ? `url(${imageData})` : "", "--group-text-shadow": textShadow || "" }
+        });
+    }
+    createClanOption(name) {
+        return this.createDiyOption({ dataset: { clanOption: name }, label: name });
+    }
+    /**
+     * 建一个「势力 / 宗族」选项条目。
+     * ⚠️ 文字必须包在 `.diy-label` 里：`li.textContent` 会被 ✕ 删除键污染，而单/多选管理器是读
+     * `now.textContent` 拿势力名的（见 #listenGroup 里的 setGroup）——不包一层就会把「✕」拼进势力名。
+     * @param {{dataset?:Record<string,string>, label?:string, style?:Record<string,string>}} config
+     */
+    createDiyOption({ dataset = {}, label = "", style = {} } = {}) {
         const li = document.createElement("li");
-        li.dataset.groupOption = id;
-        li.textContent = name || id || "";
-        //没有图片就别写 url(undefined)——那会让整个选项渲染成空白格（用户截图里「键」和「＋新增」之间那个空位）
-        if (imageData) li.style.setProperty("--url", `url(${imageData})`);
-        if (textShadow) li.style.setProperty("--group-text-shadow", textShadow);
+        Object.assign(li.dataset, dataset);
+        const labelSpan = document.createElement("span");
+        labelSpan.className = "diy-label";
+        labelSpan.textContent = label;
+        li.append(labelSpan);
+        Object.entries(style).forEach(([name, value]) => {
+            //没有图片就别写 url(undefined)——那会让整个选项渲染成空白格（用户截图里那个空位）
+            if (value) li.style.setProperty(name, value);
+        });
         return li;
+    }
+    /**
+     * 取选项条目的显示文字（排除 ✕ 删除键）。管理器靠它读势力名 / 宗族名。
+     * @param {HTMLElement} [node]
+     * @returns {string}
+     */
+    optionLabel(node) {
+        return (node?.querySelector?.(".diy-label")?.textContent || node?.textContent || "").trim();
+    }
+    /**
+     * 给自建项挂上右上角的 ✕ 删除键。
+     * ⚠️ 必须 `stopPropagation`：选择管理器的 pointerup 监听就挂在 `<li>` 上（`listenAllNodes`），
+     * 不拦住的话按 ✕ 会先触发一次「选中这个势力 / 宗族」。
+     * @param {HTMLElement} node
+     */
+    attachDiyRemove(node) {
+        if (!node) return node;
+        const button = document.createElement("span");
+        button.className = "diy-remove";
+        button.title = "删除";
+        button.addEventListener("pointerup", (event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            this.removeDiyOption(node);
+        });
+        node.append(button);
+        return node;
+    }
+    /**
+     * ✕ 的统一入口：按条目上的属性分派给势力 / 宗族的删除逻辑。
+     * @param {HTMLElement} node
+     */
+    removeDiyOption(node) {
+        if (!node) return;
+        if (node.dataset.groupOption != null) this.removeCustomGroup(node.dataset.groupOption);
+        else if (node.dataset.clanOption != null) this.removeCustomClan(node.dataset.clanOption);
+    }
+    /**
+     * @returns {Record<string, object>} 全部武将草稿（键 = 草稿编号）
+     */
+    draftRecords() {
+        return this.configQuery("get", { member: "x19D6_editor.characters" }) || {};
+    }
+    /**
+     * 删除一个自建势力：界面选中态 / 多势力串 / 登记表 / 图标 / live translate / **所有草稿里的引用**一起清掉。
+     * @param {string} groupId
+     */
+    async removeCustomGroup(groupId) {
+        if (!groupId) return;
+        const chooseManager = this.groupChoiceManager;
+        const doubleManager = this.doubleGroupChoiceManager;
+        const wasChosen = chooseManager?.chosen?.dataset?.groupOption === groupId;
+        const nodes = Array.from(this.getDataAreaDom("group")?.querySelectorAll(`[data-group-option="${CSS.escape(groupId)}"]`) || []);
+        //① 先收拾界面选中态：选中的正是它 → 空选中（会回调 setGroup，把 data-group 一并清掉）
+        if (wasChosen) {
+            chooseManager.choose(null);
+        } else if (this.getDataAreaDom("group")?.dataset?.group === groupId) {
+            this.changeData("group", "");
+        }
+        //多选的「多势力」里也要摘掉
+        this.removeGroupFromDouble(groupId);
+        //② 从两个选择管理器里摘掉（listener 留着无妨：节点已离开文档，点不到）
+        nodes.forEach(node => {
+            chooseManager?.remove(node);
+            doubleManager?.remove(node);
+            node.remove();
+        });
+        //③ 登记表 / 图标记录 / live translate 一并清掉
+        this.configQuery("remove", { member: `x19D6_editor.groups.${groupId}` });
+        const icon = this.configQuery("get", { member: `x19D6_editor.groupImages.${groupId}` });
+        if (icon) {
+            this.configQuery("remove", { member: `x19D6_editor.groupImages.${groupId}` });
+            try {
+                await this.fileQuery("removeFile", { path: `extension/${icon}` });
+            } catch (err) {
+                console.warn("势力图标删除失败", icon, err);
+            }
+        }
+        if (lib.translate[groupId]) delete lib.translate[groupId];
+        //④ 草稿里的引用一起清空
+        this.purgeDraftsByGroup(groupId);
+        this.finishDiyRemove();
+    }
+    /**
+     * 删除一个自建宗族（宗族没有独立 id，key 就是中文名）。
+     * @param {string} name
+     */
+    removeCustomClan(name) {
+        if (!name) return;
+        const manager = this.clanChoiceManager;
+        const wasChosen = manager?.chosen?.dataset?.clanOption === name;
+        const nodes = Array.from(this.getDataAreaDom("clans")?.querySelectorAll(`[data-clan-option="${CSS.escape(name)}"]`) || []);
+        //选中态必须走管理器：choose(null) 会跑回调，把随宗族附加的技能一起移除
+        if (wasChosen) manager.choose(null);
+        else if ((this.getDataAreaDom("clans")?.dataset?.clans || "").split(" ").includes(name)) this.changeData("clans", "");
+        nodes.forEach(node => {
+            manager?.remove(node);
+            node.remove();
+        });
+        const saved = this.configQuery("get", { member: "x19D6_editor.clans" });
+        if (Array.isArray(saved)) {
+            this.configQuery("write", { member: "x19D6_editor.clans", value: saved.filter(clan => clan !== name) });
+        }
+        //草稿里存的宗族是数组，删掉这一个；数组空了就把字段一起删，别留一份空数组
+        this.purgeDraftField(
+            record => Array.isArray(record.clans) && record.clans.includes(name),
+            record => {
+                const left = record.clans.filter(clan => clan !== name);
+                if (left.length) record.clans = left;
+                else delete record.clans;
+            }
+        );
+        this.finishDiyRemove();
+    }
+    /**
+     * 从「多势力」多选管理器与编辑器数据里摘掉某个势力。
+     * @param {string} groupId
+     */
+    removeGroupFromDouble(groupId) {
+        const area = this.getDataAreaDom("group");
+        if (!area) return;
+        const list = (area.dataset.doubleGroup || "").split(" ").filter(Boolean);
+        if (!list.includes(groupId)) return;
+        const left = list.filter(id => id !== groupId);
+        area.dataset.doubleGroup = left.join(" ");
+        const node = Array.from(area.querySelectorAll("[data-group-option]")).find(item => item.dataset.groupOption === groupId);
+        if (node) this.doubleGroupChoiceManager?.unselect(node);
+        const chosen = this.groupChoiceManager?.chosen?.dataset?.groupOption;
+        const infoList = left.filter(id => id !== chosen).map(id => {
+            const item = Array.from(area.querySelectorAll("[data-group-option]")).find(data => data.dataset.groupOption === id);
+            return { groupId: id, groupName: this.optionLabel(item), groupTextShadow: item?.style?.getPropertyValue?.("--group-text-shadow") };
+        });
+        if (!left.length) {
+            this.doubleGroupChoiceManager?.reset();
+            area.dataset.doubleGroup = "";
+        } else {
+            this.setDoubleGroup({ groupId: chosen, groupName: this.optionLabel(this.groupChoiceManager?.chosen), groupTextShadow: "" }, infoList);
+        }
+    }
+    /**
+     * 清空所有武将草稿里的某个势力：`group` 与 `doubleGroup`（空格分隔的多势力串）都要摘掉。
+     * @param {string} groupId
+     */
+    purgeDraftsByGroup(groupId) {
+        this.purgeDraftField(
+            record => record.group === groupId || (record.doubleGroup || "").split(" ").includes(groupId),
+            record => {
+                if (record.group === groupId) delete record.group;
+                if (record.doubleGroup) {
+                    const left = record.doubleGroup.split(" ").filter(id => id && id !== groupId);
+                    if (left.length) record.doubleGroup = left.join(" ");
+                    else delete record.doubleGroup;
+                }
+            }
+        );
+    }
+    /**
+     * 按条件改写当前工作区下的武将草稿（写回的是原对象引用，`writeConfig` 按键整份落盘）。
+     * @param {(record:object)=>boolean} match
+     * @param {(record:object)=>void} apply
+     * @returns {number} 改了几份
+     */
+    purgeDraftField(match, apply) {
+        const records = this.draftRecords();
+        let changed = 0;
+        Object.values(records).forEach(record => {
+            if (!record || typeof record !== "object") return;
+            if (this.workspace && record.extension && record.extension !== this.workspace) return;
+            if (!match(record)) return;
+            apply(record);
+            changed++;
+        });
+        return changed;
+    }
+    /**
+     * 删除自建项之后的收尾：刷新选项列表 → 当前草稿立刻落库 → 通知外壳重新生成武将包文件。
+     * ⚠️ 顺序不能反：`saveDraft()` 会把当前界面状态写进配置，必须排在所有清空动作之后。
+     */
+    finishDiyRemove() {
+        this.renderCustomGroups();
+        this.renderCustomClans();
+        this.flushDraft();
+        this.triggerEvent("draftSaved", { draftKey: this.draftKey });
     }
     /**
      * 记下自建宗族（`x19D6_editor.clans` 数组）。宗族没有独立 id，key 就是中文名。
@@ -1252,7 +1455,7 @@ shadow.innerHTML=`
             if (groupDataArea.querySelector(`[data-group-option="${CSS.escape(groupId)}"]`)) return;
             const icon = icons[groupId];
             groupDiy.parentElement.insertBefore(
-                this.createGroupOption({ id: groupId, name: groupName, imageData: icon ? `/extension/${icon}` : "" }),
+                this.attachDiyRemove(this.createGroupOption({ id: groupId, name: groupName, imageData: icon ? `/extension/${icon}` : "" })),
                 groupDiy
             );
             added++;
@@ -1281,7 +1484,7 @@ shadow.innerHTML=`
         let added = 0;
         clans.forEach(clanName => {
             if (clansDataArea.querySelector(`[data-clan-option="${CSS.escape(clanName)}"]`)) return;
-            clanDiy.parentElement.insertBefore(this.createClanOption(clanName), clanDiy);
+            clanDiy.parentElement.insertBefore(this.attachDiyRemove(this.createClanOption(clanName)), clanDiy);
             added++;
         });
         return added;
@@ -1356,12 +1559,13 @@ shadow.innerHTML=`
                 funcMap.forClass("chosen");
                 this.setGroup({
                     groupId: now?.dataset?.groupOption,
-                    groupName: now?.textContent?.trim(),
+                    groupName: this.optionLabel(now),
                     groupTextShadow: now?.style?.getPropertyValue?.("--group-text-shadow")
                 });
             })
             .choose(groupOptions[0]);
         this.groupChoiceManager = singleManager;
+        this.doubleGroupChoiceManager = doubleManager;
         doubleManager
             .listenAllNodes("pointerup", (_event, node) => chosenModeManager.getLastestInfo() === "double" && !node.classList.contains("chosen"))
             .setCallback((type, target, funMap) => {
@@ -1370,7 +1574,7 @@ shadow.innerHTML=`
                 const groupChosen = singleManager.chosen;
                 const groupInfo = {
                     groupId: groupChosen?.dataset?.groupOption,
-                    groupName: groupChosen?.textContent?.trim(),
+                    groupName: this.optionLabel(groupChosen),
                     groupTextShadow: groupChosen?.style?.getPropertyValue?.("--group-text-shadow")
                 }
                 this.setDoubleGroup(groupInfo, infoList);
@@ -1378,7 +1582,7 @@ shadow.innerHTML=`
             .setGetInfoMethod(target => {
                 return {
                     groupId: target?.dataset?.groupOption,
-                    groupName: target?.textContent?.trim(),
+                    groupName: this.optionLabel(target),
                     groupTextShadow: target?.style?.getPropertyValue?.("--group-text-shadow")
                 };
             });
@@ -1391,19 +1595,13 @@ shadow.innerHTML=`
             if (result) {
                 //图标先落盘，再拿落盘路径建选项（否则刷新后图标就没了）
                 const iconPath = await this.saveGroupIcon(result.id, result.imageData);
-                const newGroupOption = this.createGroupOption({ ...result, imageData: iconPath ? `/extension/${iconPath}` : "" });
+                const newGroupOption = this.attachDiyRemove(this.createGroupOption({ ...result, imageData: iconPath ? `/extension/${iconPath}` : "" }));
                 groupDiy.parentElement.insertBefore(newGroupOption, groupDiy);
                 singleManager.append(newGroupOption);
                 doubleManager.append(newGroupOption);
                 this.recordGroupName(result.id, result.name);
             }
         })
-    }
-    createClanOption(name) {
-        const li = document.createElement("li");
-        li.dataset.clanOption = name;
-        li.textContent = name;
-        return li;
     }
     #listenClans() {
         const clansDataArea = this.getDataAreaDom("clans")
@@ -1435,7 +1633,7 @@ shadow.innerHTML=`
             dialog.setAttribute("message", "请输入宗族");
             const result = await dialog.wait()
             if (result) {
-                const newClanOption = this.createClanOption(result);
+                const newClanOption = this.attachDiyRemove(this.createClanOption(result));
                 clanDiy.parentElement.insertBefore(newClanOption, clanDiy);
                 manager.append(newClanOption);
                 this.recordClanName(result);

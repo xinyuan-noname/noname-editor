@@ -267,6 +267,10 @@ export class HTMLNonameFocusUIElement extends HTMLElement {
                 const { member, value } = query;
                 return this.#server.writeConfig(member, value);
             }
+            case "remove": {
+                const { member } = query;
+                return this.#server.removeConfigMember(member);
+            }
         }
     }
     /**
