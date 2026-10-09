@@ -291,23 +291,130 @@ button.close:hover {
     white-space: nowrap;
 }
 
-.tag-n {
+/* 一个标签 = 芯片 + 可能的 − / + 记数器（值型标签）+ ⚙（带特殊设置的标签） */
+.tag-item {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    font-size: 0.82em;
-    color: #cfe0f7;
+    gap: 2px;
 }
 
-.tag-n input {
-    width: 3.4em;
+.tag-stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+}
+
+.tag-step-btn {
     font: inherit;
-    font-size: 0.95em;
-    padding: 1px 3px;
+    font-size: 0.8em;
+    line-height: 1;
+    width: 1.5em;
+    padding: 1px 0;
+    border: 1px solid #5b6b85;
+    border-radius: 4px;
+    background: rgba(120, 140, 170, 0.28);
+    color: #e6eefb;
+    cursor: pointer;
+}
+
+.tag-step-btn:hover {
+    background: rgba(140, 165, 200, 0.45);
+}
+
+.tag-step-value {
+    width: 2.2em;
+    font: inherit;
+    font-size: 0.8em;
+    text-align: center;
+    padding: 1px 0;
     border: 1px solid #5b6b85;
     border-radius: 4px;
     background: rgba(30, 38, 52, 0.6);
     color: #e6eefb;
+}
+
+.tag-gear {
+    font: inherit;
+    font-size: 0.85em;
+    line-height: 1;
+    padding: 1px 3px;
+    border: 1px solid #5b6b85;
+    border-radius: 4px;
+    background: rgba(120, 140, 170, 0.22);
+    color: #dbe6f5;
+    cursor: pointer;
+}
+
+.tag-gear:hover {
+    background: rgba(140, 165, 200, 0.4);
+}
+
+.tag-gear.chosen {
+    background: #7093DB;
+    color: #fff;
+    border-color: #a8c4ff;
+}
+
+.tag-value {
+    font-size: 0.78em;
+    color: #a8c4ff;
+    max-width: 8em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 齿轮弹的小面板：fixed 定位（.tools-body 是 overflow:auto，绝对定位会被裁掉） */
+.tag-popup {
+    position: fixed;
+    z-index: 1024;
+    min-width: 8em;
+    max-height: 16em;
+    overflow: auto;
+    padding: 4px;
+    border-radius: 6px;
+    border: 1px solid #8fb0ef;
+    background: rgba(38, 48, 66, 0.98);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.tag-popup-title {
+    font-size: 0.8em;
+    opacity: 0.85;
+    color: #cfe0f7;
+    padding: 1px 4px 3px;
+}
+
+.tag-popup-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+
+.tag-popup-option {
+    font: inherit;
+    font-size: 0.8em;
+    padding: 1px 7px;
+    border: 1px solid #5b6b85;
+    border-radius: 4px;
+    background: rgba(120, 140, 170, 0.22);
+    color: #e6eefb;
+    cursor: pointer;
+}
+
+.tag-popup-option:hover {
+    background: rgba(140, 165, 200, 0.4);
+}
+
+.tag-popup-option.chosen {
+    background: #7093DB;
+    color: #fff;
+    border-color: #a8c4ff;
+}
+
+.tag-popup-option.clear {
+    margin-top: 3px;
+    width: 100%;
 }
 
 .tag-insert,

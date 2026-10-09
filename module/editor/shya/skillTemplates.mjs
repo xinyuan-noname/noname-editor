@@ -16,7 +16,7 @@ export const SKILL_KINDS = [
   #skill: my_trigger
   #translation: "技能名"
   #description: "触发时机：……；效果：……。"
-  // 标签（可选，一行一个，不按技能种类限制）：#forced: true / #frequent: true / #locked: true / #limited: true / #usable: 1 / #round: 1
+  // 标签（可选，一行一个；面板按技能种类过滤——触发技没有「选角色」页，对应槽也不在宏里）
   #trigger: "phaseJieshuBegin"
   #filter:
     return player hp < player maxHp
@@ -119,9 +119,9 @@ export const SKILL_KINDS = [
     },
     {
         key: "mod",
-        name: "修改技",
-        hint: "只改规则钩子，没有 filter/content（from 是 shya 关键字，形参记得改名）",
-        template: `// 修改技：只挂规则钩子（from 是 shya 关键字，形参改名，位置语义不变）
+        name: "mod技",
+        hint: "只挂规则钩子（mod: { … }），没有 filter/content；from 是 shya 关键字，形参记得改名",
+        template: `// mod技：只挂规则钩子（from 是 shya 关键字，形参改名，位置语义不变）
 @skill_mod {
   #skill: my_mod
   #translation: "技能名"

@@ -105,7 +105,7 @@
 
 ## 11. 常用标签（写在技能宏调用体里，一行一个）
 
-标签是**独立的槽行**，与触发时机/效果无关，缺省就不写；它们不按技能种类限制（与旧版编辑器一致）。
+标签是**独立的槽行**，与触发时机/效果无关，缺省就不写；它们**按技能种类过滤**（「选角色」只有主动技与自由技能能写）。
 写错字段比不写更糟——拿不准的标签一律不写（例如给普通技能写 `#mainSkill`）。
 
 - 发动方式：`#forced: true`（强制发动）、`#frequent: true`（自动发动）、`#direct: true`、`#forceDie: true`
@@ -115,7 +115,7 @@
 - 身份标记：`#zhuSkill: true`（主公技）、`#zhuanhuanji: true`（转换技）、`#hiddenSkill: true`（隐匿技）、`#clanSkill: true`（宗族技）、`#sunbenSkill: true`、`#chargeSkill: true`
 - 势力技：`#groupSkill: "wei"`（值是势力 id：wei / shu / wu / qun / jin / shen）
 - 国战：`#mainSkill: true`、`#viceSkill: true`、`#preHidden: true`、`#zhenfa: true`
-- 选目标 / 选牌：`#multitarget: true`、`#deadTarget: true`、`#includeOut: true`、`#lose: false`、`#discard: false`
+- 选目标（**只有主动技 / 自由技能能写**，触发技写了会编译报错）：`#multitarget: true`、`#deadTarget: true`、`#includeOut: true`、`#complexTarget: true`；选牌：`#lose: false`、`#discard: false`
 - 触发顺序与标记：`#firstDo: true`（最先触发）、`#lastDo: true`（最后触发）、`#mark: true`（标记持续显示）
 - 动画：`#skillAnimation: true` 配 `#animationColor: "fire"`（fire 火 / wood 木 / water 水 / thunder 雷 / orange 橙 / metal 金）
 

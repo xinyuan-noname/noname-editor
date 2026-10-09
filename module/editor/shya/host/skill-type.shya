@@ -14,7 +14,7 @@
 //   打出类                @skill_chooseToRespond  enable:"chooseToRespond"
 //   使用打出类            @skill_useRespond       enable:["chooseToUse","chooseToRespond"]
 //   视为技（正交）        @skill_viewAs           enable + viewAs
-//   修改技                @skill_mod              mod:{ … }
+//   mod技                 @skill_mod              mod:{ … }
 //   组合技                @skill_group            group:[ … ]
 //   自由技能（兜底）      @skill_raw              #object 原样展开
 //
@@ -24,9 +24,13 @@
 //   #description:Str?  技能描述 → 产物字段 description（归位到 <id>_info）
 //   #ai:ObjectLit?     整块 ai 字段
 //
-// 技能标签（每个技能宏都有，共 39 个槽；旧版「技能标签」页 + 「特殊设置」页）：
-//   标签**不按技能种类过滤**（旧版九个页面的按钮永远全在），任何标签都能写在任何宏上；
+// 技能标签（旧版「技能标签」页 + 「特殊设置」页）：
 //   槽名就是产物字段名，省略的标签整条消失。数据与映射见 module/editor/shya/tags.mjs。
+//   **选角色专属的 4 个槽（#deadTarget / #includeOut / #multitarget / #complexTarget）只在本文件
+//   的主动技宏（@skill_phaseUse / @skill_chooseToUse / @skill_chooseToRespond / @skill_useRespond /
+//   @skill_viewAs）和兜底的 @skill_raw 里**：引擎里它们只参与 enable 类技能的选目标流程
+//   （standard/skill.js 的 lijian、bingshi/skill.js 的 potdimeng），触发技不选目标——
+//   宏、面板「选角色」页、AI 提示词三处口径一致（tags.mjs:TARGET_ONLY_SLOTS）。
 //     #forced / #frequent / #direct / #forceDie / … : Bool?   → `<槽>: true`
 //     #locked / #lose / #discard / #delay: Bool?               → `<槽>: false`（旧版 locked-false 等）
 //     #usable / #round: Num?                                    → `usable: n` / `round: n`
@@ -132,10 +136,6 @@ macro @skill_trigger(
   #mainSkill: Bool?,
   #viceSkill: Bool?,
   #preHidden: expr?,
-  #deadTarget: Bool?,
-  #includeOut: Bool?,
-  #multitarget: Bool?,
-  #complexTarget: Bool?,
   #lose: Bool?,
   #discard: Bool?,
   #delay: Bool?,
@@ -182,10 +182,6 @@ macro @skill_trigger(
     <mainSkill>mainSkill: #mainSkill,</mainSkill>
     <viceSkill>viceSkill: #viceSkill,</viceSkill>
     <preHidden>preHidden: #preHidden,</preHidden>
-    <deadTarget>deadTarget: #deadTarget,</deadTarget>
-    <includeOut>includeOut: #includeOut,</includeOut>
-    <multitarget>multitarget: #multitarget,</multitarget>
-    <complexTarget>complexTarget: #complexTarget,</complexTarget>
     <lose>lose: #lose,</lose>
     <discard>discard: #discard,</discard>
     <delay>delay: #delay,</delay>
@@ -960,8 +956,8 @@ macro @skill_viewAs(
   }
 }
 
-// ═══════════════════════════════ 修改技 ═════════════════════════════════════
-// 旧版编辑器把「修改技」放在独立板块（editor.mjs:246 的 back.skill.mod）。
+// ═══════════════════════════════ mod技 ══════════════════════════════════════
+// 旧版编辑器叫「修改技」，放在独立板块（editor.mjs:246 的 back.skill.mod）；这里照它的 mod 字段写。
 // #mod 直接写钩子对象，方法简写，与官方 mashu 同形：
 //   @skill_mod {
 //     #skill: mashu
@@ -997,10 +993,6 @@ macro @skill_mod(
   #mainSkill: Bool?,
   #viceSkill: Bool?,
   #preHidden: expr?,
-  #deadTarget: Bool?,
-  #includeOut: Bool?,
-  #multitarget: Bool?,
-  #complexTarget: Bool?,
   #lose: Bool?,
   #discard: Bool?,
   #delay: Bool?,
@@ -1043,10 +1035,6 @@ macro @skill_mod(
     <mainSkill>mainSkill: #mainSkill,</mainSkill>
     <viceSkill>viceSkill: #viceSkill,</viceSkill>
     <preHidden>preHidden: #preHidden,</preHidden>
-    <deadTarget>deadTarget: #deadTarget,</deadTarget>
-    <includeOut>includeOut: #includeOut,</includeOut>
-    <multitarget>multitarget: #multitarget,</multitarget>
-    <complexTarget>complexTarget: #complexTarget,</complexTarget>
     <lose>lose: #lose,</lose>
     <discard>discard: #discard,</discard>
     <delay>delay: #delay,</delay>
@@ -1100,10 +1088,6 @@ macro @skill_group(
   #mainSkill: Bool?,
   #viceSkill: Bool?,
   #preHidden: expr?,
-  #deadTarget: Bool?,
-  #includeOut: Bool?,
-  #multitarget: Bool?,
-  #complexTarget: Bool?,
   #lose: Bool?,
   #discard: Bool?,
   #delay: Bool?,
@@ -1145,10 +1129,6 @@ macro @skill_group(
     <mainSkill>mainSkill: #mainSkill,</mainSkill>
     <viceSkill>viceSkill: #viceSkill,</viceSkill>
     <preHidden>preHidden: #preHidden,</preHidden>
-    <deadTarget>deadTarget: #deadTarget,</deadTarget>
-    <includeOut>includeOut: #includeOut,</includeOut>
-    <multitarget>multitarget: #multitarget,</multitarget>
-    <complexTarget>complexTarget: #complexTarget,</complexTarget>
     <lose>lose: #lose,</lose>
     <discard>discard: #discard,</discard>
     <delay>delay: #delay,</delay>

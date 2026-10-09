@@ -129,7 +129,7 @@ export const SHYA_RULES = [
     "属性与方法一律用**空格**连接，不要用点：写 player hp、player draw(1)、get color(card)、event cards。写成 player.hp 会直接语法报错。",
     "语句类槽（#filter / #check / #cost / #content / #filterCard / #filterTarget）**直接写语句**，不要包大括号，多条语句换行写。",
     "局部变量可以写 const 名 = 值；分支可以写 if (条件) { … } else { … }。",
-    "技能标签是独立的槽行（一行一个，缺省就不写，不按技能种类限制）：布尔标签写 true —— #forced 强制发动 / #frequent 自动发动 / #locked 锁定技 / #limited 限定技 / #juexingji 觉醒技 / #zhuSkill 主公技 / #preHidden 预亮 / #multitarget 多名角色 / #firstDo 最先触发 / #lastDo 最后触发；带值的写 #usable: 1（每回合限一次）、#round: 1（每轮限一次）、#groupSkill: \"wei\"（势力技）、#animationColor: \"fire\"（动画色）。",
+    "技能标签是独立的槽行（一行一个，缺省就不写；**按技能种类过滤**）：布尔标签写 true —— #forced 强制发动 / #frequent 自动发动 / #locked 锁定技 / #limited 限定技 / #juexingji 觉醒技 / #zhuSkill 主公技 / #preHidden 预亮 / #firstDo 最先触发 / #lastDo 最后触发；带值的写 #usable: 1（每回合限一次）、#round: 1（每轮限一次）、#groupSkill: \"wei\"（势力技）、#animationColor: \"fire\"（动画色）。#multitarget / #deadTarget / #includeOut / #complexTarget 只在主动技（@skill_phaseUse / @skill_chooseToUse / @skill_chooseToRespond / @skill_useRespond / @skill_viewAs / @skill_raw）里写，触发技写了会编译报错。",
     "不要写箭头函数、不要写 import/export、不要写 console.log、不要用 try/catch。",
     "get / lib / ui / ai / game / _status 是引擎全局量，直接用即可（编译器可能给一条 TC010 警告，属正常）。",
     "不要发明引擎里没有的 API。只能用上面 Player / get 清单里列出的成员；拿不准就不用。",

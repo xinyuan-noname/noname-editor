@@ -6,15 +6,22 @@ import {
     TAG_NUMBER_MIN,
     TAG_NUMBER_MAX,
     SPECIAL_TAG_PREFIXES,
+    SPECIAL_TAG_GROUPS,
     getSpecialGroups,
+    tagPagesForKind,
+    specialGroupForTag,
     linesFromTags,
     readTagRegion,
     writeTagRegion,
     clearTagRegion,
+    replaceInlineSlot,
     tagsFromTagLines,
+    tagNumbersFromSource,
+    tagFromSlotLine,
     inlineTagKeys,
     inlineTagSlots,
-    tagSlotName
+    tagSlotName,
+    INLINE_REPLACEABLE_SLOTS
 } from "./shya/tags.mjs";
 import { SKILL_KINDS, getSkillKind } from "./shya/skillTemplates.mjs";
 
@@ -62,10 +69,13 @@ class HTMLNonameShyaEditorElement extends HTMLNonameFocusUIElement {
     generatedCode = "";
     /** 已选标签（内部键） */
     chosenTags = new Set();
-    /** 标签面板当前页（TAG_PAGES 的 key，或 "special"） */
-    activeTagPage = "fadong";
-    /** 「每回合限n次 / 每n轮限一次」里的 n */
+    /** 标签面板当前页（TAG_PAGES 的 key；换种类后归零，由面板退回第一页） */
+    activeTagPage = "";
+    /** 「每回合限n次 / 每n轮限一次」里的 n（芯片旁的 − / + 调） */
     tagNumbers = { usable: 1, round: 1 };
+    /** 齿轮弹出的小面板，与它「点别处收起」的监听 */
+    specialPopup = null;
+    specialPopupCloser = null;
     /** 当前选中的技能种类（SKILL_KINDS 的 key） */
     currentKind = "";
     /** 源码是否已被动过：没动过时插模板直接整块替换，避免与初始示例叠在一起 */
@@ -91,7 +101,6 @@ shadow.innerHTML=`
     <div class="kind-bar">
         <span class="kind-label">技能种类</span>
         <div class="kind-buttons"></div>
-        <span class="kind-hint" title="快捷键（只在源码框内生效）&#10;Tab 缩进 / Shift+Tab 反缩进&#10;Enter 保持上一行缩进（行尾是 { 或 : 时多缩进一级）&#10;Shift+Alt+↑ / Shift+Alt+↓ 复制当前行（或选区）&#10;Shift+Alt+D 删除当前行（或选区）">快捷键：Tab 缩进 · Shift+Tab 反缩进 · Enter 保持缩进 · Shift+Alt+↑/↓ 复制行 · Shift+Alt+D 删除行</span>
     </div>
     <div class="tools">
         <div class="tools-tabs">
@@ -103,7 +112,6 @@ shadow.innerHTML=`
                 <div class="tag-groups"></div>
                 <div class="tag-footer">
                     <span class="tag-count">已选 0 项</span>
-                    <label class="tag-n" title="「每回合限n次 / 每n轮限一次」里的 n（1~20）">n <input class="tag-n-input" type="number" min="1" max="20" step="1" value="1"></label>
                     <button class="tag-insert" type="button">写入标签</button>
                     <button class="tag-clear" type="button">清空</button>
                 </div>
@@ -121,8 +129,7 @@ shadow.innerHTML=`
             <pre class="output"></pre>
         </div>
     </div>
-</section>
-`
+</section>`
 //#: shadow , html/shyaEditor.html//
     }
     connectedCallback() {
@@ -144,16 +151,11 @@ shadow.innerHTML=`
         const closeButton = q(".close");
         if (closeButton) closeButton.addEventListener("pointerup", () => this.remove());
         //标签工具：选中标签后写进源码里的 //#tags-begin … //#tags-end 托管区
+        //（次数没有底部输入框：usable / round 的 − / + 就画在对应芯片旁边）
         const tagInsert = q(".tag-insert");
         const tagClear = q(".tag-clear");
-        const tagNumber = q(".tag-n-input");
         if (tagInsert) tagInsert.addEventListener("pointerup", () => this.writeTags());
         if (tagClear) tagClear.addEventListener("pointerup", () => this.clearTags());
-        if (tagNumber) tagNumber.addEventListener("change", () => {
-            this.tagNumbers.usable = this.clampTagNumber(tagNumber.value);
-            this.tagNumbers.round = this.tagNumbers.usable;
-            this.renderTagCount();
-        });
         //技能种类：一排按钮（形态照旧版编辑器的「技能种类」，不用下拉框）
         this.renderKindBar();
         //标签面板按源码回填（模板/草稿里已有的标签槽一眼可见）
@@ -245,22 +247,33 @@ shadow.innerHTML=`
         }
     }
     /**
-     * 标签面板：页签（旧版「技能标签」九页 + 「特殊设置」）+ 当前页 chips + 底部计数
-     * 冷色调：选中态用冷蓝，未选为半透明冷灰
+     * 标签面板：页签（**按技能种类过滤**）+ 当前页 chips + 底部计数。
+     * 值型标签（usable / round）自带 − / + 记数器；带特殊设置的标签（势力 / 技能动画 /
+     * 宗族 / 主将·副将）自带 ⚙ —— 点开就是旧版「特殊设置」页那一组候选。
+     * 冷色调：选中态用冷蓝，未选为半透明冷灰。
      */
     renderTagPanel() {
         this.renderTagPages();
         this.renderTagChips();
         this.renderTagCount();
     }
-    /** 页签：九页标签 + 特殊设置（形态对齐旧版「技能标签」页的类别按钮） */
+    /**
+     * 面板判定用的技能种类：点过「技能种类」按钮就用它，否则按源码里的宏名推断
+     * （宏名与种类 key 同名：@skill_trigger → trigger、@skill_raw → raw …）。
+     * @returns {string}
+     */
+    panelKind() {
+        if (this.currentKind) return this.currentKind;
+        const matched = /@skill_([A-Za-z_]\w*)/.exec(this.sourceArea ? this.sourceArea.value : "");
+        if (!matched) return "";
+        return SKILL_KINDS.some(kind => kind.key === matched[1]) ? matched[1] : "";
+    }
+    /** 页签：按技能种类过滤（「选角色」只给主动技与自由技能，见 tags.mjs 的 TARGET_PAGE_KINDS） */
     renderTagPages() {
         const root = this.shadowRoot.querySelector(".tag-pages");
         if (!root) return;
-        const pages = [
-            ...TAG_PAGES.map(page => ({ key: page.key, name: page.name, title: page.description })),
-            { key: "special", name: "特殊设置", title: "势力 / 技能动画 / 宗族 / 主将·副将（按已选标签出现，与旧版一致）" }
-        ];
+        const pages = tagPagesForKind(this.panelKind());
+        if (!pages.some(page => page.key === this.activeTagPage)) this.activeTagPage = pages.length ? pages[0].key : "";
         root.replaceChildren();
         pages.forEach(page => {
             const button = document.createElement("button");
@@ -268,7 +281,7 @@ shadow.innerHTML=`
             button.className = "tag-page";
             button.dataset.tagPage = page.key;
             button.textContent = page.name;
-            button.title = page.title || "";
+            button.title = page.description || "";
             if (this.activeTagPage === page.key) button.classList.add("chosen");
             button.addEventListener("pointerup", () => {
                 this.activeTagPage = page.key;
@@ -277,29 +290,19 @@ shadow.innerHTML=`
             root.appendChild(button);
         });
     }
-    /** 当前页的 chips；特殊设置页只列「已选标签命中 requires」的组（旧版行为） */
+    /** 当前页的 chips（当前页被种类过滤掉时退回第一页） */
     renderTagChips() {
         const root = this.shadowRoot.querySelector(".tag-groups");
         if (!root) return;
+        this.closeSpecialPopup();
         root.replaceChildren();
-        if (this.activeTagPage === "special") {
-            const groups = getSpecialGroups(lib, this.chosenTags);
-            if (!groups.length) {
-                const hint = document.createElement("div");
-                hint.className = "tag-hint";
-                hint.textContent = "先在其它页选「势力技 / 技能动画 / 宗族技 / 主将技·副将技」，这里才会出现对应的特殊标签（与旧版一致）";
-                root.appendChild(hint);
-                return;
-            }
-            groups.forEach(group => root.appendChild(this.createTagGroup(group)));
-            return;
-        }
-        const page = TAG_PAGES.find(item => item.key === this.activeTagPage) || TAG_PAGES[0];
-        root.appendChild(this.createTagGroup(page));
+        const pages = tagPagesForKind(this.panelKind());
+        const page = pages.find(item => item.key === this.activeTagPage) || pages[0];
+        if (page) root.appendChild(this.createTagGroup(page));
     }
     /**
      * 画一个标签组（组名 + chips）
-     * @param {{name:string,description?:string,tags:Array<{key:string,name:string,hint?:string}>}} group
+     * @param {{name:string,description?:string,tags:Array<{key:string,name:string,hint?:string,counter?:string}>}} group
      */
     createTagGroup(group) {
         const box = document.createElement("div");
@@ -311,45 +314,207 @@ shadow.innerHTML=`
         box.appendChild(title);
         const list = document.createElement("div");
         list.className = "tag-list";
-        group.tags.forEach(tag => {
-            const chip = document.createElement("button");
-            chip.type = "button";
-            chip.className = "tag-chip";
-            chip.dataset.tagKey = tag.key;
-            chip.textContent = tag.name;
-            chip.title = tag.hint || tag.name;
-            if (this.chosenTags.has(tag.key)) chip.classList.add("chosen");
-            chip.addEventListener("pointerup", () => this.toggleTag(tag.key));
-            list.appendChild(chip);
-        });
+        group.tags.forEach(tag => list.appendChild(this.createTagItem(tag)));
         box.appendChild(list);
         return box;
     }
     /**
-     * 选中/取消一个标签。特殊设置的四类前缀互斥（旧版 findPrefix：group- / animation- / clan- / mainVice-）
+     * 一个标签 = 芯片 + 可能的 − / + 记数器（值型标签）+ ⚙（带特殊设置的标签）
+     * @param {{key:string,name:string,hint?:string,counter?:string}} tag
+     */
+    createTagItem(tag) {
+        const item = document.createElement("span");
+        item.className = "tag-item";
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "tag-chip";
+        chip.dataset.tagKey = tag.key;
+        chip.textContent = tag.name;
+        chip.title = tag.hint || tag.name;
+        if (this.chosenTags.has(tag.key)) chip.classList.add("chosen");
+        chip.addEventListener("pointerup", () => this.toggleTag(tag.key));
+        item.appendChild(chip);
+        if (tag.counter) item.appendChild(this.createTagStepper(tag));
+        if (specialGroupForTag(tag.key)) {
+            item.appendChild(this.createTagGear(tag.key));
+            const value = this.specialTagName(tag.key);
+            if (value) {
+                const badge = document.createElement("span");
+                badge.className = "tag-value";
+                badge.textContent = value;
+                badge.title = `已设：${value}`;
+                item.appendChild(badge);
+            }
+        }
+        return item;
+    }
+    /** 值型标签的 − / + 记数器（点一下就把这个标签选上，次数直接进 tagNumbers） */
+    createTagStepper(tag) {
+        const which = tag.counter;
+        const box = document.createElement("span");
+        box.className = "tag-stepper";
+        box.title = tag.hint || "";
+        const minus = document.createElement("button");
+        minus.type = "button";
+        minus.className = "tag-step-btn";
+        minus.dataset.tagStep = which;
+        minus.dataset.stepDelta = "-1";
+        minus.textContent = "−";
+        minus.addEventListener("pointerup", () => this.setTagNumber(which, this.tagNumbers[which] - 1));
+        const input = document.createElement("input");
+        input.className = "tag-step-value";
+        input.dataset.tagStepValue = which;
+        input.type = "text";
+        input.inputMode = "numeric";
+        input.value = String(this.tagNumbers[which]);
+        input.addEventListener("change", () => this.setTagNumber(which, input.value));
+        const plus = document.createElement("button");
+        plus.type = "button";
+        plus.className = "tag-step-btn";
+        plus.dataset.tagStep = which;
+        plus.dataset.stepDelta = "1";
+        plus.textContent = "＋";
+        plus.addEventListener("pointerup", () => this.setTagNumber(which, this.tagNumbers[which] + 1));
+        box.append(minus, input, plus);
+        return box;
+    }
+    /** 带特殊设置的标签旁的齿轮：点开弹这一组的候选（势力 / 动画色 / 宗族 / 阴阳鱼） */
+    createTagGear(tagKey) {
+        const group = this.specialGroupOf(tagKey);
+        const gear = document.createElement("button");
+        gear.type = "button";
+        gear.className = "tag-gear";
+        gear.dataset.tagGear = tagKey;
+        gear.textContent = "⚙";
+        gear.title = group ? `${group.name}设置：${group.description || ""}` : "设置";
+        if (group && group.tags.some(tag => this.chosenTags.has(tag.key))) gear.classList.add("chosen");
+        gear.addEventListener("pointerup", event => {
+            event.stopPropagation();
+            this.openSpecialPopup(tagKey, gear);
+        });
+        return gear;
+    }
+    /** 这个标签对应的特殊设置组（没有齿轮返回 null） */
+    specialGroupOf(tagKey) {
+        if (!specialGroupForTag(tagKey)) return null;
+        return getSpecialGroups(lib, [tagKey])[0] || null;
+    }
+    /** 这个标签当前选中的具体值（势力 / 动画色 / 宗族名），没有返回空串 */
+    specialTagName(tagKey) {
+        const group = this.specialGroupOf(tagKey);
+        if (!group) return "";
+        const chosen = group.tags.find(tag => this.chosenTags.has(tag.key));
+        return chosen ? chosen.name : "";
+    }
+    /** 往选中集合里加一个标签：四类特殊前缀互斥 + 同一个槽只留一条（不渲染） */
+    selectTag(key) {
+        SPECIAL_TAG_PREFIXES.forEach(prefix => {
+            if (!key.startsWith(prefix)) return;
+            for (const chosen of [...this.chosenTags]) {
+                if (chosen.startsWith(prefix)) this.chosenTags.delete(chosen);
+            }
+        });
+        const slot = tagSlotName(key);
+        if (slot) {
+            for (const chosen of [...this.chosenTags]) {
+                if (chosen !== key && tagSlotName(chosen) === slot) this.chosenTags.delete(chosen);
+            }
+        }
+        this.chosenTags.add(key);
+    }
+    /**
+     * 选中/取消一个标签（同槽只留一条；特殊设置四类前缀互斥）
      * @param {string} key 标签内部键
      */
     toggleTag(key) {
-        if (this.chosenTags.has(key)) {
-            this.chosenTags.delete(key);
-        } else {
-            //特殊设置的四类前缀互斥（旧版 findPrefix：group- / animation- / clan- / mainVice-）
-            SPECIAL_TAG_PREFIXES.forEach(prefix => {
-                if (!key.startsWith(prefix)) return;
-                for (const chosen of [...this.chosenTags]) {
-                    if (chosen.startsWith(prefix)) this.chosenTags.delete(chosen);
-                }
-            });
-            //同一个槽只留一条（usable-1 与 usable-n 是一个槽 usable）
-            const slot = tagSlotName(key);
-            if (slot) {
-                for (const chosen of [...this.chosenTags]) {
-                    if (chosen !== key && tagSlotName(chosen) === slot) this.chosenTags.delete(chosen);
-                }
-            }
-            this.chosenTags.add(key);
-        }
+        if (this.chosenTags.has(key)) this.chosenTags.delete(key);
+        else this.selectTag(key);
         this.renderTagPanel();
+    }
+    /** − / + 或手填改次数（1~20）：同时把这个值型标签选上——点加减号就是要用它 */
+    setTagNumber(which, value) {
+        this.tagNumbers[which] = this.clampTagNumber(value);
+        if (!this.chosenTags.has(which)) this.selectTag(which);
+        this.renderTagPanel();
+    }
+    /**
+     * 齿轮弹的小面板：列这一组的候选值，选中即写进标签。
+     * 候选与旧版「特殊设置」页同一批（getSpecialGroups），只是从整页收进了齿轮里。
+     * @param {string} tagKey 带齿轮的标签键
+     * @param {HTMLElement} anchor 齿轮节点（定位用）
+     */
+    openSpecialPopup(tagKey, anchor) {
+        this.closeSpecialPopup();
+        const group = this.specialGroupOf(tagKey);
+        if (!group || !anchor) return;
+        const popup = document.createElement("div");
+        popup.className = "tag-popup";
+        const title = document.createElement("div");
+        title.className = "tag-popup-title";
+        title.textContent = group.name;
+        popup.appendChild(title);
+        const list = document.createElement("div");
+        list.className = "tag-popup-list";
+        group.tags.forEach(tag => {
+            const option = document.createElement("button");
+            option.type = "button";
+            option.className = "tag-popup-option";
+            option.dataset.tagOption = tag.key;
+            option.textContent = tag.name;
+            option.title = tag.hint || tag.name;
+            if (this.chosenTags.has(tag.key)) option.classList.add("chosen");
+            option.addEventListener("pointerup", () => this.chooseSpecialTag(tagKey, tag.key));
+            list.appendChild(option);
+        });
+        popup.appendChild(list);
+        const clear = document.createElement("button");
+        clear.type = "button";
+        clear.className = "tag-popup-option clear";
+        clear.textContent = "清除";
+        clear.addEventListener("pointerup", () => this.clearSpecialTag(group));
+        popup.appendChild(clear);
+        //定位按齿轮在视口里的位置现算（面板是 shadowRoot + overflow:auto，fixed 才不会被裁）
+        const rect = anchor.getBoundingClientRect();
+        popup.style.left = `${Math.max(4, Math.min(rect.left, window.innerWidth - 220))}px`;
+        popup.style.top = `${rect.bottom + 4}px`;
+        this.shadowRoot.appendChild(popup);
+        this.specialPopup = popup;
+        this.specialPopupCloser = event => {
+            if (popup.contains(event.target)) return;
+            this.closeSpecialPopup();
+        };
+        this.shadowRoot.addEventListener("pointerdown", this.specialPopupCloser, true);
+    }
+    /** 收起齿轮小面板（幂等） */
+    closeSpecialPopup() {
+        if (this.specialPopupCloser) {
+            this.shadowRoot.removeEventListener("pointerdown", this.specialPopupCloser, true);
+            this.specialPopupCloser = null;
+        }
+        if (this.specialPopup) {
+            this.specialPopup.remove();
+            this.specialPopup = null;
+        }
+    }
+    /** 齿轮面板里选一个具体值：特殊值 + 它的父标签一起选中（`#groupSkill: "wei"` 也意味着「势力技」） */
+    chooseSpecialTag(tagKey, optionKey) {
+        this.selectTag(optionKey);
+        this.chosenTags.add(tagKey);
+        this.closeSpecialPopup();
+        this.renderTagPanel();
+    }
+    /** 齿轮面板里的「清除」：这一组的特殊值全部取消（父标签留着） */
+    clearSpecialTag(group) {
+        group.tags.forEach(tag => this.chosenTags.delete(tag.key));
+        this.closeSpecialPopup();
+        this.renderTagPanel();
+    }
+    /** 面板归零：换技能种类 / 「清空」都走这里（别像标签页那样把上一种的标签留着） */
+    resetTagState() {
+        this.chosenTags = new Set();
+        this.tagNumbers = { usable: TAG_NUMBER_MIN, round: TAG_NUMBER_MIN };
+        this.activeTagPage = "";
+        this.closeSpecialPopup();
     }
     /** 底部「已选 N 项」 */
     renderTagCount() {
@@ -357,7 +522,10 @@ shadow.innerHTML=`
         if (!counter) return;
         const names = new Map();
         TAG_PAGES.forEach(page => page.tags.forEach(tag => names.set(tag.key, tag.name)));
-        getSpecialGroups(lib, this.chosenTags).forEach(group => group.tags.forEach(tag => names.set(tag.key, tag.name)));
+        SPECIAL_TAG_GROUPS.forEach(item => {
+            const group = this.specialGroupOf(item.tag);
+            if (group) group.tags.forEach(tag => names.set(tag.key, tag.name));
+        });
         const chosen = [...this.chosenTags].map(key => names.get(key) || key);
         counter.textContent = chosen.length ? `已选 ${chosen.length} 项：${chosen.join("、")}` : "已选 0 项";
     }
@@ -367,6 +535,10 @@ shadow.innerHTML=`
         if (!Number.isFinite(num)) return TAG_NUMBER_MIN;
         return Math.max(TAG_NUMBER_MIN, Math.min(TAG_NUMBER_MAX, num));
     }
+    /** 组件被移除时把齿轮小面板一起收掉（它是挂在 shadowRoot 上的 fixed 节点） */
+    disconnectedCallback() {
+        this.closeSpecialPopup();
+    }
     /** 技能 id：优先工具栏输入框，其次源码的 #skill 槽（特殊标签 mainVice-remove1 要写进 init 里） */
     currentSkillId() {
         const input = this.shadowRoot.querySelector(".skill-id");
@@ -375,8 +547,11 @@ shadow.innerHTML=`
         return matched ? matched[1] : "";
     }
     /**
-     * 把已选标签写进源码：托管区存在就整块替换，不存在就插到 @skill_* 宏体开头。
-     * 已经手写在宏体里（托管区外）的标签不再重复写（同名槽编译器不报错、后者胜，但两条互相矛盾很坑）。
+     * 把已选标签写进源码：
+     *   · 值型槽（usable / round / locked / …）在宏体里**手写过**时，就地改那一行——
+     *     否则芯片旁 − / + 调出来的次数落不进源码（@skill_phaseUse 模板自带 #usable: 1 就是这种情况）；
+     *   · 其余写进 //#tags-begin … //#tags-end 托管区（存在就整块替换）；
+     *   · 宏体里已经手写过的其它槽不再重复写（同名槽编译器不报错、后者胜，但两条互相矛盾很坑）。
      */
     writeTags() {
         if (!this.sourceArea) return;
@@ -384,33 +559,61 @@ shadow.innerHTML=`
             this.setDiagnostics('<span class="warn">请先在上面选标签</span>');
             return;
         }
-        const inline = inlineTagKeys(this.sourceArea.value);
-        const inlineSlots = inlineTagSlots(this.sourceArea.value);
-        //宏体里已写过的标签/槽不再重复写（同名槽编译器不报错、后者胜，但两条互相矛盾很坑）
-        const pending = [...this.chosenTags].filter(key => !inline.has(key) && !inlineSlots.has(tagSlotName(key)));
-        const lines = linesFromTags(pending, {
+        const lines = linesFromTags(this.chosenTags, {
             skillId: this.currentSkillId(),
             main: this.chosenTags.has("mainSkill"),
             vice: this.chosenTags.has("viceSkill"),
             numbers: this.tagNumbers
         });
-        if (!lines.length) {
+        const inlineSlots = inlineTagSlots(this.sourceArea.value);
+        const regionLines = [];
+        const inlineLines = new Map();
+        let skipped = 0;
+        for (const line of lines) {
+            const slot = tagSlotName(tagFromSlotLine(line) || "");
+            if (!slot || !inlineSlots.has(slot)) {
+                regionLines.push(line);
+                continue;
+            }
+            if (!INLINE_REPLACEABLE_SLOTS.includes(slot)) {
+                skipped++;
+                continue;
+            }
+            if (!inlineLines.has(slot)) inlineLines.set(slot, []);
+            inlineLines.get(slot).push(line);
+        }
+        //宏体里手写的值型槽：就地改那一行（一次改一处，改完重新取文本，位置不会串）
+        let replaced = 0;
+        for (const [slot, slotLines] of inlineLines) {
+            const result = replaceInlineSlot(this.sourceArea.value, slot, slotLines);
+            if (!result.ok) {
+                regionLines.push(...slotLines);
+                continue;
+            }
+            if (this.sourceArea.value.slice(result.start, result.end) === result.text) continue;
+            this.replaceRange(result.start, result.end, result.text);
+            replaced++;
+        }
+        if (regionLines.length) {
+            const result = writeTagRegion(this.sourceArea.value, regionLines);
+            if (!result.ok) {
+                this.setDiagnostics(`<span class="warn">${this.escape(result.reason)}</span>`);
+                return;
+            }
+            this.replaceRange(result.start, result.end, result.text);
+        } else {
             const removed = clearTagRegion(this.sourceArea.value);
             if (removed.ok) this.replaceRange(removed.start, removed.end, removed.text);
-            this.setDiagnostics(`<span class="ok">已选的 ${this.chosenTags.size} 项都写在宏体里（托管区外），无需重复写入</span>`);
-            return;
         }
-        const result = writeTagRegion(this.sourceArea.value, lines);
-        if (!result.ok) {
-            this.setDiagnostics(`<span class="warn">${this.escape(result.reason)}</span>`);
-            return;
-        }
-        this.replaceRange(result.start, result.end, result.text);
-        this.setDiagnostics(`<span class="ok">已写入 ${lines.length} 行标签（托管区 //#tags-begin … //#tags-end）</span>`);
+        const done = [];
+        if (regionLines.length) done.push(`托管区写入 ${regionLines.length} 行`);
+        if (replaced) done.push(`就地改了 ${replaced} 处手写槽`);
+        if (skipped) done.push(`跳过 ${skipped} 条宏体里已写过的标签`);
+        this.setDiagnostics(`<span class="ok">${done.length ? done.join("，") : "已选的标签都已在源码里"}</span>`);
     }
-    /** 清空：面板选择清掉，源码里的托管区也删掉（宏体里手写的标签槽不动） */
+    /** 清空：面板选择清掉（次数归 1），源码里的托管区也删掉（宏体里手写的标签槽不动） */
     clearTags() {
-        this.chosenTags.clear();
+        this.resetTagState();
         if (this.sourceArea) {
             const result = clearTagRegion(this.sourceArea.value);
             if (result.ok) this.replaceRange(result.start, result.end, result.text);
@@ -424,9 +627,8 @@ shadow.innerHTML=`
         const parsed = tagsFromTagLines(region ? region.lines : []);
         inlineTagKeys(this.sourceArea.value).forEach(key => parsed.tags.add(key));
         this.chosenTags = parsed.tags;
-        this.tagNumbers = parsed.numbers;
-        const input = this.shadowRoot.querySelector(".tag-n-input");
-        if (input) input.value = String(parsed.numbers.usable);
+        //次数从**整段宏体**里扫（托管区行也在宏体内）：模板自带或手写的 #usable: 3 才读得回来
+        this.tagNumbers = tagNumbersFromSource(this.sourceArea.value);
         this.renderTagPanel();
         return this;
     }
@@ -451,26 +653,45 @@ shadow.innerHTML=`
         });
     }
     /**
-     * 选中某个技能种类：更新选中态，并写入该类模板
+     * 选中某个技能种类：更新选中态、**把标签面板归零**，再写入该类模板。
+     * 换种类 = 直接清除覆盖：上一种的标签勾选与源码里的托管区一起清掉，只留新模板自带的标签槽——
+     * 不这样做，面板会像标签页一样把上一种的标签一直留着。
      * @param {string} key SKILL_KINDS 里的 key
      */
     chooseKind(key) {
         if (!getSkillKind(key)) return;
+        const switched = this.currentKind !== key;
+        const overwrite = this.canReplaceSource();
         this.currentKind = key;
         this.renderKindBar();
-        this.insertTemplate(key);
+        if (switched) {
+            this.resetTagState();
+            //整块覆盖时托管区随旧源码一起去掉；插到光标处时才需要单独清掉它
+            if (!overwrite) {
+                const removed = this.sourceArea ? clearTagRegion(this.sourceArea.value) : { ok: false };
+                if (removed.ok) this.replaceRange(removed.start, removed.end, removed.text);
+            }
+        }
+        this.insertTemplate(key, { overwrite });
+    }
+    /** 源码没动过 / 是空的 / 还等于上一次写进去的模板 → 换种类时整块覆盖（否则只插到光标处） */
+    canReplaceSource() {
+        const node = this.sourceArea;
+        if (!node) return false;
+        return !this.sourceTouched || !node.value.trim() || node.value === this.lastTemplateText;
     }
     /**
      * 把某类技能的最简模板写进源码：源码为空或还是初始示例时整块替换，否则插到光标处
      * @param {string} key SKILL_KINDS 里的 key
+     * @param {{ overwrite?: boolean }} [options] overwrite=true 强制整块覆盖（换种类时由 chooseKind 传）
      */
-    insertTemplate(key) {
+    insertTemplate(key, options = {}) {
         const kind = getSkillKind(key);
         if (!kind || !this.sourceArea) return;
         const text = kind.template;
         const node = this.sourceArea;
-        //没动过 / 空 / 还是上一次写进去的模板 → 整块替换，点着换种类不会越堆越多
-        if (!this.sourceTouched || !node.value.trim() || node.value === this.lastTemplateText) {
+        //没动过 / 空 / 还是上一次写进去的模板（或调用方明确要求覆盖）→ 整块替换，点着换种类不会越堆越多
+        if (options.overwrite === true || this.canReplaceSource()) {
             this.replaceRange(0, node.value.length, text);
             //整块替换后光标回到开头、视野回顶部（否则停在模板末尾，看不到开头）
             node.setSelectionRange(0, 0);

@@ -2,23 +2,27 @@
 // 技能标签字典（纯数据 + 纯逻辑，零全局挂载）
 //
 // 来源：旧版技能编辑器
-//   · 「技能标签」页九页 39 项：module/editor/skill/editor.mjs:972-1030 的 TAG_TYPE_LIST
+//   · 「技能标签」页九页：module/editor/skill/editor.mjs:972-1030 的 TAG_TYPE_LIST
 //   · 「特殊设置」页四组：editor.mjs:1159-1231（uniqueList，按已选标签出现）
 //   · 标签 → 产物字段的映射：skill/editor/organize.mjs:265-324 的 skillTag()
 //     与 :327-344 的 init()
 //
-// 与旧版一致的两条铁律：
-//   1. **标签不按技能种类过滤** —— 旧版九个页面的按钮永远全在，产物也是原样
-//      `<标签>: true`；所以新版任何标签都能写在任何技能宏上（skill-type.shya 里
-//      每个技能宏都有下面 TAG_SLOTS 的全部槽）。
-//   2. **不校验冲突** —— 同时选 locked 与 locked-false 也照写；旧版只对「特殊设置」
-//      的四个前缀做互斥（group- / animation- / clan- / mainVice-，见 findPrefix）。
+// 新版与旧版的三处差异（2026-10 按用户要求改）：
+//   1. **按技能种类过滤**：「选角色」页只给主动技 + 自由技能（TARGET_PAGE_KINDS）。
+//      依据：引擎里 deadTarget / includeOut / multitarget / complexTarget 只出现在 enable
+//      类技能的选目标流程里（例：standard/skill.js 的 lijian、bingshi/skill.js 的 potdimeng），
+//      触发技不选目标。宏侧同步：@skill_trigger / @skill_mod / @skill_group 不再声明这 4 个槽。
+//   2. 「自定义」页并进「发动」页：usable / round 两个芯片带 − / + 记数器（产物 `#usable: n`），
+//      面板底部那个全局 n 输入框已下线。
+//   3. 「特殊设置」不再单独一页：势力 / 技能动画 / 宗族 / 主将·副将四组拆开挂在对应标签旁的
+//      **小齿轮 ⚙** 上（SPECIAL_TAG_GROUPS），点齿轮弹小面板选具体值。
 //
-// 新版与旧版的形态差异只有一个（shya 编译期没有字符串比较，宏无法按标签名翻字段名）：
-//   标签的载体 = skill-type.shya 里每个技能宏的 39 个**类型化槽**；
-//   面板把选中的标签写成源码里的 `#槽: 值` 行，包在
-//   `//#tags-begin` … `//#tags-end` 托管区里（见 writeTagRegion / readTagRegion）。
-//   托管区之外的手写标签槽一律不碰。
+// 照旧的两条铁律：
+//   1. **不校验冲突** —— 同时选 locked 与 locked-false 也照写；只对「特殊设置」的四个前缀
+//      做互斥（group- / animation- / clan- / mainVice-，见 SPECIAL_TAG_PREFIXES）。
+//   2. 标签的载体 = skill-type.shya 里技能宏的**类型化槽**；面板把选中的标签写成源码里的
+//      `#槽: 值` 行，包在 //#tags-begin … //#tags-end 托管区里（见 writeTagRegion）。
+//      托管区之外手写的标签槽一律不碰——值型槽例外，就地改那一行（replaceInlineSlot）。
 // ============================================================================
 
 /** 托管区标记：面板维护的标签行都夹在这两行之间 */
@@ -80,7 +84,32 @@ export const TAG_SLOTS = [
 ];
 
 /**
- * 旧版「技能标签」页：九页 39 项，页名/顺序照抄 TAG_TYPE_LIST。
+ * 只有「选角色」页用到的 4 个槽：宏侧只在主动技与自由技能里声明它们
+ * （@skill_trigger / @skill_mod / @skill_group 已删除这 4 个槽，写了会编译报错）。
+ * @type {string[]}
+ */
+export const TARGET_ONLY_SLOTS = ["deadTarget", "includeOut", "multitarget", "complexTarget"];
+
+/**
+ * 会「选目标」的技能种类：主动技 + 自由技能（自由技能什么都能写，所以也算上）。
+ * 只有这些种类的面板显示「选角色」页，也只有它们的宏声明 TARGET_ONLY_SLOTS。
+ * @type {string[]}
+ */
+export const TARGET_PAGE_KINDS = ["phaseUse", "chooseToUse", "chooseToRespond", "useRespond", "viewAs", "raw"];
+
+/**
+ * 某个技能种类能用的标签槽（顺序与 TAG_SLOTS 一致）。
+ * @param {string} kind SKILL_KINDS 的 key
+ * @returns {Array<{ name: string, type: string }>}
+ */
+export function slotsForKind(kind) {
+    if (TARGET_PAGE_KINDS.includes(kind)) return TAG_SLOTS.slice();
+    return TAG_SLOTS.filter(slot => !TARGET_ONLY_SLOTS.includes(slot.name));
+}
+
+/**
+ * 旧版「技能标签」页：九页（「自定义」页已并进「发动」页），页名/顺序照抄 TAG_TYPE_LIST。
+ * 带 kinds 的页只在那些种类下显示（没写 kinds = 所有种类都显示）。
  * 每项 key 即标签内部键，name 是旧版按钮文字，hint 说明它产出的字段。
  * @type {Array<{ key: string, name: string, description: string, tags: Array<{key:string,name:string,hint:string}> }>}
  */
@@ -94,8 +123,8 @@ export const TAG_PAGES = [
             { key: "frequent", name: "自动发动", hint: "产物 frequent: true" },
             { key: "direct", name: "直接发动", hint: "产物 direct: true" },
             { key: "forceDie", name: "死亡可发动", hint: "产物 forceDie: true" },
-            { key: "usable-1", name: "每回合一次", hint: "产物 usable: 1" },
-            { key: "round-1", name: "每轮一次", hint: "产物 round: 1" }
+            { key: "usable", name: "每回合限n次", hint: "产物 usable: n；点芯片旁的 − / + 调次数", counter: "usable" },
+            { key: "round", name: "每n轮限一次", hint: "产物 round: n；点芯片旁的 − / + 调次数", counter: "round" }
         ]
     },
     {
@@ -149,7 +178,8 @@ export const TAG_PAGES = [
     {
         key: "xuanjuese",
         name: "选角色",
-        description: "选目标角色的范围与数量",
+        description: "选目标角色的范围与数量（只有主动技与自由技能会选目标，其余种类不显示本页）",
+        kinds: TARGET_PAGE_KINDS,
         tags: [
             { key: "deadTarget", name: "死亡角色可选", hint: "产物 deadTarget: true" },
             { key: "includeOut", name: "离场角色可选", hint: "产物 includeOut: true" },
@@ -177,17 +207,17 @@ export const TAG_PAGES = [
             { key: "firstDo", name: "最先触发", hint: "产物 firstDo: true" },
             { key: "lastDo", name: "最后触发", hint: "产物 lastDo: true" }
         ]
-    },
-    {
-        key: "zidingyi",
-        name: "自定义",
-        description: "带次数的标签（n 取面板底部输入框的值）",
-        tags: [
-            { key: "usable-n", name: "每回合限n次", hint: "产物 usable: n" },
-            { key: "round-n", name: "每n轮限一次", hint: "产物 round: n" }
-        ]
     }
 ];
+
+/**
+ * 按技能种类取可显示的标签页（没写 kinds 的页所有种类都能看）。
+ * @param {string} kind SKILL_KINDS 的 key；空串（认不出种类）按最保守处理，不给「选角色」
+ * @returns {typeof TAG_PAGES}
+ */
+export function tagPagesForKind(kind) {
+    return TAG_PAGES.filter(page => !page.kinds || page.kinds.includes(kind));
+}
 
 /** 动画色（旧版 editor.mjs:1178-1185；前缀 animation- 在特殊设置里互斥） */
 const ANIMATION_TAGS = [
@@ -234,8 +264,36 @@ const SPECIAL_GROUP_META = [
 /** 特殊标签的互斥前缀（旧版 findPrefix 的四个前缀） */
 export const SPECIAL_TAG_PREFIXES = ["group-", "animation-", "clan-", "mainVice-"];
 
-/** 特殊设置组的 key 列表（面板「特殊设置」页用） */
-export const SPECIAL_GROUP_KEYS = SPECIAL_GROUP_META.map(meta => meta.key);
+/**
+ * 哪几个标签带「齿轮 ⚙」：点开就是旧版「特殊设置」页的那一组候选
+ * （面板里不再有独立的「特殊设置」页）。
+ * @type {Array<{ tag: string, group: string }>}
+ */
+export const SPECIAL_TAG_GROUPS = [
+    { tag: "mainSkill", group: "mainVice" },
+    { tag: "viceSkill", group: "mainVice" },
+    { tag: "groupSkill", group: "group" },
+    { tag: "skillAnimation", group: "animation" },
+    { tag: "clanSkill", group: "clan" }
+];
+
+/**
+ * 这个标签有没有齿轮；有就返回它对应的特殊设置组 key，没有返回空串。
+ * @param {string} tagKey
+ * @returns {string}
+ */
+export function specialGroupForTag(tagKey) {
+    const meta = SPECIAL_TAG_GROUPS.find(item => item.tag === tagKey);
+    return meta ? meta.group : "";
+}
+
+/**
+ * **值型单行槽**：宏体里手写了这些槽时，面板改值可以就地换掉那一行
+ * （典型场景：@skill_phaseUse 模板自带 `#usable: 1`，芯片旁的 − / + 调到 3 必须写进源码）。
+ * 其余槽仍按「宏体里写过了就跳过」处理，绝不碰手写内容。
+ * @type {string[]}
+ */
+export const INLINE_REPLACEABLE_SLOTS = ["usable", "round", "locked", "lose", "discard", "delay", "groupSkill", "animationColor"];
 
 function toSet(keys) {
     if (keys instanceof Set) return keys;
@@ -306,19 +364,18 @@ export function inlineTagSlots(source) {
  */
 export function lineFromTag(key, options = {}) {
     const numbers = options.numbers || {};
-    if (key === "usable-1") return ["#usable: 1"];
-    if (key === "usable-n") return [`#usable: ${clampNumber(numbers.usable)}`];
-    if (key === "round-1") return ["#round: 1"];
-    if (key === "round-n") return [`#round: ${clampNumber(numbers.round)}`];
+    //「发动」页的两个次数标签：n 由芯片旁的 − / + 决定（旧版的 usable-1 / usable-n 仍照收）
+    if (key === "usable" || key === "usable-1" || key === "usable-n") return [`#usable: ${clampNumber(numbers.usable)}`];
+    if (key === "round" || key === "round-1" || key === "round-n") return [`#round: ${clampNumber(numbers.round)}`];
     if (key === "locked-false") return ["#locked: false"];
     if (key === "lose-false") return ["#lose: false"];
     if (key === "discard-false") return ["#discard: false"];
     if (key === "delay-false") return ["#delay: false"];
     if (key.startsWith("group-")) return [`#groupSkill: ${JSON.stringify(key.slice(6))}`];
     if (key === "groupSkill") {
-        // 页上的「势力技」本身没有值：具体势力在「特殊设置」页选（旧版同款两段式）。
+        // 页上的「势力技」本身没有值：具体势力点芯片旁的 ⚙ 选（旧版是「特殊设置」页）。
         // 单独选它时写一行注释，既说明去处、也能被面板读回来。
-        return ['// 势力技：到「特殊设置」页选一个具体势力（产物 groupSkill: "wei"）'];
+        return ['// 势力技：点旁边的 ⚙ 选一个具体势力（产物 groupSkill: "wei"）'];
     }
     if (key.startsWith("animation-")) return [`#animationColor: ${JSON.stringify(key.slice(10))}`];
     if (key.startsWith("clan-")) return [`// 宗族：${key.slice(5)}（照旧版不产字段；宗族归属由武将卡设定）`];
@@ -345,7 +402,7 @@ export function linesFromTags(keys, options = {}) {
     const out = [];
     const usedSlots = new Set();
     const hasGroupChild = [...chosen].some(key => String(key).startsWith("group-"));
-    /** 一个槽只写一条（`usable-1` 与 `usable-n` 同时选中时按 TAG_PAGES 顺序取先出现的） */
+    /** 一个槽只写一条（同槽只保留 TAG_PAGES 顺序里先出现的那个标签） */
     const push = key => {
         const slot = tagSlotName(key);
         if (slot && usedSlots.has(slot)) return;
@@ -389,8 +446,8 @@ export function tagFromSlotLine(line) {
     const slot = matched[1];
     const value = matched[2].trim();
     if (slot === "init") return "mainVice-remove1";
-    if (slot === "usable") return value === "1" ? "usable-1" : "usable-n";
-    if (slot === "round") return value === "1" ? "round-1" : "round-n";
+    if (slot === "usable") return "usable";
+    if (slot === "round") return "round";
     if (slot === "groupSkill") return unquote(value) ? `group-${unquote(value)}` : "";
     if (slot === "animationColor") return unquote(value) ? `animation-${unquote(value)}` : "";
     if (value === "false" && (slot === "locked" || slot === "lose" || slot === "discard" || slot === "delay")) return `${slot}-false`;
@@ -429,10 +486,29 @@ export function tagsFromTagLines(lines) {
         if (!key) continue;
         tags.add(key);
         const num = numberFromSlotLine(line);
-        if (key === "usable-n" || key === "usable-1") numbers.usable = num || numbers.usable;
-        if (key === "round-n" || key === "round-1") numbers.round = num || numbers.round;
+        if (key === "usable" || key === "usable-n" || key === "usable-1") numbers.usable = num || numbers.usable;
+        if (key === "round" || key === "round-n" || key === "round-1") numbers.round = num || numbers.round;
     }
     return { tags: withImpliedTags(tags), numbers };
+}
+
+/**
+ * 源码里 usable / round 的当前值（**托管区里的行 + 宏体里手写的值型槽都算**）。
+ * 面板打开 / 换模板后靠它把芯片旁的次数摆对——只读托管区的话，模板自带或用户手写的
+ * `#usable: 3` 会读不回来，点一次「写入标签」就把 3 改回 1。
+ * @param {string} source
+ * @returns {{ usable: number, round: number }}
+ */
+export function tagNumbersFromSource(source) {
+    const numbers = { usable: TAG_NUMBER_MIN, round: TAG_NUMBER_MIN };
+    const call = findMacroCall(String(source || ""));
+    if (!call) return numbers;
+    const body = String(source).slice(call.bodyStart, call.bodyEnd);
+    for (const line of body.split(/\r?\n/)) {
+        const matched = /^#(usable|round)\s*:\s*(\d+)/.exec(line.trim());
+        if (matched) numbers[matched[1]] = clampNumber(matched[2]);
+    }
+    return numbers;
 }
 
 /**
@@ -608,6 +684,43 @@ export function writeTagRegion(source, lines) {
         return { ok: false, reason: "源码里没有 @skill_* { … } 技能宏调用：先用上面的「技能种类」插入模板，再写入标签" };
     }
     return { ok: true, start: call.bodyStart, end: call.bodyStart, text: `\n${regionText(list, call.indent)}` };
+}
+
+/**
+ * 把标签行写进**宏体里手写的那一行**的位置（值型单行槽就地替换）。
+ * 用途：模板自带 `#usable: 1` 时，面板把次数调到 3 必须改掉源码里那一行
+ * （只写托管区会被「同槽去重」挡掉，次数落不进源码）。
+ * @param {string} source
+ * @param {string} slot 槽名（INLINE_REPLACEABLE_SLOTS 里的）
+ * @param {string[]} lines 新的行（不含缩进）
+ * @returns {{ ok: true, start: number, end: number, text: string } | { ok: false, reason: string }}
+ */
+export function replaceInlineSlot(source, slot, lines) {
+    const text = String(source || "");
+    const next = (Array.isArray(lines) ? lines : []).filter(line => String(line).trim() !== "");
+    if (!next.length) return { ok: false, reason: "没有要写入的行" };
+    const call = findMacroCall(text);
+    if (!call) return { ok: false, reason: "源码里没有 @skill_* { … } 技能宏调用" };
+    const region = readTagRegion(text);
+    const inRegion = new Set(region ? region.lines.map(line => line.trim()) : []);
+    const body = text.slice(call.bodyStart, call.bodyEnd);
+    let offset = -1;
+    let indent = call.indent;
+    for (const match of body.matchAll(/^([ \t]*)#([A-Za-z_$][\w$]*)\s*:[^\n]*$/gm)) {
+        if (match[2] !== slot) continue;
+        if (inRegion.has(match[0].trim())) continue;
+        offset = call.bodyStart + match.index;
+        indent = match[1] || call.indent;
+        break;
+    }
+    if (offset < 0) return { ok: false, reason: `宏体里没有手写的 #${slot} 槽` };
+    const lineBreak = text.indexOf("\n", offset);
+    return {
+        ok: true,
+        start: offset,
+        end: lineBreak < 0 ? text.length : lineBreak,
+        text: next.map(line => `${indent}${line}`).join("\n")
+    };
 }
 
 /**
