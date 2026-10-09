@@ -125,9 +125,9 @@ new Function("_status", "lib", "game", "ui", "get", "ai", code)(_status, lib, ga
     - 老版本塞在入口里的 `//#noname-editor-workspace-begin … end` 大段 lib 注入会被自动清掉。
     - 文件里会**补 translate**：自定义势力（`x19D6_editor.groups` 里记的中文名，编辑器选/建势力时自动记）与宗族，
       否则游戏里只会显示原 id（如 `bqzj_qi`）。拼音会归一成字符串（草稿里的 `[""]` / 按字数组都不再直接写进去）。
-        - **自建的势力 / 宗族会持久化**（`x19D6_editor.groups.<势力id>` = 中文名、`x19D6_editor.clans` = 名字数组），
+    - **自建的势力 / 宗族会持久化**（`x19D6_editor.groups.<势力id>` = 中文名、`x19D6_editor.clans` = 名字数组），
       打开编辑器时自动补回选项列表；自定义势力选项没有图片时不再写 `url(undefined)`（否则渲染成空白格）。
-        - **技能定义跟着武将一起落盘**（`skill: { … }` 段）：武将 `skills` 里引用到的技能，只要**不是游戏本体技能**，
+    - **技能定义跟着武将一起落盘**（`skill: { … }` 段）：武将 `skills` 里引用到的技能，只要**不是游戏本体技能**，
       定义就写进所属武将包文件（同一个技能只写一次，归到包 id 排序最前的那个包）；**本体技能只引用、不写定义**
       （写了会在重启时报 duplicated skill，甚至盖掉核心技能）。本体技能表 = `character/` 目录下的包
       ∩ `lib.characterPack`（本体在 app 根、扩展在 `extension/` 下，边界就靠这个）。
