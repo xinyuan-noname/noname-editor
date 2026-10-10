@@ -65,7 +65,7 @@
 //     ⚠️ 扩展内置 wasm 必须与这份宏库同批：`module/editor/shya/bin/shya.wasm`
 //     （构建 `build-wasm.bat`，产物在 `build/wasm/`）——旧 wasm 会把多条语句拼成成员链。
 //  3. 过滤器类槽（filter / filterCard / filterTarget / check）的末尾由宏补
-//     `return true`，与旧版编辑器一致：写了 `return` 就提前返回，没写就是永远成立。
+//     ``，与旧版编辑器一致：写了 `return` 就提前返回，没写就是永远成立。
 //  4. 省略某个可选插槽时，那个成员**整条消失**（靠 `<插槽>…</插槽>` 作用域），
 //     产物里不会留下 `xxx: undefined` —— 这需要 shya ≥ 1.3.0 的编译器。
 //  5. `#trigger: "phaseEnd"` 是糖 → `trigger:{ player: "phaseEnd" }`；
@@ -204,13 +204,13 @@ macro @skill_trigger(
     <filter>
       filter(event: GameEvent, player: Player) {
         #filter
-        return true
+        
       },
     </filter>
     <check>
       check(event: GameEvent, player: Player) {
         #check
-        return true
+        
       },
     </check>
     <cost>
@@ -229,7 +229,7 @@ macro @skill_trigger(
 
 // ═══════════════════════════════ 出牌阶段类 ══════════════════════════════════
 // 旧版编辑器 kind = 'enable:"phaseUse"'；选牌条件写 #filterCard（体，末尾自动补
-// return true），或用 #filterCardValue 直接给值（`true` / `{ name: "sha" }`，
+// ），或用 #filterCardValue 直接给值（`true` / `{ name: "sha" }`，
 // 写了它就以它为准）；选角色条件写 #filterTarget。主动技请务必给 #ai。
 macro @skill_phaseUse(
   #skill: Ident?,
@@ -340,13 +340,13 @@ macro @skill_phaseUse(
     <filter>
       filter(event: GameEvent, player: Player) {
         #filter
-        return true
+        
       },
     </filter>
     <filterCard>
       filterCard(card: Card, player: Player) {
         #filterCard
-        return true
+        
       },
     </filterCard>
     <filterCardValue>filterCard: #filterCardValue,</filterCardValue>
@@ -354,7 +354,7 @@ macro @skill_phaseUse(
     <filterTarget>
       filterTarget(card: Card, player: Player, target: Player) {
         #filterTarget
-        return true
+        
       },
     </filterTarget>
     <selectTarget>selectTarget: #selectTarget,</selectTarget>
@@ -363,7 +363,7 @@ macro @skill_phaseUse(
     <check>
       check(card: Card) {
         #check
-        return true
+        
       },
     </check>
     <content>
@@ -486,13 +486,13 @@ macro @skill_chooseToUse(
     <filter>
       filter(event: GameEvent, player: Player) {
         #filter
-        return true
+        
       },
     </filter>
     <filterCard>
       filterCard(card: Card, player: Player) {
         #filterCard
-        return true
+        
       },
     </filterCard>
     <filterCardValue>filterCard: #filterCardValue,</filterCardValue>
@@ -500,7 +500,7 @@ macro @skill_chooseToUse(
     <filterTarget>
       filterTarget(card: Card, player: Player, target: Player) {
         #filterTarget
-        return true
+        
       },
     </filterTarget>
     <selectTarget>selectTarget: #selectTarget,</selectTarget>
@@ -509,7 +509,7 @@ macro @skill_chooseToUse(
     <check>
       check(card: Card) {
         #check
-        return true
+        
       },
     </check>
     <content>
@@ -632,13 +632,13 @@ macro @skill_chooseToRespond(
     <filter>
       filter(event: GameEvent, player: Player) {
         #filter
-        return true
+        
       },
     </filter>
     <filterCard>
       filterCard(card: Card, player: Player) {
         #filterCard
-        return true
+        
       },
     </filterCard>
     <filterCardValue>filterCard: #filterCardValue,</filterCardValue>
@@ -646,7 +646,7 @@ macro @skill_chooseToRespond(
     <filterTarget>
       filterTarget(card: Card, player: Player, target: Player) {
         #filterTarget
-        return true
+        
       },
     </filterTarget>
     <selectTarget>selectTarget: #selectTarget,</selectTarget>
@@ -655,7 +655,7 @@ macro @skill_chooseToRespond(
     <check>
       check(card: Card) {
         #check
-        return true
+        
       },
     </check>
     <content>
@@ -778,13 +778,13 @@ macro @skill_useRespond(
     <filter>
       filter(event: GameEvent, player: Player) {
         #filter
-        return true
+        
       },
     </filter>
     <filterCard>
       filterCard(card: Card, player: Player) {
         #filterCard
-        return true
+        
       },
     </filterCard>
     <filterCardValue>filterCard: #filterCardValue,</filterCardValue>
@@ -792,7 +792,7 @@ macro @skill_useRespond(
     <filterTarget>
       filterTarget(card: Card, player: Player, target: Player) {
         #filterTarget
-        return true
+        
       },
     </filterTarget>
     <selectTarget>selectTarget: #selectTarget,</selectTarget>
@@ -801,7 +801,7 @@ macro @skill_useRespond(
     <check>
       check(card: Card) {
         #check
-        return true
+        
       },
     </check>
     <content>
@@ -929,14 +929,14 @@ macro @skill_viewAs(
     <filterCard>
       filterCard(card: Card, player: Player) {
         #filterCard
-        return true
+        
       },
     </filterCard>
     <filterCardValue>filterCard: #filterCardValue,</filterCardValue>
     <viewAsFilter>
       viewAsFilter(player: Player) {
         #viewAsFilter
-        return true
+        
       },
     </viewAsFilter>
     <selectCard>selectCard: #selectCard,</selectCard>
@@ -945,7 +945,7 @@ macro @skill_viewAs(
     <check>
       check(card: Card) {
         #check
-        return true
+        
       },
     </check>
     <content>

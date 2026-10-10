@@ -207,13 +207,13 @@ macro @触发技(
     <条件>
       filter(event: GameEvent, player: Player) {
         #条件
-        return true
+       
       },
     </条件>
     <询问>
       check(event: GameEvent, player: Player) {
         #询问
-        return true
+       
       },
     </询问>
     <代价>
@@ -232,7 +232,7 @@ macro @触发技(
 
 // ═══════════════════════════════ 出牌阶段类 ══════════════════════════════════
 // 旧版编辑器 kind = 'enable:"phaseUse"'；选牌条件写 #牌条件（体，末尾自动补
-// return true），或用 #牌值条件 直接给值（`true` / `{ name: "sha" }`，
+//），或用 #牌值条件 直接给值（`true` / `{ name: "sha" }`，
 // 写了它就以它为准）；选角色条件写 #目标条件。主动技请务必给 #ai。
 macro @出牌阶段技(
   #技能: Ident?,
@@ -343,13 +343,13 @@ macro @出牌阶段技(
     <条件>
       filter(event: GameEvent, player: Player) {
         #条件
-        return true
+       
       },
     </条件>
     <牌条件>
       filterCard(card: Card, player: Player) {
         #牌条件
-        return true
+       
       },
     </牌条件>
     <牌值条件>filterCard: #牌值条件,</牌值条件>
@@ -357,7 +357,7 @@ macro @出牌阶段技(
     <目标条件>
       filterTarget(card: Card, player: Player, target: Player) {
         #目标条件
-        return true
+       
       },
     </目标条件>
     <选目标>selectTarget: #选目标,</选目标>
@@ -366,7 +366,7 @@ macro @出牌阶段技(
     <询问>
       check(card: Card) {
         #询问
-        return true
+       
       },
     </询问>
     <效果>
@@ -489,13 +489,13 @@ macro @使用技(
     <条件>
       filter(event: GameEvent, player: Player) {
         #条件
-        return true
+       
       },
     </条件>
     <牌条件>
       filterCard(card: Card, player: Player) {
         #牌条件
-        return true
+       
       },
     </牌条件>
     <牌值条件>filterCard: #牌值条件,</牌值条件>
@@ -503,7 +503,7 @@ macro @使用技(
     <目标条件>
       filterTarget(card: Card, player: Player, target: Player) {
         #目标条件
-        return true
+       
       },
     </目标条件>
     <选目标>selectTarget: #选目标,</选目标>
@@ -512,7 +512,7 @@ macro @使用技(
     <询问>
       check(card: Card) {
         #询问
-        return true
+       
       },
     </询问>
     <效果>
@@ -635,13 +635,13 @@ macro @打出技(
     <条件>
       filter(event: GameEvent, player: Player) {
         #条件
-        return true
+       
       },
     </条件>
     <牌条件>
       filterCard(card: Card, player: Player) {
         #牌条件
-        return true
+       
       },
     </牌条件>
     <牌值条件>filterCard: #牌值条件,</牌值条件>
@@ -649,7 +649,7 @@ macro @打出技(
     <目标条件>
       filterTarget(card: Card, player: Player, target: Player) {
         #目标条件
-        return true
+       
       },
     </目标条件>
     <选目标>selectTarget: #选目标,</选目标>
@@ -658,7 +658,7 @@ macro @打出技(
     <询问>
       check(card: Card) {
         #询问
-        return true
+       
       },
     </询问>
     <效果>
@@ -781,13 +781,13 @@ macro @使用打出技(
     <条件>
       filter(event: GameEvent, player: Player) {
         #条件
-        return true
+       
       },
     </条件>
     <牌条件>
       filterCard(card: Card, player: Player) {
         #牌条件
-        return true
+       
       },
     </牌条件>
     <牌值条件>filterCard: #牌值条件,</牌值条件>
@@ -795,7 +795,7 @@ macro @使用打出技(
     <目标条件>
       filterTarget(card: Card, player: Player, target: Player) {
         #目标条件
-        return true
+       
       },
     </目标条件>
     <选目标>selectTarget: #选目标,</选目标>
@@ -804,7 +804,7 @@ macro @使用打出技(
     <询问>
       check(card: Card) {
         #询问
-        return true
+       
       },
     </询问>
     <效果>
@@ -932,14 +932,14 @@ macro @视为技(
     <牌条件>
       filterCard(card: Card, player: Player) {
         #牌条件
-        return true
+       
       },
     </牌条件>
     <牌值条件>filterCard: #牌值条件,</牌值条件>
     <视为筛选>
       viewAsFilter(player: Player) {
         #视为筛选
-        return true
+       
       },
     </视为筛选>
     <选牌>selectCard: #选牌,</选牌>
@@ -948,7 +948,7 @@ macro @视为技(
     <询问>
       check(card: Card) {
         #询问
-        return true
+       
       },
     </询问>
     <效果>
