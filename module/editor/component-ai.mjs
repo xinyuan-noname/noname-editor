@@ -591,7 +591,7 @@ shadow.innerHTML=`
             if (sizeNode) {
                 const wanted = inUse ? (config.size || "") : "";
                 const has = Array.from(sizeNode.options).some(option => option.value === wanted);
-                sizeNode.value = has ? wanted : (sizes.includes("768x1024") ? "768x1024" : (sizes[0] || "1024x1024"));
+                sizeNode.value = has ? wanted : (sizes.includes("1024x1024") ? "1024x1024" : (sizes[0] || "1024x1024"));
             }
             set(".cfg-extra", inUse ? (config.extra || "") : "");
         } else {

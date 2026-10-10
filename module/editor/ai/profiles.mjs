@@ -205,7 +205,7 @@ export const IMAGE_PROFILES = [
         key: "ark",
         name: "火山方舟 Seedream",
         baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
-        models: ["doubao-seedream-3-0-t2i-250415"],
+        models: ["doubao-seedream-5-0-pro-260628"],
         defaultModel: "",
         keyUrl: "https://console.volcengine.com/ark",
         siteUrl: "https://console.volcengine.com/ark",
