@@ -190,7 +190,6 @@ export function buildCharacterPackageFile(options = {}) {
 
     //④ 武将包中文名：引擎按 `<包id>_character_config` 取包名（ui/create/index.js:1586 少了这个键
     //连整个包都进不了武将包列表），而扩展侧惯例就是直接写这个键——game/index.js:5634/5668 与
-    //3D精选 / 英雄杀 / 玩点论杀 的 precontent 都是这么写的。包名与包 id 相同时也照写，保证键一定存在。
     addTranslate(`${packageId}_character_config`, packageName || packageId);
 
     const sortLines = Object.entries(sortMembers)
@@ -234,7 +233,9 @@ export function buildCharacterPackageFile(options = {}) {
         "pinyins: { ...pinyins }"
     ];
 
-    const callbackLines = groups.map(id => `${INDENT}lib.group.push(${JSON.stringify(id)});`);
+    const callbackLines = [
+        ...groups.map(id => `${INDENT}lib.group.push(${JSON.stringify(id)});`)
+    ];
     callbackLines.push(`${INDENT}return {`);
     callbackLines.push(returns.map(line => INDENT.repeat(2) + line).join(`,${EOL}`));
     callbackLines.push(`${INDENT}};`);

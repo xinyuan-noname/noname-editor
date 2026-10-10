@@ -8,7 +8,6 @@ import {
 } from "../../noname.js";
 import { installApi } from "./module/editor/api.mjs";
 
-const menuLabel = "<div>魂氏编辑器</div>";
 export const type = "extension";
 export default function () {
     return {
@@ -20,21 +19,23 @@ export default function () {
             const extensionMenu = lib.extensionMenu["extension_魂氏编辑器"];
             if (!extensionMenu) return;
             const openItem = {
+                name: "<div>魂氏编辑器</div>",
                 clear: true,
                 onclick: function () {
                     if (typeof game.x19D6_openEditor === "function") return game.x19D6_openEditor();
-                    alert("魂氏编辑器尚未载入完成，请重启游戏后再试。");
+                    alert("编辑器尚未载入完成，请重启游戏后再试。");
                 }
             };
-            openItem.name = menuLabel;
-            extensionMenu.openEditor = openItem;
-            const skillItem = {
+            const openOldEditor = {
+                name: "<div>旧版编辑器</div>",
                 clear: true,
                 onclick: function () {
-                    if (typeof game.x19D6_openSkillEditor === "function") return game.x19D6_openSkillEditor();
-                    alert("魂氏编辑器尚未载入完成，请重启游戏后再试。");
+                    if (typeof game.x19D6_openEditor === "function") return createSkillEditor();
+                    alert("编辑器尚未载入完成，请重启游戏后再试。");
                 }
-            };
+            }
+            extensionMenu.openEditor = openItem;
+            extensionMenu.openOldEditor = openOldEditor
         },
         arenaReady: function () {
             if (!ui.system) return;
@@ -56,7 +57,7 @@ export default function () {
             author: "<a href=https://b23.tv/RHn9COW>新元noname</a>",
             diskURL: "",
             forumURL: "",
-            version: "1.1.0"
+            version: "0.1.0"
         }
     };
 }

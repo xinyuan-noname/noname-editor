@@ -603,42 +603,49 @@ export class NonameData {
         return get.characterIntro(id);
     }
     /**
-     * @param {"character"|"skill"} type 
-     * @param {"sex"|"group"|"name"} attr 
+     * @param {"character"|"skill"|"skills"} type 
+     * @param {"sex"|"group"|"name"|"name"|"description"|"info"|"nameid"} attr 
      * @param {string} text 
      */
-    getTranslation(type, attr, text) {
+    getTranslation(type, attr, target) {
         switch (type) {
             case "character": {
                 switch (attr) {
                     case "sex": {
-                        if (text === "none") return "无性";
-                        if (text === "male-castrated") return "太监";
-                        return (lib.translate[text] || "") + "性";
+                        if (target === "none") return "无性";
+                        if (target === "male-castrated") return "太监";
+                        return (lib.translate[target] || target) + "性";
                     }
                     case "group": {
-                        let group = lib.translate[text] || "";
+                        let group = lib.translate[target] || target;
                         return group + "势力";
                     }
                     case "name": {
-                        return lib.translate[text] || "";
+                        return lib.translate[target] || target;
                     }
                 }
             }
             case "skill": {
                 switch (attr) {
                     case "name": {
-                        return lib.translate[text] || text;
+                        return lib.translate[target] || target;
                     };
                     case "description": case "info": {
-                        return lib.translate[text + "_info"] || ""
+                        return lib.translate[target + "_info"] || ""
+                    }
+                }
+            }
+            case "skills": {
+                switch (attr) {
+                    case "nameid": {
+                        if (Array.isArray(target)) return target.map(skill => `${lib.translate[skill] || skill}(${skill})`);
                     }
                 }
             }
             case "characterPackage": {
-                return lib.translate[text + "_character_config"] || "";
+                return lib.translate[target + "_character_config"] || target;
             }
-            default: return get.translation(text);
+            default: return get.translation(target);
         }
     }
     setTranslation(en, cn) {

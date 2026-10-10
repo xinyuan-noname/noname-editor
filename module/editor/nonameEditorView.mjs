@@ -593,18 +593,19 @@ mainPage.innerHTML=`
             //removable 开启「删除」，usable 开启「使用」（点击后发 useCardData 事件）
             card.setAttribute("removable", "true");
             card.setAttribute("usable", "true");
+            console.log(data);
             card.characterInfo = {
                 id: characterId,
                 name: data.name || characterId,
                 packageName: data.packageId || data.extension,
                 characterSortName: data.characterSortName || data.characterSort,
-                sex: data.sex,
-                group: data.group,
+                sex: this.serveFor.data.getTranslation("character", "sex", data.sex),
+                group: this.serveFor.data.getTranslation("character", "group", data.group),
                 hp: data.hp,
                 maxHp: data.maxHp,
                 hujia: data.hujia,
-                clans: Array.isArray(data.clans) ? data.clans.join("、") : data.clans,
-                skillList: Array.isArray(data.skills) ? data.skills : [],
+                clans: data.clans,
+                skillList: this.serveFor.data.getTranslation("skills", "nameid", data.skills),
                 dieAudios: []
             };
             const seq = (draftKey.match(/^draft-(\d+)$/) || [])[1];
