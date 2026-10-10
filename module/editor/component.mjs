@@ -3,7 +3,7 @@ import { HTMLNonameFocusUIElement } from "./component-base.mjs";
 import "./component-infoCard.mjs";
 import "./component-dialog.mjs";
 import { openCharacterCardPreview } from "./characterCard.mjs";
-class HTMLNonameCharacterEditorElement extends HTMLNonameFocusUIElement {
+export class HTMLNonameCharacterEditorElement extends HTMLNonameFocusUIElement {
     /**
      * 草稿自动保存的防抖定时器
      */
@@ -1666,11 +1666,111 @@ shadow.innerHTML=`
             }
         })
     }
+    #adjustHpDivsTo(num) {
+        if (num < 1 || num > 6) return;
+        const hpDataArea = this.getDataAreaDom("hp");
+        const hpContainer = hpDataArea.querySelector(".hpContainer");
+        const hpManager = this.getUniqueChoiceManager("hp")
+        const hps = Array.from(hpDataArea.querySelectorAll(`.hp`));
+        const d = num - hps.length;
+        if (d > 0) {
+            for (let i = 0; i < d; i++) {
+                const hp = document.createElement("div");
+                hp.className = "hp lost";
+                hpContainer.prepend(hp);
+                hpManager.append(hp);
+            }
+        } else if (d < 0) {
+            hps.slice(0, Math.abs(d)).forEach(node => {
+                node.remove();
+                hpManager.remove(node);
+            })
+        }
+    }
+    #prependMaxHp(num = 1, onlyMaxHp = false) {
+        if (num < 0) return;
+        const hpDataArea = this.getDataAreaDom("hp");
+        const moreShowContainer = hpDataArea.querySelector(".hp-more-show");
+        const hpManager = this.getUniqueChoiceManager("hp");
+        const nowHp = this.getData("hp"), nowMaxHp = this.getData("maxHp");
+        const maxHpInputManager = this.getEditableElementManager("maxHp");
+        const hpInputManager = this.getEditableElementManager("hp");
+        const changedMaxHp = nowMaxHp + num
+        maxHpInputManager.changeValue(changedMaxHp);
+        this.changeData("maxHp", changedMaxHp);
+        if (changedMaxHp <= 6) {
+            this.#adjustHpDivsTo(changedMaxHp);
+            if (onlyMaxHp === false) {
+                hpManager.choose(this.getDataAreaDom("hp").querySelector(`.hp:nth-last-child(${nowHp + num})`));
+            }
+        } else {
+            if (moreShowContainer.classList.contains("hidden")) {
+                moreShowContainer.classList.remove("hidden");
+            }
+            if (onlyMaxHp === false) {
+                hpInputManager.changeValue(nowHp + num);
+                this.changeData("hp", nowHp + num);
+            }
+            hpManager.choose(null);
+        }
+    }
+    #removeMaxHp(num = 1) {
+        if (num < 0) return;
+        const hpDataArea = this.getDataAreaDom("hp");
+        const moreShowContainer = hpDataArea.querySelector(".hp-more-show");
+        const hpManager = this.getUniqueChoiceManager("hp")
+        const maxHpInputManager = this.getEditableElementManager("maxHp");
+        const hpInputManager = this.getEditableElementManager("hp");
+        const nowHp = this.getData("hp"), nowMaxHp = this.getData("maxHp"); num = Math.min(num, nowMaxHp - 1);
+        const changedMaxHp = num === Infinity ? 1 : nowMaxHp - num;
+        this.changeData("maxHp", changedMaxHp);
+        maxHpInputManager.changeValue(changedMaxHp);
+        if (changedMaxHp <= 6) {
+            this.#adjustHpDivsTo(changedMaxHp);
+            if (!moreShowContainer.classList.contains("hidden")) moreShowContainer.classList.add("hidden");
+            if (changedMaxHp < nowHp) {
+                hpManager.choose(hpDataArea.querySelector(".hp"));
+            } else {
+                hpManager.choose(hpDataArea.querySelector(`.hp:nth-last-child(${nowHp})`));
+            }
+        } else if (changedMaxHp < nowHp) {
+            hpInputManager.changeValue(nowHp - num);
+            this.changeData("hp", nowHp - num);
+        }
+    }
+    #addHp(num = 1) {
+        if (num < 0) return;
+        const hpManager = this.getUniqueChoiceManager("hp")
+        const hpInputManager = this.getEditableElementManager("hp");
+        const nowHp = this.getData("hp"), nowMaxHp = this.getData("maxHp");
+        const d = nowHp + num - nowMaxHp;
+        hpInputManager.changeValue(nowHp + num);
+        this.changeData("hp", nowHp + num);
+        //体力溢出
+        if (d > 0) {
+            this.#prependMaxHp(d, true);
+        }
+        //体力未溢出且上限不超过6，或体力溢出，但是变换后的上限小于6
+        if (d <= 0 && nowMaxHp <= 6 || d > 0 && nowMaxHp + d <= 6) {
+            hpManager.choose(this.getDataAreaDom("hp").querySelector(`.hp:nth-last-child(${nowHp + num})`));
+        }
+    }
+    #removeHp(num = 1) {
+        if (num < 0) return;
+        const hpManager = this.getUniqueChoiceManager("hp")
+        const hpInputManager = this.getEditableElementManager("hp");
+        const nowHp = this.getData("hp"), nowMaxHp = this.getData("maxHp"); num = Math.min(num, nowHp - 1);
+        const changedHp = num === Infinity ? 1 : nowHp - num;
+        hpInputManager.changeValue(changedHp);
+        this.changeData("hp", changedHp);
+        if (nowMaxHp <= 6) {
+            hpManager.choose(this.getDataAreaDom("hp").querySelector(`.hp:nth-last-child(${changedHp})`));
+        }
+    }
     #listenHp() {
         let hpAdjustMode, hpAdjustUnitOffset = 1;
         const hpDataArea = this.getDataAreaDom("hp");
         const hpContainer = hpDataArea.querySelector(".hpContainer");
-        const moreShowContainer = hpDataArea.querySelector(".hp-more-show");
         const unitOffsetInput = hpDataArea.querySelector(".hp-adjust [contenteditable]")
         const [hpInput, maxHpInput] = hpDataArea.querySelectorAll(".hp-operation [contenteditable]");
         const [hpPlus, hpMinus] = hpDataArea.querySelectorAll(".hp-adjust>div>div");
@@ -1679,102 +1779,21 @@ shadow.innerHTML=`
         const unitOffsetInputManager = this.createEditableElementManager(null, unitOffsetInput)
         const hpInputManager = this.createEditableElementManager("hp", hpInput);
         const maxHpInputManager = this.createEditableElementManager("maxHp", maxHpInput);
-        const adjustHpDivsTo = (num) => {
-            if (num < 1 || num > 6) return;
-            const hps = Array.from(hpDataArea.querySelectorAll(`.hp`));
-            const d = num - hps.length;
-            if (d > 0) {
-                for (let i = 0; i < d; i++) {
-                    const hp = document.createElement("div");
-                    hp.className = "hp lost";
-                    hpContainer.prepend(hp);
-                    hpManager.append(hp);
-                }
-            } else if (d < 0) {
-                hps.slice(0, Math.abs(d)).forEach(node => {
-                    node.remove();
-                    hpManager.remove(node);
-                })
-            }
-        }
-        const prependMaxHp = (num = 1, onlyMaxHp = false) => {
-            if (num < 0) return;
-            const nowHp = this.getData("hp"), nowMaxHp = this.getData("maxHp");
-            const changedMaxHp = nowMaxHp + num
-            maxHpInputManager.changeValue(changedMaxHp);
-            this.changeData("maxHp", changedMaxHp);
-            if (changedMaxHp <= 6) {
-                adjustHpDivsTo(changedMaxHp);
-                if (onlyMaxHp === false) {
-                    hpManager.choose(this.getDataAreaDom("hp").querySelector(`.hp:nth-last-child(${nowHp + num})`));
-                }
-            } else {
-                if (moreShowContainer.classList.contains("hidden")) {
-                    moreShowContainer.classList.remove("hidden");
-                }
-                if (onlyMaxHp === false) {
-                    hpInputManager.changeValue(nowHp + num);
-                    this.changeData("hp", nowHp + num);
-                }
-                hpManager.choose(null);
-            }
-        }
-        const removeMaxHp = (num = 1) => {
-            if (num < 0) return;
-            const nowHp = this.getData("hp"), nowMaxHp = this.getData("maxHp"); num = Math.min(num, nowMaxHp - 1);
-            const changedMaxHp = num === Infinity ? 1 : nowMaxHp - num;
-            this.changeData("maxHp", changedMaxHp);
-            maxHpInputManager.changeValue(changedMaxHp);
-            if (changedMaxHp <= 6) {
-                adjustHpDivsTo(changedMaxHp);
-                if (!moreShowContainer.classList.contains("hidden")) moreShowContainer.classList.add("hidden");
-                if (changedMaxHp < nowHp) {
-                    hpManager.choose(hpDataArea.querySelector(".hp"));
-                } else {
-                    hpManager.choose(hpDataArea.querySelector(`.hp:nth-last-child(${nowHp})`));
-                }
-            } else if (changedMaxHp < nowHp) {
-                hpInputManager.changeValue(nowHp - num);
-                this.changeData("hp", nowHp - num);
-            }
-        }
-        const addHp = (num = 1) => {
-            if (num < 0) return;
-            const nowHp = this.getData("hp"), nowMaxHp = this.getData("maxHp");
-            const d = nowHp + num - nowMaxHp;
-            hpInputManager.changeValue(nowHp + num);
-            this.changeData("hp", nowHp + num);
-            if (d > 0) {
-                prependMaxHp(d, true);
-            }
-            if (d < 0 && nowMaxHp <= 6 || d > 0 && nowMaxHp + d <= 6) {
-                hpManager.choose(this.getDataAreaDom("hp").querySelector(`.hp:nth-last-child(${nowHp + num})`));
-            }
-        }
-        const removeHp = (num = 1) => {
-            if (num < 0) return;
-            const nowHp = this.getData("hp"), nowMaxHp = this.getData("maxHp"); num = Math.min(num, nowHp - 1);
-            const changedHp = num === Infinity ? 1 : nowHp - num;
-            hpInputManager.changeValue(changedHp);
-            this.changeData("hp", changedHp);
-            if (nowMaxHp <= 6) {
-                hpManager.choose(this.getDataAreaDom("hp").querySelector(`.hp:nth-last-child(${changedHp})`));
-            }
-        }
+
         maxHpInputManager.inputNumber({
             min: 1, max: Infinity, value: 4, supportInfinity: true, isInteger: true,
             commonCallback: (e, val, last) => {
                 const d = val - last;
-                if (d < 0) removeMaxHp(Math.abs(d));
-                else if (d > 0) prependMaxHp(d, true);
+                if (d < 0) this.#removeMaxHp(Math.abs(d));
+                else if (d > 0) this.#prependMaxHp(d, true);
             }
         });
         hpInputManager.inputNumber({
             min: 1, max: Infinity, value: 4, supportInfinity: true, isInteger: true,
             commonCallback: (e, val, last) => {
                 const d = val - last;
-                if (d > 0) addHp(d)
-                else if (d < 0) removeHp(Math.abs(d))
+                if (d > 0) this.#addHp(d)
+                else if (d < 0) this.#removeHp(Math.abs(d))
             }
         });
         unitOffsetInputManager.inputNumber({
@@ -1801,19 +1820,19 @@ shadow.innerHTML=`
         hpPlus.addEventListener("pointerup", () => {
             const maxHp = this.getData("maxHp"), hp = this.getData("hp");
             if (maxHp > 6) {
-                if (hpAdjustMode === "maxHp") prependMaxHp(hpAdjustUnitOffset, true);
-                else addHp(hpAdjustUnitOffset);
+                if (hpAdjustMode === "maxHp") this.#prependMaxHp(hpAdjustUnitOffset, true);
+                else this.#addHp(hpAdjustUnitOffset);
             } else if (hp === maxHp) {
-                prependMaxHp(1, false);
+                this.#prependMaxHp(1, false);
             } else {
-                prependMaxHp(1, true);
+                this.#prependMaxHp(1, true);
             }
         });
         hpMinus.addEventListener("pointerup", () => {
             if (this.getData("maxHp") > 6) {
-                if (hpAdjustMode === "maxHp") removeMaxHp(hpAdjustUnitOffset);
-                else removeHp(hpAdjustUnitOffset);
-            } else removeMaxHp();
+                if (hpAdjustMode === "maxHp") this.#removeMaxHp(hpAdjustUnitOffset);
+                else this.#removeHp(hpAdjustUnitOffset);
+            } else this.#removeMaxHp();
         });
         //
         const hujias = Array.from(this.getDataAreaDom("hujia").querySelectorAll(".hujia"));
@@ -1842,8 +1861,6 @@ shadow.innerHTML=`
             subtree: true,
             attributeFilter: ['class']
         });
-        //初始态：把格数与选中态按当前数据对齐（applyData 走的是同一套；这里兜住「数据先到、管理器后建」）
-        this.syncHpPips();
     }
     /**
      * 造一张技能卡（技能栏与「载入草稿」共用；字段与 `data-noname.mjs:parseSkill` 的产物同形）。
@@ -2273,7 +2290,7 @@ shadow.innerHTML=`
                 this.style.setProperty("--data-clans", `'${val}'`);
             }; break;
             case "hp": case "maxHp": case "hujia": {
-                if (typeof val !== "number") return false;
+                if (typeof val !== "number" || Number.isNaN(val)) return false;
                 this.getDataAreaDom(type).dataset[type] = val;
                 this.style.setProperty("--data-" + type, val == Infinity ? "'∞'" : `'${val}'`);
             }; break;
@@ -2289,8 +2306,6 @@ shadow.innerHTML=`
                     skills = current().filter(skill => skill && skill !== val);
                     skillsDataArea.dataset[type] = skills.join(" ");
                 } else {
-                    //rewrite / replace：整串覆盖 —— **载入草稿走的就是这条**。
-                    //⚠️ 原来这里只认 append / remove / rewrite，`applyData` 传的 replace 直接落到分支外：
                     //技能栏是空的，400ms 后的自动保存再按空值重建记录 → 草稿里的技能被抹掉（用户反馈的事故）。
                     skills = String(val || "").split(" ").filter(Boolean);
                     skillsDataArea.dataset[type] = skills.join(" ");
@@ -2405,8 +2420,12 @@ shadow.innerHTML=`
             this.loadedTrashBin = Array.isArray(data.trashBin) ? data.trashBin.slice() : [];
             if (data.avatar) this.avatarReference = data.avatar;
             this.syncAvatarFromTrashBin(data.trashBin, data);
+            console.log(data, "maxHp" in data, data.hp);
             //体力 / 体力上限 / 护甲的数字框与旁边的血/甲格
-            this.syncHpInputs();
+            if ("maxHp" in data) this.restoreMaxHp(data.maxHp)
+            else this.restoreMaxHp(data.hp)
+            this.restoreHp(data.hp)
+            this.restoreHujia(data.hujia)
         } finally {
             if (restoring) this.#applyingData = false;
         }
@@ -2514,25 +2533,18 @@ shadow.innerHTML=`
             else manager.unselect(node);
         });
     }
-    /**
-     * 回填体力 / 体力上限 / 护甲的数字框（并同步旁边的血格 / 甲格）。
-     * ⚠️ 必须走输入框自己的管理器（`changeValue`），不能只写 `textContent`：
-     * 管理器内部的 `value` 不跟着更新，用户下一次 blur / 回车时它会把「变化量」算错——
-     * 例：体力上限 > 6 的草稿 hp=5，只写 textContent 后失焦 → d = 5 - 4 → 体力值被改成 6。
-     */
-    syncHpInputs() {
-        const hpArea = this.getDataAreaDom("hp");
-        if (!hpArea) return;
-        const [hpInput, maxHpInput] = hpArea.querySelectorAll(".hp-operation [contenteditable]");
-        const hujiaInput = hpArea.querySelector(".hujia-operation [contenteditable]");
-        [[hpInput, "hp", this.getData("hp")], [maxHpInput, "maxHp", this.getData("maxHp")], [hujiaInput, "hujia", this.getData("hujia")]]
-            .forEach(([input, label, value]) => {
-                if (!input || !Number.isFinite(value)) return;
-                const manager = this.getEditableElementManager(label);
-                if (manager) manager.changeValue(value);
-                else if (input.textContent !== String(value)) input.textContent = String(value);
-            });
-        this.syncHpPips();
+    restoreHp(data) {
+        const dHp = data - this.getData("hp");
+        dHp > 0 ? this.#addHp(dHp) : this.#removeHp(Math.abs(dHp));
+    }
+    restoreMaxHp(data) {
+        const dMaxHp = data - this.getData("maxHp");
+        dMaxHp > 0 ? this.#prependMaxHp(dMaxHp) : this.#removeMaxHp(Math.abs(dMaxHp));
+
+    }
+    restoreHujia(data) {
+        const hujiaManager = this.getUniqueChoiceManager("hujia");
+        hujiaManager.choose(5 - data);
     }
     /**
      * 判断一条 `trashBin` 条目是不是立绘引用。
@@ -2985,88 +2997,6 @@ shadow.innerHTML=`
         return `image/${ext === "jpg" || ext === "jfif" ? "jpeg" : ext}`;
     }
     /**
-     * 把血格的格数对齐到体力上限。
-     * 与 `#listenHp` 里点 +/- 用的 adjustHpDivsTo 同款：增删的格子必须同步进出选择管理器，
-     * 否则「第 n 格（从 DOM 末尾数）= 第 n 点」的换算会错位。
-     * @param {number} maxHp
-     */
-    adjustHpPipCount(maxHp) {
-        const hpContainer = this.getDataAreaDom("hp")?.querySelector(".hpContainer");
-        if (!hpContainer) return;
-        const target = Math.min(6, Math.max(1, Math.round(maxHp)));
-        const manager = this.getUniqueChoiceManager("hp");
-        const pips = Array.from(hpContainer.querySelectorAll(".hp"));
-        const diff = target - pips.length;
-        if (diff > 0) {
-            for (let i = 0; i < diff; i++) {
-                const pip = document.createElement("div");
-                pip.className = "hp lost";
-                hpContainer.prepend(pip);
-                manager?.append(pip);
-            }
-        } else if (diff < 0) {
-            pips.slice(0, -diff).forEach(node => {
-                node.remove();
-                manager?.remove(node);
-            });
-        }
-    }
-    /**
-     * 同步体力/护甲旁边的血格、甲格（用户反馈：「体力值设置和护甲设置显示出问题了」）。
-     *
-     * ⚠️ 血格的**实心**不是由 `lost` 表示的，而是由选择管理器的 `chosen` 表示的：
-     * CSS 里 `.hp.lost.chosen, .hp.lost.chosen~.hp.lost { filter: grayscale(0); opacity: 1 }`
-     * 会把选中格**及其后面的所有兄弟**一起点亮（模板里 4 格全带 `lost` 就是这个原因）。所以：
-     * ① 每一格都要保持 `lost`，**绝不能**按数值去 toggle 掉某些格子的 `lost`——
-     *    那样「没被 chosen 点亮」的格子也会是实心，血格会永远显示满 / 与数值脱节
-     *    （AI 那版写的是 `index >= hp`，正好是镜像）；
-     * ② 选中态必须跟着数值走：`chosen` 留在 `chooseFirst()` 的第 0 格时，
-     *    `.chosen~.hp` 会把整行都点亮 → 加载草稿后血格恒为满；
-     * ③ 格数要对齐体力上限（超过 6 时引擎整行换成「体力值 / 体力上限」模式，见 .hp-more-show 的 CSS）。
-     * 选择管理器的约定（见 `#listenHp`）是「第 n 格 **从 DOM 末尾数** = 第 n 点」：
-     * `value = 格数 - DOM 下标`、点亮的是该格及其后续兄弟，所以选中格的下标就是 `格数 - 数值`。
-     */
-    syncHpPips() {
-        const hpArea = this.getDataAreaDom("hp");
-        if (!hpArea) return;
-        const hp = this.getData("hp");
-        const maxHp = this.getData("maxHp");
-        const hujia = this.getData("hujia");
-        //数字框为空 / 草稿里存成 null 时是 NaN，这种值不参与显示
-        const isNumber = value => typeof value === "number" && !Number.isNaN(value);
-        //体力上限 > 6：血格整行隐藏，换成「体力值 / 体力上限」模式（互斥由 .hp-more-show 的 CSS 负责）
-        const moreShow = hpArea.querySelector(".hp-more-show");
-        if (moreShow && isNumber(maxHp)) moreShow.classList.toggle("hidden", !(maxHp > 6));
-        const hpContainer = hpArea.querySelector(".hpContainer");
-        if (hpContainer && isNumber(hp) && isNumber(maxHp)) {
-            if (maxHp <= 6) this.adjustHpPipCount(maxHp);
-            const pips = Array.from(hpContainer.querySelectorAll(".hp"));
-            //① 全部保持 lost：实心交给 chosen + 兄弟选择器
-            pips.forEach(pip => pip.classList.add("lost"));
-            //容器上的血量档位类（与点 +/- 用的是同一套：数据层的 getHpStatus）
-            hpContainer.classList.remove("healthy", "damaged", "dangerous");
-            hpContainer.classList.add(this.playerQuery("hpStatus", { hp, maxHp }));
-            //② 选中态 = 第 (格数 - 体力) 格。体力上限 > 6 时血格不显示，此时别碰选中态：
-            //   回调是按 DOM 下标反算数值的，choose(null) 会把体力算成「格数 + 1」
-            if (maxHp <= 6 && maxHp >= 1) {
-                const manager = this.getUniqueChoiceManager("hp");
-                const target = pips[pips.length - hp];
-                if (manager && target && manager.chosen !== target) manager.choose(target);
-            }
-        }
-        const hujiaContainer = hpArea.querySelector(".hujiaContainer");
-        if (hujiaContainer && isNumber(hujia)) {
-            const nodes = Array.from(hujiaContainer.querySelectorAll(".hujia"));
-            const pips = nodes.filter(pip => !pip.classList.contains("reset"));
-            pips.forEach(pip => pip.classList.add("lost"));
-            //护甲 0 对应的格子是末尾那个 reset（约定：末格 = 0 甲）；
-            //这里不能传 null —— 回调按 indexOf 反算，null 会算成 6 甲
-            const target = nodes[nodes.length - 1 - hujia];
-            const manager = this.getUniqueChoiceManager("hujia");
-            if (target && manager && manager.chosen !== target) manager.choose(target);
-        }
-    }
-    /**
      * 按 id 载入草稿
      * @param {string} id
      * @returns {boolean} 是否载入成功
@@ -3096,7 +3026,7 @@ shadow.innerHTML=`
         const camelizedType = this.textQuery("formatTransfer", { to: "camel", text: type });
         let result = this.getDataAreaDom(type)?.dataset?.[camelizedType];
         switch (camelizedType) {
-            case "hp": case "maxHp": case "hujia": return Number(result);
+            case "hp": case "maxHp": case "hujia": return Number(result) || 0;
             case "dieAudios": case "clans": case "skills": case "perfectPair": case "doubleGroup": return result.split(" ").filter(Boolean);
             case "pinyin": return result.split(",");
             case "intro": return result.trim();

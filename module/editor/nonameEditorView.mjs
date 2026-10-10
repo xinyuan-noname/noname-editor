@@ -532,6 +532,9 @@ mainPage.innerHTML=`
                 return opened;
             }
         }
+        /**
+         * @type {import('./component.mjs').HTMLNonameCharacterEditorElement}
+         */
         const characterEditor = document.createElement("character-editor");
         //必须在挂载前设置：组件的 connectedCallback 会按 draft-key 载入草稿
         if (key) characterEditor.setAttribute("draft-key", key);
