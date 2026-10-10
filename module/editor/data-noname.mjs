@@ -267,6 +267,8 @@ class ASTWorkerSession {
 }
 
 export class NonameData {
+    static rawGroup = ["wei", "shu", "wu", "qun", "shen", "western", "key"];
+    static rawClans = ["陈留吴氏", "颍川荀氏", "琅琊诸葛氏", "颍川韩氏", "太原王氏", "颍川钟氏", "弘农杨氏", "吴郡陆氏", "颍川陈氏"];
     /**
      * @param {string} contentType 
      * @returns {string}

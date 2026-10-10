@@ -4,6 +4,7 @@
  * 这一层只做「读配置 → 拼数据 → 写文件」，生成逻辑在 persist/packageFile.mjs（纯函数）。
  * 引擎数据（lib.*）与编辑器数据都由调用方传入，方便在 Node 里跑自检与做并发排查。
  */
+import { NonameData } from "../data-noname.mjs";
 import { buildCharacterPackageFile } from "./packageFile.mjs";
 import { getCoreSkills } from "./skills.mjs";
 
@@ -48,7 +49,7 @@ function collectPackageIds(workspace, meta, records) {
  * @param {(message: string, detail?: any) => void} [options.onWarn]
  * @returns {Object<string, Object<string, object>>} 包 id → `{ 技能id: 技能定义 }`
  */
-export function planSkillDistribution({ packageIds, records, coreSkills, skillTable, onWarn = () => {} }) {
+export function planSkillDistribution({ packageIds, records, coreSkills, skillTable, onWarn = () => { } }) {
     /** 技能 id → 归属包（先到先得 = 包 id 排序最前的那个包） */
     const owner = new Map();
     for (const packageId of packageIds) {
@@ -74,20 +75,20 @@ export function planSkillDistribution({ packageIds, records, coreSkills, skillTa
 }
 
 /**
- * 该包要补的 translate（自建势力 / 宗族）：游戏 lib.translate 里没有的才补，
- * 否则游戏界面只会显示原 id（用户反馈过「势力没落包」）。
+ * 该包要补的 translate（自建势力 / 宗族）：游戏非原生的统一补齐
+ * 否则游戏界面只会显示原 id（用户反馈过「势力没落包」）
  * @returns {Object<string, string>}
  */
-function collectTranslateExtra(records, packageId, groups, translate) {
+function collectTranslateExtra(records, packageId, groups) {
     const extra = {};
     for (const record of recordsOf(records, packageId)) {
         const groups2 = [record.group, ...(Array.isArray(record.doubleGroup) ? record.doubleGroup : [])].filter(Boolean);
-        groups2.forEach(groupId => {
-            if (translate[groupId]) return;
+        for (const groupId of groups2) {
+            if (NonameData.rawGroup.includes(groupId)) continue;
             extra[groupId] = groups[groupId] || groupId;
-        });
+        }
         (Array.isArray(record.clans) ? record.clans : []).forEach(clan => {
-            if (!clan || translate[clan]) return;
+            if (NonameData.rawClans.includes(clan)) return;
             extra[clan] = clan;
         });
     }
@@ -190,7 +191,7 @@ export async function syncWorkspaceFiles(options = {}) {
         libRef = {},
         groups = {},
         skillSourcePath = "",
-        onWarn = () => {}
+        onWarn = () => { }
     } = options;
     if (!workspace) return false;
 

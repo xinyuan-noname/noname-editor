@@ -186,12 +186,10 @@ export function buildCharacterPackageFile(options = {}) {
     }
 
     //③ 自定义势力 / 宗族：游戏 lib.translate 里没有的话界面只会显示原 id
-    Object.entries(translateExtra).forEach(([key, value]) => addTranslate(key, value));
-
     //④ 武将包中文名：引擎按 `<包id>_character_config` 取包名（ui/create/index.js:1586 少了这个键
     //连整个包都进不了武将包列表），而扩展侧惯例就是直接写这个键——game/index.js:5634/5668 与
     addTranslate(`${packageId}_character_config`, packageName || packageId);
-
+    Object.entries(translateExtra).forEach(([key, val]) => addTranslate(key, val));
     const sortLines = Object.entries(sortMembers)
         .map(([sortId, ids]) => `    ${JSON.stringify(sortId)}: [${ids.map(id => JSON.stringify(id)).join(", ")}]`);
     //分包名走另一个对象：与 translates 撞键时让 translates 赢（不同命名空间，撞上属异常）

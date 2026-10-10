@@ -593,7 +593,6 @@ mainPage.innerHTML=`
             //removable 开启「删除」，usable 开启「使用」（点击后发 useCardData 事件）
             card.setAttribute("removable", "true");
             card.setAttribute("usable", "true");
-            console.log(data);
             card.characterInfo = {
                 id: characterId,
                 name: data.name || characterId,
