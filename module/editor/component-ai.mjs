@@ -89,12 +89,6 @@ shadow.innerHTML=`
 
     <section class="block" data-block="draft">
         <textarea class="request" rows="3" spellcheck="false" placeholder="用一句话描述你要的武将，例如：蜀势力女性武将，靠卖血换爆发，体力3，两个技能"></textarea>
-        <div class="examples">
-            <span class="example" data-target=".request" data-example="蜀势力女性武将，靠卖血换爆发，体力3，两个技能">卖血爆发</span>
-            <span class="example" data-target=".request" data-example="魏势力男性武将，靠弃牌控制距离，体力4，一个锁定技">控场封锁</span>
-            <span class="example" data-target=".request" data-example="群势力武将，回合外也能用牌，体力4，一个视为技一个触发技">回合外偷袭</span>
-            <span class="example" data-target=".request" data-example="吴势力女性武将，辅助队友摸牌并回复，体力3，两个技能">团队辅助</span>
-        </div>
         <details class="skill-book">
             <summary>AI 技能书（Skill.md）<span class="skill-size muted"></span></summary>
             <label class="row check-row"><span><input type="checkbox" class="skill-enabled" checked>每次生成时把它发给 AI</span></label>
@@ -118,12 +112,6 @@ shadow.innerHTML=`
 
     <section class="block" data-block="skill" hidden>
         <textarea class="skill-request" rows="3" spellcheck="false" placeholder="用一句话描述你要的技能，例如：出牌阶段限一次，弃一张红色牌令一名角色回复1点体力"></textarea>
-        <div class="examples">
-            <span class="example" data-target=".skill-request" data-example="锁定技，当你受到伤害后，你摸一张牌">卖血摸牌</span>
-            <span class="example" data-target=".skill-request" data-example="出牌阶段限一次，你可以弃置一张黑色牌，令一名角色失去1点体力">黑牌压制</span>
-            <span class="example" data-target=".skill-request" data-example="结束阶段开始时，若你的手牌数小于体力值，你可以摸两张牌">残血补牌</span>
-            <span class="example" data-target=".skill-request" data-example="每轮限一次，你可以将一张方块牌当【杀】使用">方块当杀</span>
-        </div>
         <label class="row"><span>技能种类</span><select class="skill-kind"></select></label>
         <div class="skill-params">
             <label class="row"><span>生成数量</span><select class="skill-count"><option value="1" selected>1 个</option><option value="2">2 个</option></select></label>
@@ -893,14 +881,6 @@ shadow.innerHTML=`
                 if (apiKey.value.trim()) markGuided(this);
             });
         });
-        //生成设计稿
-        //示例芯片：写进 data-target 指的那个输入框（设计稿 .request / 技能 .skill-request）
-        this.#qa(".example").forEach(node => node.addEventListener("pointerup", () => {
-            const area = this.#q(node.dataset.target || ".request");
-            if (!area) return;
-            area.value = node.dataset.example || "";
-            area.focus();
-        }));
         this.#q(".gen-draft").addEventListener("pointerup", () => this.generateDraft());
         this.#q(".optimize-prompt")?.addEventListener("pointerup", () => this.optimizePrompt());
         this.#q(".cancel-task").addEventListener("pointerup", () => {
