@@ -550,6 +550,9 @@ mainPage.innerHTML=`
         } else if (!key && draftKey) {
             //没有该武将的草稿：开一份新的，先把武将 id 填上（保存时才分配编号）
             characterEditor.applyData({ id: draftKey });
+            //`applyData` 不再顺带排自动保存（载入不是编辑，见组件里 `#applyingData` 的说明），
+            //所以这里显式落一次：否则「从搜索页打开一个还没有草稿的武将」要等用户改了别的字段才会进侧栏
+            characterEditor.flushDraft();
         }
         return characterEditor;
     }

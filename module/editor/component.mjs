@@ -9,6 +9,12 @@ class HTMLNonameCharacterEditorElement extends HTMLNonameFocusUIElement {
      */
     #saveTimer = null;
     /**
+     * 「正在回填草稿数据」标记：`applyData` 期间不排自动保存。
+     * ⚠️ 少了它就会**真丢数据**：载入时只要有一个字段没被回填（技能就踩过这个坑），
+     * `changeData` 结尾的 400ms 防抖保存就会按**空**的交互层重建整条记录，把草稿里的字段永久抹掉。
+     */
+    #applyingData = false;
+    /**
      * 立绘的权威引用（`ext:<工作区相对路径>`）。
      * ⚠️ 不能只看 DOM：`getAllData()` 原来是从 `data-avatar` 反推 `trashBin`，只要有一次
      * 「DOM 里没有立绘」的保存（同一份草稿开了两个编辑器实例、裁剪后只剩 `blob:` URL…），
@@ -1087,6 +1093,26 @@ shadow.innerHTML=`
         this.recordURL("dieAudios", url);
         this.changeData("dieAudios", url);
     }
+    /**
+     * 按 `dataset.dieAudios` 重建阵亡语音卡（载入草稿走它 —— `applyData` 只写 dataset，卡片不会自己出现）。
+     * @returns {this}
+     */
+    renderDieAudios() {
+        const dieAudiosDataArea = this.getDataAreaDom("dieAudios");
+        const section = dieAudiosDataArea?.querySelector("section");
+        if (!section) return this;
+        section.innerHTML = "";
+        const reference = (dieAudiosDataArea.dataset.dieAudios || "").split(" ").filter(Boolean)[0];
+        if (!reference) return this;
+        const audioCard = document.createElement("audio-info-card");
+        audioCard.setAttribute("src", reference);
+        audioCard.setAttribute("removable", true);
+        section.append(audioCard);
+        //`value` 要等卡片挂进文档之后再设：它的 attributeChangedCallback 会去 shadowRoot 里找输入框
+        const dieAudioText = dieAudiosDataArea.dataset.dieAudioText;
+        if (dieAudioText) audioCard.setAttribute("value", dieAudioText);
+        return this;
+    }
     #listenDieAudios() {
         const dieAudiosDataArea = this.getDataAreaDom("dieAudios");
         const dieAudioSection = dieAudiosDataArea.querySelector("section")
@@ -1819,26 +1845,42 @@ shadow.innerHTML=`
         //初始态：把格数与选中态按当前数据对齐（applyData 走的是同一套；这里兜住「数据先到、管理器后建」）
         this.syncHpPips();
     }
+    /**
+     * 造一张技能卡（技能栏与「载入草稿」共用；字段与 `data-noname.mjs:parseSkill` 的产物同形）。
+     * ⚠️ `lib.skill` 里还没有这个技能时 `infoQuery` 给的是 null，而卡片拿到 null 会渲染成**空条**，
+     * 所以补一份按 translate 兜底的技能信息。
+     * @param {string} id
+     * @returns {HTMLElement}
+     */
+    createSkillCard(id) {
+        const skillCard = document.createElement("skill-info-card");
+        skillCard.setAttribute("skill-id", id);
+        skillCard.skillInfo = this.infoQuery("skill", { skillId: id, characterId: this.getData("id") })
+            || { id, name: lib.translate[id] || id, description: lib.translate[id + "_info"] || "", audios: [] };
+        skillCard.setAttribute("removable", true);
+        return skillCard;
+    }
     addSkill(arg) {
         const skillsDataArea = this.getDataAreaDom("skills");
         const ul = skillsDataArea.querySelector("ul");
         let id;
         if (arg instanceof HTMLElement && arg.tagName === "SKILL-INFO-CARD") {
+            id = arg.getAttribute("skill-id")
+        } else if (typeof arg === "string" && arg.trim().length !== 0) {
+            id = arg;
+        } else return;
+        //已经在技能栏里的不再入场：同一张卡拖两次、或载入草稿时宗族回调补挂已列出的技能，
+        //都会把同一个技能写两遍（一个武将带两个同名技能是坏数据）
+        if (id && (skillsDataArea.dataset.skills || "").split(" ").includes(id)) return;
+        if (arg instanceof HTMLElement && arg.tagName === "SKILL-INFO-CARD") {
             const node = arg;
-            id = node.getAttribute("skill-id")
             node.removeAttribute("usable");
             node.removeAttribute("id");
             node.removeAttribute("markWords");
             ul.append(node);
-        } else if (typeof arg === "string" && arg.trim().length !== 0) {
-            id = arg;
-            const nowSkillInfo = this.infoQuery("skill", { skillId: id, characterId: this.getData("id") })
-            const skillCard = document.createElement("skill-info-card");
-            skillCard.setAttribute("skill-id", id);
-            skillCard.skillInfo = nowSkillInfo;
-            skillCard.setAttribute("removable", true)
-            ul.append(skillCard);
-        } else return;
+        } else {
+            ul.append(this.createSkillCard(id));
+        }
         this.changeData("skills", id, { mode: "append" });
         if (this.checkQuery("skillTags", { id, tags: ["hiddenSkill"] })) {
             this.getMultipleChocieManager("more").selectByFind(node => node.dataset.moreOption === "hasHiddenSkill")
@@ -1860,6 +1902,20 @@ shadow.innerHTML=`
         } else return;
         node?.remove?.();
         this.changeData("skills", id, { mode: "remove" });
+    }
+    /**
+     * 按 `dataset.skills` 重建技能栏。
+     * ⚠️ `changeData` 只负责写 `dataset` 与 CSS 变量，卡片是 DOM —— 载入草稿后不重建的话
+     * 技能栏是空的，用户一动别的字段，防抖保存就把空技能栏当成真相写回记录（技能就是这么丢的）。
+     * @returns {this}
+     */
+    renderSkills() {
+        const skillsDataArea = this.getDataAreaDom("skills");
+        const ul = skillsDataArea?.querySelector("ul");
+        if (!ul) return this;
+        ul.innerHTML = "";
+        (skillsDataArea.dataset.skills || "").split(" ").filter(Boolean).forEach(id => ul.append(this.createSkillCard(id)));
+        return this;
     }
     #listenSkills() {
         const skillsDataArea = this.getDataAreaDom("skills");
@@ -2189,6 +2245,10 @@ shadow.innerHTML=`
     changeData(type, val, config) {
         if (!type) return;
         type = this.textQuery("formatTransfer", { text: type, to: "camel" });
+        //数组一律先折成空格串：dataset 是 DOMStringMap，赋数组会被 String() 成 `a,b`，
+        //而 `getData` 是按**空格**拆的 —— 多势力 / 宗族 / 阵亡语音载入后就成了 `wei,shu` 这种脏值，
+        //再存一次就把记录永久写坏（载入草稿时踩过）。
+        if (Array.isArray(val)) val = val.join(" ");
         switch (type) {
             case "name": {
                 this.getDataAreaDom("name").dataset["name"] = val;
@@ -2219,28 +2279,26 @@ shadow.innerHTML=`
             }; break;
             case "skills": {
                 const skillsDataArea = this.getDataAreaDom("skills");
+                if (!skillsDataArea) break;
+                const current = () => (skillsDataArea.dataset[type] || "").split(" ").filter(Boolean);
                 let skills;
                 if (config.mode === "append") {
-                    skills = skillsDataArea.dataset[type].split(" ").filter(Boolean).concat(val);
+                    skills = current().concat(String(val || "").split(" ").filter(Boolean));
                     skillsDataArea.dataset[type] = skills.join(" ");
                 } else if (config.mode === "remove") {
-                    skills = skillsDataArea.dataset[type].split(" ").filter(skill => skill && skill !== val);
+                    skills = current().filter(skill => skill && skill !== val);
                     skillsDataArea.dataset[type] = skills.join(" ");
-                } else if (config.mode === "rewrite") {
-                    if (Array.isArray(val)) {
-                        skillsDataArea.dataset[type] = val.join(" ");
-                        skills = val;
-                    } else {
-                        skillsDataArea.dataset[type] = val;
-                        skills = skillsDataArea.dataset[type].split("");
-                    }
+                } else {
+                    //rewrite / replace：整串覆盖 —— **载入草稿走的就是这条**。
+                    //⚠️ 原来这里只认 append / remove / rewrite，`applyData` 传的 replace 直接落到分支外：
+                    //技能栏是空的，400ms 后的自动保存再按空值重建记录 → 草稿里的技能被抹掉（用户反馈的事故）。
+                    skills = String(val || "").split(" ").filter(Boolean);
+                    skillsDataArea.dataset[type] = skills.join(" ");
                 }
-                if (Array.isArray(skills)) {
-                    this.style.setProperty(
-                        "--data-skills",
-                        `"${skills.map(skill => this.textQuery("skillTranslation", { text: skill, attr: "name" })).join("，")}"`
-                    );
-                }
+                this.style.setProperty(
+                    "--data-skills",
+                    `"${skills.map(skill => this.textQuery("skillTranslation", { text: skill, attr: "name" })).join("，")}"`
+                );
             }; break;
             case "perfectPair": {
                 const perfectPairDataArea = this.getDataAreaDom("perfectPair");
@@ -2265,7 +2323,8 @@ shadow.innerHTML=`
                 if (target) target.dataset[type] = val;
             }; break;
         }
-        this.scheduleSaveDraft();
+        //回填草稿期间不排保存（见 #applyingData）：载入不是编辑，没回填到的字段不该被写回记录
+        if (!this.#applyingData) this.scheduleSaveDraft();
     }
     /**
      * 草稿自动保存：字段级防抖，落库到 lib.config.x19D6_editor.characters.<id>
@@ -2309,31 +2368,48 @@ shadow.innerHTML=`
      */
     applyData(data) {
         if (!data) return this;
-        const attributes = this.characterAttributes;
-        for (const attr of attributes) {
-            if (!(attr in data)) continue;
-            this.changeData(attr, data[attr], { mode: "replace" });
+        //⚠️ 回填期间禁止排自动保存（见 `#applyingData` 的说明）：载入不是编辑，
+        //这一轮里没被回填到的字段不该被 400ms 后的保存当成「用户清空了」写回记录 —— 技能就是这么丢的。
+        const restoring = !this.#applyingData;
+        this.#applyingData = true;
+        try {
+            const attributes = this.characterAttributes;
+            for (const attr of attributes) {
+                if (!(attr in data)) continue;
+                this.changeData(attr, data[attr], { mode: "replace" });
+            }
+            //列表类字段的卡片是 DOM：`changeData` 只写 dataset 与 CSS 变量，这里必须重建一遍
+            this.renderSkills();
+            this.renderPerfectPair();
+            this.renderDieAudios();
+            //文字输入框（姓名 / 拼音 / id）
+            this.syncTextInputs();
+            //选中态：必须走选择管理器的 choose()——只写 class 的话管理器内部状态还是空的，
+            //于是第一次点别的选项时它不知道要摘掉旧的那个（用户反馈：第一次无法切换宗族）
+            this.restoreChoice("sex", this.sexChoiceManager, data.sex);
+            this.restoreChoice("group", this.groupChoiceManager, data.group);
+            this.restoreChoice("clans", this.clanChoiceManager, data.clans);
+            //宗族管理器是**单选**的，而 `clans` 在记录里可以是数组：单选回填会把 dataset 收窄成选中的那一个，
+            //多宗族草稿于是会在下一次保存时被静默截断 —— 按记录原样写回
+            if (Array.isArray(data.clans) && data.clans.length > 1) this.changeData("clans", data.clans);
+            //「多势力」的勾选态也在多选管理器里（同 restoreMoreSettings 的理由）
+            this.restoreDoubleGroup(data.doubleGroup);
+            //「更多设置」的勾选态（主公技/隐藏技/BOSS…）：见 restoreMoreSettings 的说明
+            this.restoreMoreSettings(data);
+            if (data.groupName) this.setGroup({ groupId: data.group, groupName: data.groupName });
+            //顶部「所属分包」那行用的是 CSS 变量，载入时同样要设
+            if (data.extension) this.style.setProperty("--data-extension", `"${data.extension}"`);
+            if (data.packageId) this.style.setProperty("--data-package-id", `"${lib.translate[data.packageId + "_character_config"] || data.packageId}"`);
+            if (data.characterSortName) this.style.setProperty("--data-character-sort", `"${data.characterSortName}"`);
+            //立绘：getAllData 会把 avatar 挪进 trashBin（ext: 路径），草稿里没有 avatar 字段，所以从这里恢复
+            this.loadedTrashBin = Array.isArray(data.trashBin) ? data.trashBin.slice() : [];
+            if (data.avatar) this.avatarReference = data.avatar;
+            this.syncAvatarFromTrashBin(data.trashBin, data);
+            //体力 / 体力上限 / 护甲的数字框与旁边的血/甲格
+            this.syncHpInputs();
+        } finally {
+            if (restoring) this.#applyingData = false;
         }
-        //文字输入框（姓名 / 拼音 / id）
-        this.syncTextInputs();
-        //选中态：必须走选择管理器的 choose()——只写 class 的话管理器内部状态还是空的，
-        //于是第一次点别的选项时它不知道要摘掉旧的那个（用户反馈：第一次无法切换宗族）
-        this.restoreChoice("sex", this.sexChoiceManager, data.sex);
-        this.restoreChoice("group", this.groupChoiceManager, data.group);
-        this.restoreChoice("clans", this.clanChoiceManager, data.clans);
-        //「更多设置」的勾选态（主公技/隐藏技/BOSS…）：见 restoreMoreSettings 的说明
-        this.restoreMoreSettings(data);
-        if (data.groupName) this.setGroup({ groupId: data.group, groupName: data.groupName });
-        //顶部「所属分包」那行用的是 CSS 变量，载入时同样要设
-        if (data.extension) this.style.setProperty("--data-extension", `"${data.extension}"`);
-        if (data.packageId) this.style.setProperty("--data-package-id", `"${lib.translate[data.packageId + "_character_config"] || data.packageId}"`);
-        if (data.characterSortName) this.style.setProperty("--data-character-sort", `"${data.characterSortName}"`);
-        //立绘：getAllData 会把 avatar 挪进 trashBin（ext: 路径），草稿里没有 avatar 字段，所以从这里恢复
-        this.loadedTrashBin = Array.isArray(data.trashBin) ? data.trashBin.slice() : [];
-        if (data.avatar) this.avatarReference = data.avatar;
-        this.syncAvatarFromTrashBin(data.trashBin, data);
-        //体力 / 体力上限 / 护甲的数字框与旁边的血/甲格
-        this.syncHpInputs();
         return this;
     }
     /**
@@ -2384,6 +2460,39 @@ shadow.innerHTML=`
         if (manager && manager.chosen !== node) manager.choose(node);
         else if (!manager) node.classList.add("chosen");
         return true;
+    }
+
+    /**
+     * 回填「多势力」（`doubleGroup`，dataset 里是空格串）。
+     * ⚠️ 同 `restoreMoreSettings`：勾选态在**多选管理器**内部，只写 dataset（`changeData`）界面不会亮；
+     * 走 `select()` 才会跑回调 → `setDoubleGroup()` 把 CSS 变量与 dataset 一起写对。
+     * @param {string|string[]} values
+     * @returns {this}
+     */
+    restoreDoubleGroup(values) {
+        const manager = this.doubleGroupChoiceManager;
+        const areaDom = this.getDataAreaDom("group");
+        if (!manager || !areaDom) return this;
+        manager.reset();
+        const nodes = Array.from(areaDom.querySelectorAll("[data-group-option]"));
+        const mainGroup = this.groupChoiceManager?.chosen?.dataset?.groupOption;
+        //主势力本来就在「势力」单选的选中态里，不进多势力列表（与 removeGroupFromDouble 口径一致）
+        const extras = (Array.isArray(values) ? values : String(values || "").split(" "))
+            .filter(id => id && id !== mainGroup);
+        extras.forEach(id => {
+            const node = nodes.find(item => item.dataset.groupOption === id);
+            if (node) manager.select(node);
+        });
+        //管理器回调只在真的选中时才写 dataset，这里兜一次底（没有多势力时必须是空串）
+        this.changeData("doubleGroup", extras.length ? [mainGroup, ...extras].filter(Boolean).join(" ") : "");
+        //「选择多势力」的勾选态：有多势力就点亮它，否则界面显示成单势力、再点选项会改错目标
+        const checkBox = areaDom.querySelector(".checkbox");
+        const chosenModeManager = this.getMultipleChocieManager("groupChosenMode");
+        if (checkBox && chosenModeManager) {
+            if (extras.length) chosenModeManager.select(checkBox);
+            else chosenModeManager.unselect(checkBox);
+        }
+        return this;
     }
 
     /**
@@ -2976,7 +3085,7 @@ shadow.innerHTML=`
         this.syncWorkspace();
         //媒体改名要按「当前草稿的武将 id」比，所以载入后重新对准
         this.lastAssetId = this.getData("id") || "";
-        this.renderPerfectPair();
+        //珠联璧合列表由 `applyData` 里的 `renderPerfectPair()` 一起重建，这里不再单独调
         return true;
     }
     /**
