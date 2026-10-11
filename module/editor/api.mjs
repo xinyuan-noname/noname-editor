@@ -161,11 +161,13 @@ async function openShyaSkillEditor(options = {}) {
         node.setSource(options.source, options.skillId);
     }
     return node;
-}async function openSkillEditor(options = {}) {
+}
+async function openSkillEditor(options = {}) {
     const version = await resolveSkillEditorVersion();
     if (version === "legacy") return openLegacySkillEditor(options.readCache !== false);
     return openShyaSkillEditor(options);
-}/**
+}
+/**
  * 打开并切到武将编辑页，返回 <character-editor> 组件
  * @param {{ parent?: HTMLElement, id?: string, data?: object }} [options]
  */
@@ -286,7 +288,6 @@ export function installApi() {
     game.x19D6_openCharacterEditor = openCharacterEditor;
     game.x19D6_createSkill = createSkill;
     game.x19D6_closeEditor = closeEditor;
-    return game.x19D6_editor;
 }
 
 export { openEditor, openSkillEditor, openShyaSkillEditor, resolveSkillEditorVersion, openLegacySkillEditor, openCharacterEditor, createSkill, closeEditor, getEditor };

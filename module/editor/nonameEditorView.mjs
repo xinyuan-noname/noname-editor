@@ -1160,7 +1160,7 @@ mainPage.innerHTML=`
         const { sideBarSkill } = this;
         if (!sideBarSkill) return;
         const createSkill = () => {
-            if (typeof game.x19D6_openSkillEditor === "function") game.x19D6_openSkillEditor();
+            if (typeof game.x19D6_openShyaSkillEditor === "function") game.x19D6_openShyaSkillEditor();
         };
         //空态卡里的按钮（侧栏顶部没有其它 button，但仍按武将页的写法限定容器）
         sideBarSkill.querySelector(".xy-ED-nocharacterCard>button")?.addEventListener("pointerup", createSkill);

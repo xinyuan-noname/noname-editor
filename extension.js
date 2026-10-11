@@ -30,23 +30,37 @@ export default function () {
                 name: "<div>旧版编辑器</div>",
                 clear: true,
                 onclick: function () {
-                    if (typeof game.x19D6_openEditor === "function") return createSkillEditor();
-                    alert("编辑器尚未载入完成，请重启游戏后再试。");
+                    if (typeof game.x19D6_openLegacySkillEditor === "function") game.x19D6_openLegacySkillEditor();
                 }
             }
             extensionMenu.openEditor = openItem;
             extensionMenu.openOldEditor = openOldEditor
         },
         arenaReady: function () {
-            if (!ui.system) return;
-            if (ui.system.querySelector("x19D6-system-ED")) return;
-            if (ui.x19D6_system_ED) return;
-            if (typeof game.x19D6_openEditor !== "function") return;
-            const node = ui.create.system("魂氏编辑", function () {
-                game.x19D6_openEditor();
-            });
-            node.classList.add("x19D6-system-ED");
-            ui.x19D6_system_ED = node;
+            const editor = () => {
+                if (!ui.system) return;
+                if (ui.system.querySelector("x19D6-system-ED")) return;
+                if (ui.x19D6_system_ED) return;
+                if (typeof game.x19D6_openEditor !== "function") return;
+                const node = ui.create.system("魂氏编辑", function () {
+                    game.x19D6_openEditor();
+                });
+                node.classList.add("x19D6-system-ED");
+                ui.x19D6_system_ED = node;
+            }
+            const oldSkillEditor = () => {
+                if (!ui.system) return;
+                if (ui.system.querySelector("x19D6-old-skill-ED")) return;
+                if (ui.x19D6_openSkill_ED) return;
+                if (typeof game.x19D6_openLegacySkillEditor !== "function") return;
+                const node = ui.create.system("技能编辑", function () {
+                    game.x19D6_openLegacySkillEditor();
+                });
+                node.classList.add("x19D6-old-skill-ED");
+                ui.x19D6_openSkill_ED = node;
+            }
+            editor();
+            oldSkillEditor();
         },
         editable: false,
         connect: false,
