@@ -187,7 +187,7 @@ export class NonameEditorView {
     init(parentNode) {
         const mainPage = this.mainPage;
         //$: mainPage , html/index.html//
-mainPage.innerHTML=`
+        mainPage.innerHTML = `
 <div class="xy-ED-minimizeControl" draggable>魂</div>
 <div class="xy-ED-operationPage">
     <header>
@@ -270,7 +270,7 @@ mainPage.innerHTML=`
         </div>
     </div>
 </div>`
-//#: mainPage , html/index.html//
+        //#: mainPage , html/index.html//
         parentNode.appendChild(mainPage);
         this.listenPageClose();
         this.listenPageMinize();
@@ -970,7 +970,22 @@ mainPage.innerHTML=`
      */
     filterDraftData() {
         const state = this.characterFilterState;
-        const data = {};
+        //新武将的默认体力 4/4（模板 .data-setting 也是 4/4；这里让数据上也带上，落盘/载入都有据可依）。
+        //
+        //⚠️ 待修根因（2026-10-11 实测；用户明确「restore 那条链是好的、别动」，所以这里只记结论、不改行为）：
+        //   `component.mjs:applyData()` 无条件把 data.hp / data.maxHp / data.hujia 喂给
+        //   restoreHp / restoreMaxHp / restoreHujia（component.mjs:2424-2428）。**数据里没带这些字段时**
+        //   传进去的是 undefined → `undefined - 4 = NaN` → `#removeHp(NaN)` 拼出选择器
+        //   `.hp:nth-last-child(NaN)` → 非法选择器 → **SyntaxError 直接从 applyData 里抛出去**
+        //   （无头 Edge 实测：`:nth-last-child(4)`、`(0)` 正常；`(NaN)`、`(undefined)` 抛 SyntaxError），
+        //   于是后面的 restoreHujia 与调用方的 flushDraft() 都不会执行。
+        //   这一行只盖住「侧栏点创建」；**载入**方向还有两条：
+        //     ① createCharacterEditor() 的兜底 applyData(records[key])（nonameEditorView.mjs:544）
+        //     ② 没有草稿时 applyData({ id: draftKey })（nonameEditorView.mjs:555）
+        //   修的时候请在**载入侧**收口（applyData 只在字段是有限数字时才回填，或 loadDraft 先归一 record），
+        //   不要动 restoreHp / #removeHp 那条链。
+        //   注：component-ai.mjs:1430 也调本方法，但那边随后用 draft.hp / draft.maxHp 覆盖，不受影响。
+        const data = { hp: 4, maxHp: 4 };
         if (!state.packageId) return data;
         data.packageId = state.packageId;
         if (state.characterSort) {
