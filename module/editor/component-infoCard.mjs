@@ -143,8 +143,11 @@ class HTMLNonameInfoCardElement extends HTMLNonameFocusUIElement {
                     const useSpan = document.createElement("span");
                     useSpan.className = "use";
                     useSpan.textContent = "⬅️";
+                    //⬅️ 只有一个语义：配了 usefor 且目标区还开着 → 把卡片移进目标区（requestUseSkill）；
+                    //否则交给外层 useCardData（新开/切到武将编辑器）。两条都跑会「既进珠联璧合区、又开一份新草稿」。
                     useSpan.addEventListener("pointerdown", () => {
-                        this.triggerEvent("useCardData");
+                        if (this.useForNode?.isConnected) this.sendEvent("requestUseSkill", this.useForNode);
+                        else this.triggerEvent("useCardData");
                     });
                     interactBar.prepend(useSpan);
                 } else {
@@ -172,12 +175,7 @@ class HTMLNonameInfoCardElement extends HTMLNonameFocusUIElement {
                 const use = interactBar.querySelector(":scope>.use");
                 if (this.useForNode && this.useForNode.id == newValue || (this.useForNode = document.getElementById(newValue))) {
                     mainContentDiv.setAttribute("draggable", "true");
-                    if (use) {
-                        use?.classList?.add?.("allowed");
-                        use.onpointerdown = (e) => {
-                            this.sendEvent("requestUseSkill", this.useForNode);
-                        };
-                    }
+                    if (use) use?.classList?.add?.("allowed");
                     mainContentDiv.ondragstart = (e) => {
                         this.setAttribute("id", "chosen-card");
                         e.dataTransfer.setData("text", "chosen-card");
@@ -189,10 +187,7 @@ class HTMLNonameInfoCardElement extends HTMLNonameFocusUIElement {
                 } else {
                     mainContentDiv.removeAttribute("draggable");
                     mainContentDiv.ondragstart = null;
-                    if (use) {
-                        use?.classList?.remove?.("allowed");
-                        use.onpointerdown = null;
-                    }
+                    if (use) use?.classList?.remove?.("allowed");
                     this.useForNode = null;
                 }
             }; break;

@@ -1310,6 +1310,10 @@ mainPage.innerHTML=`
         //
         /** ⬅️：技能→往当前武将编辑器里放一份副本；武将→打开该武将草稿 */
         const useCard = node => {
+            //带 usefor 的结果卡片由组件自己的 ⬅️ 处理（那条路径是「把卡片移进目标区」）；
+            //目标区还开着时这里不接管，否则会「既加进珠联璧合区，又新开一份武将编辑器 + 落一份草稿」（用户实测）；
+            //但目标编辑器已关闭时，那条路径只会把卡片挪进一个看不见的编辑器（卡片凭空消失），这时由这里接管
+            if (node?.hasAttribute?.("usefor") && node.useForNode?.isConnected) return;
             const characterId = node?.getAttribute?.("character-id");
             if (characterId) {
                 //按武将 id 找已打开的编辑器（草稿键现在是编号，不再等于 id）
@@ -1320,9 +1324,6 @@ mainPage.innerHTML=`
             }
             const skillId = node?.getAttribute?.("skill-id");
             if (!skillId) return;
-            //带 usefor 的结果卡片由组件自己的 requestUseSkill 处理（那条路径是「把卡片移进技能栏」）；
-            //但目标编辑器已关闭时，那条路径只会把卡片挪进一个看不见的编辑器（卡片凭空消失），这时由这里接管
-            if (node.hasAttribute("usefor") && node.useForNode?.isConnected) return;
             //技能可能已被删除（历史草稿引用的技能）
             if (!this.serveFor.data.checkSkillTags(skillId, [])) return;
             //落到「当前看得见的那个」武将编辑器；一个都没有就新建（否则这个箭头点了看不出反应）
