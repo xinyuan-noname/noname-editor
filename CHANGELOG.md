@@ -5,6 +5,25 @@
 
 ---
 
+## v0.1.2 — 修复：新建武将的体力（2026-10-11）
+
+### 修复
+
+- **新建武将默认 4/4 体力**：侧栏「点击创建」时，新草稿的初始数据现在明确带上 `hp: 4` / `maxHp: 4`（以前是空对象）。
+  **现象**：新建武将时体力区出问题（数字框 NaN / 体力被写成 0 / 报错），生成的武将包里体力不对。
+- **根因已定位并写进代码注释（本版不改那处行为）**：`component.mjs:applyData()` 无条件把
+  `data.hp / data.maxHp / data.hujia` 喂给 `restoreHp / restoreMaxHp / restoreHujia`；数据里没带这些字段时
+  传进去的是 `undefined` → `undefined - 4 = NaN` → `#removeHp` 拼出 `.hp:nth-last-child(NaN)`
+  → 非法选择器 → `SyntaxError` 直接从 `applyData` 抛出去（后面的 `restoreHujia` 与 `flushDraft()` 都不会执行）。
+  本版只补上「新建」这条路的默认值。**载入方向还有两条同类路径待修**：`createCharacterEditor()` 的兜底
+  `applyData(records[key])` 与无草稿时的 `applyData({ id })` —— 完整结论写在
+  `nonameEditorView.mjs:filterDraftData()` 上方的注释里，留待后续在载入侧收口。
+
+### 升级
+
+- 覆盖安装即可（把新包重命名为 `魂氏编辑器` 放进 `resources/app/extension/`）；草稿、工作区素材、`backup/` 都不会被动。
+- 编辑器内置的「设置 → 版本与更新」也能一键更新到本版本。
+
 ## v0.1.1 — 修复：珠联璧合里点 ⬅️ 会同时新开武将草稿（2026-10-11）
 
 ### 修复
